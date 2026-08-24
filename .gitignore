@@ -1,0 +1,27 @@
+# Configuração e segredos — por instância, nunca versionados
+.env
+
+# Banco — gerado por database/migrate.php
+database/*.sqlite
+database/*.sqlite-shm
+database/*.sqlite-wal
+
+# Uploads — por instância
+public_html/assets/uploads/*
+!public_html/assets/uploads/.gitkeep
+
+# Locks e temporários do worker
+storage/
+*.lock
+*.log
+
+# vendor/ NÃO entra aqui: é commitado de propósito, para que o deploy
+# continue sendo apenas `git pull`, sem build. Ver ARQUITETURA.md §1.
+
+# Sistema operacional / editores
+Thumbs.db
+desktop.ini
+.DS_Store
+.idea/
+.vscode/
+*.code-workspace
