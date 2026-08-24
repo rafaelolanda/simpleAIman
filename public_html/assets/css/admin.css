@@ -1250,3 +1250,19 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; }
 }
 
 .chat-form input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.barra {
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(100, 116, 139, 0.18);
+    overflow: hidden;
+    margin-top: 0.3rem;
+    max-width: 160px;
+}
+
+.barra > span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.3s;
+}

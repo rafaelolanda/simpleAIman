@@ -69,6 +69,25 @@ if ($jobsPresos > 0) {
     $alertas[] = ['aviso', $jobsPresos . ' job(s) com lock expirado — o worker pode não estar rodando (confira o cron).'];
 }
 
+// Artefato parado em `pendente` há muito tempo significa que NINGUÉM está
+// consumindo a fila: nem o "kick" do upload, nem o cron.
+//
+// Esse alerta existe porque o kick falha em silêncio de propósito — a ideia é
+// que o cron sirva de rede de segurança. Mas se os dois estiverem quebrados
+// (APP_URL errada, cron não configurado), o sintoma é um arquivo que fica
+// "pendente" para sempre, sem nenhuma mensagem de erro em lugar nenhum.
+$paradosDesde = date('Y-m-d H:i:s', time() - 600);
+$parados = $contar($pdo, "SELECT COUNT(*) FROM artefatos WHERE status = 'pendente' AND criado_em < '" . $paradosDesde . "'");
+
+if ($parados > 0) {
+    $alertas[] = [
+        'erro',
+        $parados . ' artefato(s) parado(s) em "pendente" há mais de 10 minutos. Ninguém está processando a fila: '
+            . 'confira o <code>cron</code> do <code>bin/worker.php</code> e se <code>APP_URL</code> no <code>.env</code> '
+            . 'aponta para o endereço real desta instância (é por ele que o upload dispara o worker).',
+    ];
+}
+
 // Setor com contato nunca revisado: contato errado é pior que contato nenhum,
 // porque o agente entrega o número errado com toda a confiança do mundo.
 $setoresSemRevisao = $contar(

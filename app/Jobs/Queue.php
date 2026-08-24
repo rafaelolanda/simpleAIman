@@ -180,6 +180,71 @@ final class Queue
         return $stmt->rowCount();
     }
 
+    /**
+     * Cutuca o worker para começar agora, sem esperar o cron.
+     *
+     * Fire-and-forget de propósito: abre a conexão, manda a requisição e
+     * fecha sem ler a resposta. Quem acabou de subir um arquivo não pode
+     * ficar esperando a ingestão terminar para o formulário responder.
+     *
+     * Falhar aqui é aceitável e silencioso — o cron pega no próximo ciclo.
+     * É por isso que o cron continua existindo mesmo com o kick funcionando.
+     */
+    public static function cutucarWorker(): void
+    {
+        if (WORKER_TOKEN === '' || APP_URL === '') {
+            return;
+        }
+
+        $url = APP_URL . '/api/worker-kick.php?token=' . rawurlencode(WORKER_TOKEN);
+        $partes = parse_url($url);
+
+        if (!is_array($partes) || !isset($partes['host'])) {
+            return;
+        }
+
+        $seguro = ($partes['scheme'] ?? 'http') === 'https';
+        $porta = $partes['port'] ?? ($seguro ? 443 : 80);
+        $destino = ($seguro ? 'ssl://' : '') . $partes['host'];
+
+        $contexto = stream_context_create([
+            // Ambiente local costuma usar certificado autoassinado; o alvo
+            // aqui é a própria máquina, então não há o que interceptar.
+            'ssl' => ['verify_peer' => APP_ENV !== 'local', 'verify_peer_name' => APP_ENV !== 'local'],
+        ]);
+
+        $socket = @stream_socket_client(
+            "{$destino}:{$porta}",
+            $erro,
+            $mensagem,
+            2,
+            STREAM_CLIENT_CONNECT,
+            $contexto
+        );
+
+        if ($socket === false) {
+            return;
+        }
+
+        $caminho = ($partes['path'] ?? '/') . (isset($partes['query']) ? '?' . $partes['query'] : '');
+
+        fwrite($socket, "GET {$caminho} HTTP/1.1\r\nHost: {$partes['host']}\r\nConnection: Close\r\n\r\n");
+
+        // Lê APENAS a linha de status antes de fechar.
+        //
+        // Fechar logo após o fwrite() parece mais rápido, mas descarta o que
+        // ainda está no buffer — sobretudo em TLS, onde o handshake e a
+        // escrita podem não ter sido drenados. O pedido simplesmente não
+        // chega, e como a falha é silenciosa ninguém percebe.
+        //
+        // Ler uma linha custa milissegundos: o endpoint responde 202 e só
+        // depois começa a trabalhar. Não é esperar a ingestão — é confirmar
+        // que o pedido foi entregue.
+        stream_set_timeout($socket, 3);
+        fgets($socket, 128);
+        fclose($socket);
+    }
+
     /** @return array<string, int> */
     public static function resumo(): array
     {
