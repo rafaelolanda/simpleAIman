@@ -1,0 +1,22 @@
+{
+    "name": "olanda/simpleaiman",
+    "description": "Plataforma de agentes de IA com RAG, ferramentas configuraveis e multiplos canais",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.2",
+        "ext-pdo": "*",
+        "ext-pdo_sqlite": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    },
+    "autoload": {
+        "psr-4": {
+            "SimpleAIman\\": "app/"
+        }
+    }
+}

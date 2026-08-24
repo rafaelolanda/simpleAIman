@@ -1,0 +1,1082 @@
+:root {
+    --bg: #0f1115;
+    --bg-elevated: #171a21;
+    --bg-elevated-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #eef0f4;
+    --text-muted: #9aa1b1;
+    --accent: #ff2d55;
+    --accent-2: #1c1c1e;
+    --on-accent: #ffffff;
+    --success: #2ecc71;
+    --danger: #ff5470;
+    --warning: #ffb02e;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    --sidebar-w: 250px;
+    font-size: 16px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.admin-shell {
+    display: flex;
+    min-height: 100vh;
+}
+
+/* Sidebar */
+.admin-sidebar {
+    width: var(--sidebar-w);
+    flex-shrink: 0;
+    background: var(--bg-elevated);
+    border-right: 1px solid var(--border);
+    padding: 1.5rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    transition: transform 0.25s ease;
+}
+
+.admin-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0 0.5rem;
+    flex-shrink: 0;
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.admin-brand .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* a lista de itens é a única parte que rola; assim o rodapé com "Sair" continua
+   alcançável em tela baixa, em vez de ser empurrado para fora da viewport.
+   min-height:0 é necessário: sem ele um filho flex não encolhe abaixo do
+   conteúdo e o overflow nunca chega a acontecer. */
+.admin-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.admin-nav a {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    font-weight: 500;
+}
+
+.admin-nav a:hover {
+    background: var(--bg-elevated-2);
+    color: var(--text);
+}
+
+/* contador de mensagens novas: margin-left auto empurra pra ponta do item */
+.nav-badge {
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+}
+
+.admin-nav a.active {
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--text);
+}
+
+.admin-nav .icon {
+    width: 18px;
+    text-align: center;
+    opacity: 0.85;
+}
+
+.admin-sidebar-footer {
+    margin-top: auto;
+    flex-shrink: 0; /* nunca é comprimido pela lista de itens acima */
+    border-top: 1px solid var(--border);
+    padding-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+.admin-sidebar-footer form {
+    margin-top: 0.5rem;
+}
+
+/* Main area */
+.admin-main {
+    flex: 1;
+    min-width: 0;
+    padding: 1.75rem 2rem 3rem;
+}
+
+.admin-topbar {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.admin-menu-toggle {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.7rem;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.admin-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.admin-header h1 {
+    font-size: 1.4rem;
+    margin: 0;
+}
+
+.admin-header p {
+    color: var(--text-muted);
+    margin: 0.25rem 0 0;
+    font-size: 0.9rem;
+}
+
+/* Cards */
+.cards-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.75rem;
+}
+
+.card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem 1.25rem;
+    box-shadow: var(--shadow);
+}
+
+.card .label {
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.card .value {
+    font-size: 1.7rem;
+    font-weight: 700;
+    margin-top: 0.35rem;
+}
+
+.panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.panel h2 {
+    font-size: 1.05rem;
+    margin: 0 0 1rem;
+}
+
+/* Forms */
+.form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.field.full {
+    grid-column: 1 / -1;
+}
+
+.field label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="url"],
+input[type="date"],
+input[type="time"],
+input[type="file"],
+select,
+textarea {
+    background: var(--bg-elevated-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.6rem 0.7rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.92rem;
+    font-family: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+.checkbox-field {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.dias-semana-check {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.dia-semana-opcao {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--bg-elevated-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.dia-semana-opcao:has(input:checked) {
+    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.color-field {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.color-field input[type="color"] {
+    width: 42px;
+    height: 38px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-elevated-2);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.color-field input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 3px;
+}
+
+.color-field input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 4px;
+}
+
+.color-field input[type="text"] {
+    flex: 1;
+    min-width: 0;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--accent);
+    color: var(--on-accent);
+    border: none;
+    padding: 0.65rem 1.1rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.btn:hover {
+    opacity: 0.92;
+}
+
+.btn:active {
+    transform: scale(0.98);
+}
+
+.btn-secondary {
+    background: var(--bg-elevated-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.btn-danger {
+    background: var(--danger);
+}
+
+.btn-sm {
+    padding: 0.4rem 0.75rem;
+    font-size: 0.82rem;
+}
+
+.actions-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    margin-top: 1.25rem;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+thead th {
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.6rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+}
+
+tbody td {
+    padding: 0.7rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.table-wrap {
+    overflow-x: auto;
+}
+
+thead th a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: inherit;
+}
+
+thead th a:hover {
+    color: var(--text);
+}
+
+/* Filtros de listagem (busca/categoria/status) */
+.filtros-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.filtros-row .field {
+    flex: 1 1 180px;
+    min-width: 0;
+}
+
+/*
+ * Tabela responsiva "leve", sem JS: abaixo do breakpoint, cada <tr> vira um
+ * card e cada <td> mostra seu rótulo (data-label) à esquerda do valor — evita
+ * rolagem horizontal e mantém a leitura confortável no celular.
+ */
+@media (max-width: 720px) {
+    table.cards-mobile thead {
+        display: none;
+    }
+
+    table.cards-mobile,
+    table.cards-mobile tbody,
+    table.cards-mobile tr,
+    table.cards-mobile td {
+        display: block;
+        width: 100%;
+    }
+
+    table.cards-mobile tbody tr {
+        margin-bottom: 0.85rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 0.4rem 0.75rem;
+        background: var(--bg-elevated-2);
+    }
+
+    table.cards-mobile tbody tr:last-child {
+        margin-bottom: 0;
+    }
+
+    table.cards-mobile td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 0.55rem 0;
+        border-bottom: 1px dashed var(--border);
+        text-align: right;
+    }
+
+    table.cards-mobile td:last-child {
+        border-bottom: none;
+    }
+
+    table.cards-mobile td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: var(--text-muted);
+        text-align: left;
+        flex-shrink: 0;
+    }
+
+    table.cards-mobile td[data-label=""]::before,
+    table.cards-mobile td:not([data-label])::before {
+        content: none;
+    }
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge.on {
+    background: color-mix(in srgb, var(--success) 20%, transparent);
+    color: var(--success);
+}
+
+.badge.off {
+    background: color-mix(in srgb, var(--danger) 20%, transparent);
+    color: var(--danger);
+}
+
+.thumb {
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-sm);
+    object-fit: cover;
+    background: var(--bg-elevated-2);
+}
+
+.remove-image-check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: var(--danger);
+    cursor: pointer;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--text-muted);
+}
+
+/* Ação que abre um mini-formulário na própria linha da tabela */
+.acao-inline { display: inline-block; }
+.acao-inline summary { list-style: none; cursor: pointer; }
+.acao-inline summary::-webkit-details-marker { display: none; }
+.acao-inline-form { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
+.acao-inline-form input { min-width: 160px; }
+
+/* Textos de instrução: dica-campo abaixo de um campo, dica-painel no topo do bloco */
+.dica-campo {
+    margin: 0.35rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.45;
+    color: var(--text-muted);
+}
+.dica-campo strong { color: var(--text); font-weight: 600; }
+.dica-painel {
+    margin: -0.4rem 0 1rem;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+/* Seletor de par tipográfico com amostra real de cada fonte */
+.fonte-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 0.8rem;
+}
+.fonte-picker-item {
+    cursor: pointer;
+}
+.fonte-picker-item input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+.fonte-picker-visual {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1rem 1.1rem;
+    height: 100%;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--border);
+    border-radius: var(--radius-sm);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.fonte-picker-item:hover .fonte-picker-visual {
+    border-color: var(--accent);
+}
+.fonte-picker-item input:checked ~ .fonte-picker-visual {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.fonte-picker-amostra {
+    font-size: 1.5rem;
+    line-height: 1.2;
+    color: var(--text);
+}
+.fonte-picker-corpo {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+.fonte-picker-nome {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text);
+}
+.fonte-picker-item input:checked ~ .fonte-picker-visual .fonte-picker-nome {
+    color: var(--accent);
+}
+.fonte-picker-desc {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+/* Seletor visual de ícones (áreas de atuação) */
+.icon-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    gap: 0.6rem;
+}
+.icon-picker-item {
+    cursor: pointer;
+}
+.icon-picker-item input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+}
+.icon-picker-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.8rem 0.5rem;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--border);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+.icon-picker-item:hover .icon-picker-visual {
+    border-color: var(--accent);
+}
+.icon-picker-item input:checked ~ .icon-picker-visual {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    color: var(--text);
+    font-weight: 600;
+}
+.icon-picker-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 1.3rem;
+}
+.icon-picker-item input:checked ~ .icon-picker-visual .icon-picker-icon {
+    color: var(--accent);
+}
+
+/* Toasts */
+#toasts {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.toast {
+    background: var(--bg-elevated-2);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--success);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    font-size: 0.88rem;
+    max-width: 320px;
+    animation: toast-in 0.2s ease;
+}
+
+.toast.error {
+    border-left-color: var(--danger);
+}
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Login page (tela dividida: marca da emissora + formulário) */
+.login-split {
+    min-height: 100vh;
+    display: flex;
+}
+
+.login-brand {
+    flex: 1 1 46%;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+    color: var(--on-accent);
+}
+
+.login-brand-shape {
+    position: absolute;
+    border-radius: 50%;
+    background: var(--on-accent);
+    opacity: 0.1;
+}
+
+.login-brand-shape-1 {
+    width: 480px;
+    height: 480px;
+    top: -160px;
+    left: -160px;
+}
+
+.login-brand-shape-2 {
+    width: 340px;
+    height: 340px;
+    bottom: -120px;
+    right: -90px;
+}
+
+.login-brand-content {
+    position: relative;
+    z-index: 1;
+    max-width: 360px;
+    padding: 2rem;
+    text-align: center;
+}
+
+.login-brand-logo {
+    display: block;
+    width: 100px;
+    height: 100px;
+    object-fit: contain;
+    border-radius: 50%;
+    margin: 0 auto 1.4rem;
+    background: #fff;
+}
+
+.login-brand-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100px;
+    height: 100px;
+    border-radius: 50%;
+    margin: 0 auto 1.4rem;
+    background: color-mix(in srgb, var(--on-accent) 14%, transparent);
+    font-size: 2.4rem;
+}
+
+.login-brand-content h2 {
+    display: inline-block;
+    color: #fff;
+    background: color-mix(in srgb, black 25%, transparent);
+    font-size: 1.4rem;
+    padding: 0.55rem 1.4rem;
+    border-radius: 999px;
+    margin: 0;
+}
+
+.login-panel {
+    flex: 1 1 54%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--bg);
+}
+
+.login-card {
+    width: 100%;
+    max-width: 360px;
+    padding: 2rem 1.75rem;
+}
+
+.login-card h1 {
+    font-size: 1.2rem;
+    margin: 0 0 0.25rem;
+}
+
+.login-card p.sub {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    margin: 0 0 1.5rem;
+}
+
+.login-card p.sub a {
+    color: var(--accent);
+    text-decoration: underline;
+}
+
+.login-card .field {
+    margin-bottom: 1rem;
+}
+
+.password-field {
+    position: relative;
+    display: flex;
+}
+
+.password-field input {
+    width: 100%;
+    padding-right: 2.6rem;
+}
+
+.password-toggle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 2.6rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1.05rem;
+}
+
+.password-toggle:hover {
+    color: var(--text);
+}
+
+.alert {
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    margin-bottom: 1rem;
+}
+
+.alert.error {
+    background: color-mix(in srgb, var(--danger) 15%, transparent);
+    color: var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
+}
+
+.alert.success {
+    background: color-mix(in srgb, var(--success) 15%, transparent);
+    color: var(--success);
+    border: 1px solid color-mix(in srgb, var(--success) 40%, transparent);
+}
+
+/* Editor de texto simples (contenteditable) */
+.editor-wrapper {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--bg-elevated-2);
+}
+
+.editor-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+}
+
+.editor-toolbar button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text);
+    padding: 0.3rem 0.55rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-family: inherit;
+}
+
+.editor-toolbar button:hover {
+    background: var(--bg-elevated-2);
+    border-color: var(--border);
+}
+
+.editor-area {
+    min-height: 260px;
+    padding: 0.9rem 1rem;
+    outline: none;
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+.editor-area:empty::before {
+    content: attr(data-placeholder);
+    color: var(--text-muted);
+}
+
+.editor-area img {
+    max-width: 100%;
+    border-radius: var(--radius-sm);
+}
+
+.gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+}
+
+.gallery-item {
+    position: relative;
+}
+
+.gallery-item img {
+    width: 100%;
+    height: 90px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+}
+
+.gallery-item form {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+}
+
+.gallery-item button {
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 0.15rem 0.45rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .admin-topbar {
+        display: flex;
+    }
+
+    .admin-sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        z-index: 50;
+        transform: translateX(-100%);
+        box-shadow: var(--shadow);
+    }
+
+    .admin-sidebar.open {
+        transform: translateX(0);
+    }
+
+    .admin-main {
+        padding: 1.25rem 1.1rem 2.5rem;
+    }
+
+    .login-brand {
+        display: none;
+    }
+
+    .login-panel {
+        flex: 1 1 100%;
+    }
+}
+
+/* ============================================================
+   simpleAIman — acréscimos ao admin.css herdado do site-adv
+   ============================================================ */
+
+.admin-nav-grupo {
+    display: block;
+    padding: 1rem 0.9rem 0.35rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.25rem;
+}
+
+.stat-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 1rem;
+    border: 1px solid var(--borda, #e3e6ec);
+    border-radius: 12px;
+    background: var(--superficie, #fff);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, transform 0.15s;
+}
+
+.stat-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.stat-icon {
+    color: var(--accent);
+    margin-bottom: 0.35rem;
+}
+
+.stat-valor {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.stat-rotulo {
+    font-size: 0.78rem;
+    opacity: 0.7;
+}
+
+.lista-alertas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.alerta {
+    padding: 0.7rem 0.9rem;
+    border-radius: 9px;
+    border-left: 4px solid;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.alerta code {
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.06);
+    font-size: 0.85em;
+}
+
+.alerta-erro   { border-color: #dc2626; background: rgba(220, 38, 38, 0.07); }
+.alerta-aviso  { border-color: #d97706; background: rgba(217, 119, 6, 0.07); }
+.alerta-ok     { border-color: #16a34a; background: rgba(22, 163, 74, 0.07); margin: 0; }
+
+.vazio {
+    opacity: 0.6;
+    font-size: 0.9rem;
+    margin: 0;
+}

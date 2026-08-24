@@ -1,0 +1,38 @@
+Options -Indexes -MultiViews
+RewriteEngine On
+
+# /blog/{slug} -> artigo.php?slug={slug}
+RewriteRule ^blog/([a-z0-9\-]+)/?$ artigo.php?slug=$1 [L,QSA]
+
+# /areas-de-atuacao/{slug} -> area-atuacao.php?slug={slug}
+RewriteRule ^areas-de-atuacao/([a-z0-9\-]+)/?$ area-atuacao.php?slug=$1 [L,QSA]
+
+# /favicon.ico -> favicon.php (navegadores pedem esse caminho direto, sem passar por <link>)
+RewriteRule ^favicon\.ico$ favicon.php [L]
+
+# /robots.txt -> robots.php (precisa gerar a URL absoluta do sitemap, que varia por instância)
+RewriteRule ^robots\.txt$ robots.php [L]
+
+# Bloqueia acesso direto a arquivos .sqlite eventualmente presentes no document root
+<FilesMatch "\.(sqlite|sqlite3|db)$">
+    Require all denied
+</FilesMatch>
+
+# Redireciona /pagina.php -> /pagina (URL limpa), preservando query string
+# Só em GET: redirect 301 em POST faz o navegador reenviar sem o corpo (perde os dados do form)
+RewriteCond %{REQUEST_METHOD} GET
+RewriteCond %{THE_REQUEST} \s/+([^?\s]+)\.php[\s?] [NC]
+RewriteRule ^ /%1 [R=301,L]
+
+# Reescreve /pagina -> pagina.php internamente, se o arquivo existir
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([^.]+)$ $1.php [L,QSA]
+
+# Cache básico para assets estáticos
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css "access plus 1 week"
+    ExpiresByType application/javascript "access plus 1 week"
+    ExpiresByType image/webp "access plus 1 month"
+</IfModule>
