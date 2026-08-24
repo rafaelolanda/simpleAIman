@@ -197,14 +197,18 @@ titulo('4. sqlite-vec carrega neste PHP?');
 $podeCarregar = false;
 $motivo = '';
 
-if (method_exists('PDO', 'loadExtension')) {
+// Atenção ao nome: NÃO é PDO::loadExtension(). O método vive na subclasse
+// Pdo\Sqlite, introduzida no PHP 8.4, e só uma conexão criada por
+// PDO::connect() é instância dela — `new PDO()` devolve um PDO puro, sem o
+// método. Procurar em PDO dá falso negativo. Verificado no 8.4.21.
+if (method_exists('Pdo\Sqlite', 'loadExtension')) {
     $podeCarregar = true;
-    $motivo = 'PDO::loadExtension() disponível (PHP >= 8.4).';
+    $motivo = 'Pdo\Sqlite::loadExtension() disponível (PHP >= 8.4).';
 } elseif (class_exists('SQLite3') && method_exists('SQLite3', 'loadExtension')) {
     $podeCarregar = true;
-    $motivo = 'SQLite3::loadExtension() disponível.';
+    $motivo = 'Pdo\Sqlite ausente; caindo em SQLite3::loadExtension().';
 } else {
-    $motivo = 'Nem PDO::loadExtension() (PHP >= 8.4) nem SQLite3::loadExtension() existem neste PHP.';
+    $motivo = 'Nem Pdo\Sqlite::loadExtension() (PHP >= 8.4) nem SQLite3::loadExtension() existem neste PHP.';
 }
 
 echo '  ' . $motivo . "\n";
@@ -214,14 +218,19 @@ if ($podeCarregar) {
     // usa SQLITE_OMIT_LOAD_EXTENSION, e o PHP ainda desliga isso por php.ini.
     //
     // Atenção: loadExtension() sinaliza por WARNING, não por exceção. Um
-    // try/catch aqui não pega nada e o teste dá falso positivo — por isso a
+    // try/catch sozinho não pega nada e o teste dá falso positivo — por isso a
     // detecção converte o warning em exceção antes de chamar.
     set_error_handler(static function (int $no, string $str): bool {
         throw new ErrorException($str, 0, $no);
     });
 
     try {
-        $mem = new SQLite3(':memory:');
+        if (method_exists('Pdo\Sqlite', 'loadExtension')) {
+            $mem = PDO::connect('sqlite::memory:');
+        } else {
+            $mem = new SQLite3(':memory:');
+        }
+
         $mem->loadExtension('inexistente_apenas_para_testar');
         echo "  Carregamento habilitado (a extensão de teste nem existe, então o silêncio já é resposta).\n";
     } catch (Throwable $e) {

@@ -9,7 +9,7 @@ Primeiro case: assistente da URI (dúvidas de alunos e candidatos, simulação d
 ## 1. Premissas
 
 - **PHP 8.4+, sem framework.** Composer entra só como fornecedor de bibliotecas. `vendor/` vai **commitado** — deploy continua sendo `git pull`, sem build.
-  O piso é 8.4 e não 8.2 por um motivo concreto: `PDO::loadExtension()` só existe a
+  O piso é 8.4 e não 8.2 por um motivo concreto: `Pdo\Sqlite::loadExtension()` só existe a
   partir do 8.4, e é o único caminho limpo para o sqlite-vec (§8). Fixar o piso agora
   custa nada; descobrir na etapa 4 que o host está no 8.2 custa a otimização inteira.
   `app/bootstrap.php` recusa versão anterior com mensagem explícita, em vez de deixar
@@ -330,11 +330,15 @@ antes do scan.
 
 Não é a implementação inicial por três motivos, nenhum deles relacionado a qualidade:
 
-1. **Carregar extensão pelo PHP.** `PDO::loadExtension()` só existe a partir do **PHP 8.4**
-   (por isso o piso do projeto é 8.4). O caminho alternativo, `SQLite3::loadExtension()`,
-   várias distribuições compilam desabilitado — confirmado no ambiente local em 2026-08-24 —
-   e em compartilhada não se escolhe como o PHP foi compilado. `bin/benchmark-sqlite.php`
-   verifica isso no host de destino antes de qualquer decisão.
+1. **Carregar extensão pelo PHP.** O método é `Pdo\Sqlite::loadExtension()` — **não**
+   `PDO::loadExtension()`, que não existe. Ele vive na subclasse `Pdo\Sqlite`, introduzida
+   no PHP 8.4 (por isso o piso do projeto é 8.4), e **só uma conexão criada por
+   `PDO::connect()` é instância dela**: `new PDO()` devolve um `PDO` puro, sem o método.
+   Por isso `Database::connection()` usa `PDO::connect()` — do contrário a porta ficaria
+   fechada mesmo com o PHP certo. O caminho alternativo, `SQLite3::loadExtension()`, várias
+   distribuições compilam desabilitado, e em compartilhada não se escolhe como o PHP foi
+   compilado. `bin/benchmark-sqlite.php` verifica isso no host de destino.
+   Tudo isto verificado no PHP 8.4.21 em 2026-08-24.
 2. **Binário por plataforma.** É um `.so`/`.dll` compilado. Versionar binário por arquitetura
    corrói a premissa que nos fez commitar o `vendor/`: "`git pull` e funciona em qualquer
    lugar" viraria "funciona se o host bater com o binário certo".

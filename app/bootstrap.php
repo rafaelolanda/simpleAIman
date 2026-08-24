@@ -10,8 +10,8 @@ declare(strict_types=1);
  * PHP muda por painel de controle e sem aviso, essa mensagem economiza uma
  * sessão inteira de depuração.
  *
- * O piso é 8.4 porque PDO::loadExtension() só existe a partir dele, e é o único
- * caminho limpo para o sqlite-vec. Ver ARQUITETURA.md §1 e §8.
+ * O piso é 8.4 porque Pdo\Sqlite::loadExtension() só existe a partir dele, e é o
+ * único caminho limpo para o sqlite-vec. Ver ARQUITETURA.md §1 e §8.
  */
 if (PHP_VERSION_ID < 80400) {
     $msg = 'simpleAIman exige PHP 8.4 ou superior. Em uso: ' . PHP_VERSION

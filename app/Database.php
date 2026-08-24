@@ -10,7 +10,15 @@ final class Database
     {
         if (self::$instance === null) {
             $dsn = 'sqlite:' . DB_PATH;
-            $pdo = new PDO($dsn);
+
+            // PDO::connect() e não `new PDO()`.
+            //
+            // A partir do PHP 8.4 existe a subclasse Pdo\Sqlite, e só ela expõe
+            // loadExtension() — que é o caminho para o sqlite-vec. `new PDO()`
+            // devolve um PDO puro, sem esse método, o que fecharia a porta da
+            // otimização de vez. Como o piso do projeto é 8.4, não há fallback
+            // a manter. Ver ARQUITETURA.md §8.
+            $pdo = PDO::connect($dsn);
             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
             $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
             $pdo->exec('PRAGMA foreign_keys = ON');
