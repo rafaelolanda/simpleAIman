@@ -84,9 +84,16 @@ if (!$pdo->query('SELECT 1 FROM setores LIMIT 1')->fetchColumn()) {
 // alguém conferir a chave no .env — provedor ativo sem chave só produz erro
 // confuso na primeira conversa.
 if (!$pdo->query('SELECT 1 FROM provedores LIMIT 1')->fetchColumn()) {
-    // Chat pelo caminho OpenAI-compatible; embeddings pelo NATIVO.
-    // Motivo medido: o compat recusa `task_type` (HTTP 400) e o nativo aplica.
-    // Ver comentário em schema.sql, tabela provedores.
+    // Chat e embeddings pelo caminho NATIVO do Gemini.
+    //
+    // Chat nativo porque e' o unico que trata `thoughtSignature` no retorno da
+    // ferramenta — a camada OpenAI-compatible entrega a assinatura em
+    // `extra_content`, mas quem remonta a mensagem tende a descarta-la, e a
+    // segunda volta volta 400. Embedding nativo porque o compat recusa
+    // `task_type` (HTTP 400) e o nativo aplica de fato.
+    //
+    // As duas colunas de endpoint continuam existindo para provedores em que
+    // chat e embedding moram em caminhos diferentes.
     $stmt = $pdo->prepare(
         'INSERT INTO provedores
             (slug, nome, driver, base_url, auth_ref, modelo_chat,
@@ -100,14 +107,14 @@ if (!$pdo->query('SELECT 1 FROM provedores LIMIT 1')->fetchColumn()) {
     $stmt->execute([
         'slug' => 'gemini-flash',
         'nome' => 'Google Gemini Flash',
-        'driver' => 'openai',
-        'base_url' => 'https://generativelanguage.googleapis.com/v1beta/openai/',
+        'driver' => 'gemini',
+        'base_url' => 'https://generativelanguage.googleapis.com/v1beta/models',
         'auth_ref' => 'GEMINI_API_KEY',
         // Versão FIXA de propósito: `gemini-flash-latest` devolveu 503 por
         // sobrecarga enquanto os modelos fixos respondiam, e um alias muda
         // comportamento e custo sem aviso.
         'chat' => 'gemini-3.7-flash',
-        'base_embed' => 'https://generativelanguage.googleapis.com/v1beta/',
+        'base_embed' => 'https://generativelanguage.googleapis.com/v1beta/models/',
         'driver_embed' => 'gemini_nativo',
         'embed' => 'gemini-embedding-001',
         'dim' => 768,
