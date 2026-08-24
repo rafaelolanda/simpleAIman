@@ -78,7 +78,8 @@ simpleAIman/
 │   ├── config.php  bootstrap.php  helpers.php
 ├── bin/
 │   ├── worker.php                fila (cron + kick)
-│   └── benchmark-sqlite.php      teste de concorrência no host real
+│   └── benchmark-sqlite.php      no host real: concorrência de escrita (NFS?),
+│                                 custo do cosseno em PHP, sqlite-vec carrega?
 ├── database/  schema.sql  migrate.php
 ├── vendor/                       ← commitado
 ├── composer.json
@@ -310,6 +311,33 @@ ao vivo.
 **Verificar antes de fechar:** se o host usa storage de rede (NFS), o lock do SQLite é lento
 e não confiável. Único cenário que inviabilizaria a rota. `bin/benchmark-sqlite.php` testa isso.
 
+### E o sqlite-vec?
+
+`sqlite-vec` **não faz busca aproximada (ANN)** — faz a mesma varredura por força bruta que a
+nossa, só que em C com SIMD. Não muda a classe de escalabilidade; muda o multiplicador, que é
+grande: 10–30× mais rápido que PHP, com quantização int8/binária nativa e filtro por metadado
+antes do scan.
+
+Não é a implementação inicial por três motivos, nenhum deles relacionado a qualidade:
+
+1. **Carregar extensão pelo PHP.** `PDO::loadExtension()` só existe a partir do **PHP 8.4**.
+   Antes disso o caminho é `SQLite3::loadExtension()`, que várias distribuições compilam
+   desabilitado — e em compartilhada não se escolhe como o PHP foi compilado.
+2. **Binário por plataforma.** É um `.so`/`.dll` compilado. Versionar binário por arquitetura
+   corrói a premissa que nos fez commitar o `vendor/`: "`git pull` e funciona em qualquer
+   lugar" viraria "funciona se o host bater com o binário certo".
+3. **Pré-1.0**, com troca de API entre versões — dependência a mais que pode quebrar num host
+   e não em outro, num produto clonado por cliente.
+
+**Plano:** `bin/benchmark-sqlite.php` verifica se a instalação consegue carregar a extensão.
+O `SqliteVectorStore` em PHP puro é o piso garantido em qualquer lugar. **Se e quando** a
+medição com dados reais mostrar necessidade, entra `SqliteVecStore` como segunda implementação
+da mesma interface, com detecção em runtime. Construir as duas antes de ter número seria
+otimizar sem medida.
+
+Isso vale enquanto ninguém escrever cálculo de similaridade fora da interface `VectorStore`.
+É o que torna PHP puro, sqlite-vec e pgvector uma troca de classe em vez de uma reescrita.
+
 ---
 
 ## 9. Handoff (Nível 1, com o schema do Nível 2 pronto)
@@ -333,7 +361,7 @@ ferramentas que rodaram.
 
 | # | Etapa | Fecha funcionando com |
 |---|---|---|
-| 1 | **Esqueleto** — `public_html/`+`app/`, classes do cofre, `schema.sql`, `migrate.php`, admin logando | painel acessível, zero IA |
+| 1 | **Esqueleto** — `public_html/`+`app/`, classes do cofre, `schema.sql`, `migrate.php`, admin logando, `benchmark-sqlite.php` | painel acessível, zero IA |
 | 2 | **Provedores + LLPhant** — CRUD, `ProviderFactory`, chat cru sem RAG | conversa com Gemini ponta a ponta |
 | 3 | **Ingestão** — jobs, worker retomável, leitores, chunker, embeddings | artefatos indexados com status no admin |
 | 4 | **Retrieval** — `SqliteVectorStore`, FTS5, RRF + tela "testar busca" | calibrar top_k e limiar sem queimar token |
