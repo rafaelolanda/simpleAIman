@@ -155,6 +155,19 @@ CREATE TABLE IF NOT EXISTS provedores (
     base_url            TEXT,
     auth_ref            TEXT,                             -- nome da var no .env
     modelo_chat         TEXT,
+
+    -- Embeddings têm endpoint e driver PRÓPRIOS, separados do chat.
+    --
+    -- Medido em 2026-08-24 contra o Gemini: a camada OpenAI-compatible recusa
+    -- `task_type` com HTTP 400 ("Unknown name"), enquanto o endpoint nativo
+    -- aceita e de fato aplica (RETRIEVAL_DOCUMENT e RETRIEVAL_QUERY produzem
+    -- vetores diferentes). Como usar o tipo certo em cada lado é recall de
+    -- graça, o chat vai pelo compat e o embedding pelo nativo — daí duas
+    -- colunas em vez de uma. Provedor que faça tudo por um caminho só deixa
+    -- estas em branco e cai no base_url/driver de cima.
+    base_url_embedding  TEXT,
+    driver_embedding    TEXT,                             -- openai|gemini_nativo|ollama
+
     modelo_embedding    TEXT,
     dimensoes           INTEGER,
     suporta_tools       INTEGER NOT NULL DEFAULT 1,
@@ -179,7 +192,20 @@ CREATE TABLE IF NOT EXISTS agentes (
     system_prompt       TEXT,
     mensagem_abertura   TEXT,
     temperatura         REAL NOT NULL DEFAULT 0.3,
+
+    -- CUIDADO com valor baixo: os Gemini 3.x são modelos "pensantes" e o
+    -- raciocínio interno consome este orçamento ANTES de sobrar texto. Medido
+    -- em 2026-08-24: com max_tokens = 20 a API devolve HTTP 200 com conteúdo
+    -- VAZIO e finish_reason = length. Não é erro — é resposta em branco, e o
+    -- sintoma no widget seria "o bot não respondeu", sem nada no log. O
+    -- ChatService precisa tratar esse caso explicitamente.
     max_tokens          INTEGER NOT NULL DEFAULT 1024,
+
+    -- Quanto o modelo pode "pensar" antes de responder: none|low|medium|high.
+    -- Num agente de FAQ, `none` é mais barato e mais rápido; num que encadeia
+    -- ferramentas, vale deixar pensar. Ignorado por provedor que não suporte.
+    reasoning_effort    TEXT NOT NULL DEFAULT 'none',
+
     -- Parâmetros de recuperação ficam NO AGENTE, não globais: suporte quer
     -- recall alto, política interna quer precisão. É o botão que mais move
     -- qualidade na prática.

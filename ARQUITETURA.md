@@ -102,18 +102,26 @@ simpleAIman/
 config              id=1 singleton — nome da instância, agente padrão, tema
 provedores          slug, driver(openai|anthropic|ollama|gemini), base_url,
                     auth_ref,                 -- nome da var no .env, NUNCA a chave
-                    modelo_chat, modelo_embedding, dimensoes,
+                    modelo_chat,
+                    base_url_embedding, driver_embedding,   -- embeddings por outro caminho
+                    modelo_embedding, dimensoes,
                     suporta_tools, suporta_stream, ativo
 ```
 
 > `driver` + `base_url` + `modelo` cobre Gemini, Groq, DeepSeek e OpenRouter pelo caminho
 > OpenAI-compatible, sem classe nova por fornecedor.
 
+> **Embeddings têm endpoint próprio.** Medido em 2026-08-24: a camada OpenAI-compatible do
+> Gemini **recusa `task_type`** (HTTP 400, "Unknown name"), enquanto o endpoint nativo aceita
+> e de fato aplica — `RETRIEVAL_DOCUMENT` e `RETRIEVAL_QUERY` produzem vetores diferentes.
+> Como usar o tipo certo de cada lado é recall de graça, o chat vai pelo compat e o embedding
+> pelo nativo. Provedor que faça tudo por um caminho só deixa as duas colunas em branco.
+
 ### Agentes
 
 ```sql
 agentes             slug, nome, descricao, provedor_id, modelo,
-                    system_prompt, temperatura, max_tokens,
+                    system_prompt, temperatura, max_tokens, reasoning_effort,
                     top_k, limiar_similaridade, max_iteracoes_tool,
                     usa_rag, usa_faq, captura_lead, lead_destino_id,
                     publico, token_publico, ativo
@@ -238,6 +246,17 @@ mensagem do usuário
   │
   └─ grava mensagem + fontes + execuções + tokens/custo/latência
 ```
+
+**Modelo pensante falha em silêncio.** Os Gemini 3.x gastam o orçamento de saída pensando
+**antes** de sobrar texto. Medido em 2026-08-24 com `max_tokens = 20`: HTTP **200** com
+conteúdo **vazio** e `finish_reason = length`. Não é erro — é resposta em branco, e o sintoma
+no widget seria "o bot não respondeu", sem nada no log. O `ChatService` **precisa** tratar
+`finish_reason = length` com conteúdo vazio como erro legível. `reasoning_effort` (none/low/
+medium/high) controla esse gasto por agente.
+
+**Fixar a versão do modelo, nunca o alias.** `gemini-flash-latest` devolveu **503 high demand**
+enquanto os modelos de versão fixa respondiam normalmente — e um alias ainda muda comportamento
+e custo sem aviso.
 
 **Slot filling.** Faltando parâmetro obrigatório, o modelo pergunta ao usuário. Isso não é
 encadeamento de ferramenta, é conversa — emerge sozinho dos campos obrigatórios.
@@ -390,10 +409,10 @@ ferramentas que rodaram.
 
 Parando na 8, já existe produto.
 
-**Etapa 2 tem um teste obrigatório antes de seguir:** confirmar que o Gemini pelo caminho
-OpenAI-compatible aguenta **tool calling com streaming**. É onde essa camada de compatibilidade
-costuma falhar, e é exatamente o mais usado. Se falhar, decide-se ali entre driver nativo ou
-modo não-streaming.
+**O teste obrigatório da etapa 2 foi feito e passou** (2026-08-24): o Gemini pelo caminho
+OpenAI-compatible **aguenta tool calling com streaming** — o modelo pediu a ferramenta com os
+argumentos corretos, entregues em deltas ao longo do stream. O `ChatService` pode nascer com
+pipeline único (stream e completo), como planejado.
 
 ---
 

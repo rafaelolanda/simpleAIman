@@ -84,11 +84,18 @@ if (!$pdo->query('SELECT 1 FROM setores LIMIT 1')->fetchColumn()) {
 // alguém conferir a chave no .env — provedor ativo sem chave só produz erro
 // confuso na primeira conversa.
 if (!$pdo->query('SELECT 1 FROM provedores LIMIT 1')->fetchColumn()) {
+    // Chat pelo caminho OpenAI-compatible; embeddings pelo NATIVO.
+    // Motivo medido: o compat recusa `task_type` (HTTP 400) e o nativo aplica.
+    // Ver comentário em schema.sql, tabela provedores.
     $stmt = $pdo->prepare(
         'INSERT INTO provedores
-            (slug, nome, driver, base_url, auth_ref, modelo_chat, modelo_embedding, dimensoes, ativo, criado_em, editado_em)
+            (slug, nome, driver, base_url, auth_ref, modelo_chat,
+             base_url_embedding, driver_embedding, modelo_embedding, dimensoes,
+             ativo, criado_em, editado_em)
          VALUES
-            (:slug, :nome, :driver, :base_url, :auth_ref, :chat, :embed, :dim, 0, :agora, :agora)'
+            (:slug, :nome, :driver, :base_url, :auth_ref, :chat,
+             :base_embed, :driver_embed, :embed, :dim,
+             0, :agora, :agora)'
     );
     $stmt->execute([
         'slug' => 'gemini-flash',
@@ -96,7 +103,12 @@ if (!$pdo->query('SELECT 1 FROM provedores LIMIT 1')->fetchColumn()) {
         'driver' => 'openai',
         'base_url' => 'https://generativelanguage.googleapis.com/v1beta/openai/',
         'auth_ref' => 'GEMINI_API_KEY',
-        'chat' => 'gemini-2.5-flash',
+        // Versão FIXA de propósito: `gemini-flash-latest` devolveu 503 por
+        // sobrecarga enquanto os modelos fixos respondiam, e um alias muda
+        // comportamento e custo sem aviso.
+        'chat' => 'gemini-3.7-flash',
+        'base_embed' => 'https://generativelanguage.googleapis.com/v1beta/',
+        'driver_embed' => 'gemini_nativo',
         'embed' => 'gemini-embedding-001',
         'dim' => 768,
         'agora' => $agora,
@@ -137,7 +149,7 @@ if (!$pdo->query('SELECT 1 FROM agentes LIMIT 1')->fetchColumn()) {
         'nome' => 'Assistente',
         'descricao' => 'Agente inicial. Ajuste prompt, bases e ferramentas no painel.',
         'provedor' => $provedorId ?: null,
-        'modelo' => 'gemini-2.5-flash',
+        'modelo' => 'gemini-3.7-flash',
         'prompt' => "Você é um assistente de atendimento. Responda apenas com base nas fontes fornecidas e nas ferramentas disponíveis.\n\n"
             . "Regras:\n"
             . "- Nunca invente valores, prazos, telefones ou e-mails. Esses dados só saem de ferramenta.\n"
