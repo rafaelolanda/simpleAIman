@@ -8,7 +8,12 @@ Primeiro case: assistente da URI (dúvidas de alunos e candidatos, simulação d
 
 ## 1. Premissas
 
-- **PHP 8.3+, sem framework.** Composer entra só como fornecedor de bibliotecas. `vendor/` vai **commitado** — deploy continua sendo `git pull`, sem build.
+- **PHP 8.4+, sem framework.** Composer entra só como fornecedor de bibliotecas. `vendor/` vai **commitado** — deploy continua sendo `git pull`, sem build.
+  O piso é 8.4 e não 8.2 por um motivo concreto: `PDO::loadExtension()` só existe a
+  partir do 8.4, e é o único caminho limpo para o sqlite-vec (§8). Fixar o piso agora
+  custa nada; descobrir na etapa 4 que o host está no 8.2 custa a otimização inteira.
+  `app/bootstrap.php` recusa versão anterior com mensagem explícita, em vez de deixar
+  o erro aparecer torto lá na frente.
 - **SQLite**, com o acesso vetorial isolado atrás de interface (troca por pgvector é substituir uma classe).
 - **Document root isolado** em `public_html/`; `app/`, `bin/` e `database/` fora do alcance HTTP.
 - **Uma instância por cliente.** Cada um tem seu `.env`, seu `.sqlite` e seus uploads, fora do controle de versão.
@@ -325,9 +330,10 @@ antes do scan.
 
 Não é a implementação inicial por três motivos, nenhum deles relacionado a qualidade:
 
-1. **Carregar extensão pelo PHP.** `PDO::loadExtension()` só existe a partir do **PHP 8.4**.
-   Antes disso o caminho é `SQLite3::loadExtension()`, que várias distribuições compilam
-   desabilitado — e em compartilhada não se escolhe como o PHP foi compilado.
+1. **Carregar extensão pelo PHP.** `PDO::loadExtension()` só existe a partir do **PHP 8.4**
+   (por isso o piso do projeto é 8.4). O caminho alternativo, `SQLite3::loadExtension()`,
+   várias distribuições compilam desabilitado — inclusive a Laragon local, verificada em
+   2026-08-24 — e em compartilhada não se escolhe como o PHP foi compilado.
 2. **Binário por plataforma.** É um `.so`/`.dll` compilado. Versionar binário por arquitetura
    corrói a premissa que nos fez commitar o `vendor/`: "`git pull` e funciona em qualquer
    lugar" viraria "funciona se o host bater com o binário certo".
