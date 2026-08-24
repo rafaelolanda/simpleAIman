@@ -332,8 +332,9 @@ Não é a implementação inicial por três motivos, nenhum deles relacionado a 
 
 1. **Carregar extensão pelo PHP.** `PDO::loadExtension()` só existe a partir do **PHP 8.4**
    (por isso o piso do projeto é 8.4). O caminho alternativo, `SQLite3::loadExtension()`,
-   várias distribuições compilam desabilitado — inclusive a Laragon local, verificada em
-   2026-08-24 — e em compartilhada não se escolhe como o PHP foi compilado.
+   várias distribuições compilam desabilitado — confirmado no ambiente local em 2026-08-24 —
+   e em compartilhada não se escolhe como o PHP foi compilado. `bin/benchmark-sqlite.php`
+   verifica isso no host de destino antes de qualquer decisão.
 2. **Binário por plataforma.** É um `.so`/`.dll` compilado. Versionar binário por arquitetura
    corrói a premissa que nos fez commitar o `vendor/`: "`git pull` e funciona em qualquer
    lugar" viraria "funciona se o host bater com o binário certo".
@@ -394,7 +395,10 @@ modo não-streaming.
 
 ## 11. Armadilhas conhecidas
 
-- `php -S` não processa `.htaccess` — URLs limpas só sob Apache/Laragon.
+- `php -S` não processa `.htaccess`: URLs limpas, bloqueio de `.sqlite` e cache de assets
+  só valem sob **Apache com `mod_rewrite`**. Testar essas rotas exige servidor real — e se
+  o ambiente local for nginx, as regras do `.htaccess` precisam de equivalente próprio, ou
+  o que funciona na sua máquina não é o que roda em produção.
 - SQLite não permite ALTER de `CHECK`; enumerações validam no PHP.
 - Índice sobre coluna incremental não pode ficar no `schema.sql` (roda antes da migração).
 - Coluna nova depois de instância no ar precisa de `garantir_colunas()` no `migrate.php` —
