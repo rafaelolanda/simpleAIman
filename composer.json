@@ -5,18 +5,30 @@
     "license": "proprietary",
     "require": {
         "php": ">=8.4",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
         "ext-pdo": "*",
         "ext-pdo_sqlite": "*",
-        "ext-json": "*",
-        "ext-mbstring": "*"
+        "ext-zip": "*",
+        "neuron-core/neuron-ai": "3.16.6",
+        "phpoffice/phpword": "^1.4",
+        "smalot/pdfparser": "^2.12"
     },
     "config": {
         "optimize-autoloader": true,
-        "sort-packages": true
+        "sort-packages": true,
+        "allow-plugins": {
+            "php-http/discovery": true
+        }
     },
     "autoload": {
         "psr-4": {
-            "SimpleAIman\\": "app/"
+            "SimpleAIman\\Canais\\": "app/Canais/",
+            "SimpleAIman\\Jobs\\": "app/Jobs/",
+            "SimpleAIman\\Llm\\": "app/Llm/",
+            "SimpleAIman\\Rag\\": "app/Rag/",
+            "SimpleAIman\\Tools\\": "app/Tools/"
         }
     }
 }

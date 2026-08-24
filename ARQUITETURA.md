@@ -23,6 +23,35 @@ Primeiro case: assistente da URI (dúvidas de alunos e candidatos, simulação d
 
 `Database.php` (PDO SQLite, WAL, foreign_keys), `Auth.php` (login, bloqueio por tentativas, log de ações), `Mailer.php`, `Metrics.php`, shell do admin (partials, CSS, padrão de CRUD com CSRF e flash), `migrate.php` idempotente, helper de link de WhatsApp.
 
+### Biblioteca de LLM: Neuron AI (não LLPhant)
+
+`neuron-core/neuron-ai`, **versão fixa**. O LLPhant foi instalado, testado e descartado
+em 2026-08-24 por um motivo que não dava para contornar com configuração:
+
+- **Não fecha o ciclo de ferramenta com o Gemini.** Os modelos 3.x exigem devolver
+  `thought_signature` junto do resultado; ela chega em `tool_calls[].extra_content` e o
+  modelo `Message` do LLPhant não tem onde guardá-la, então some no caminho de volta.
+  Medido: com a assinatura → HTTP 200; removendo **apenas** ela → HTTP 400.
+- **Executa a ferramenta sozinho**, sem deixar lugar para validar parâmetro, checar
+  `depende_de`, aplicar a allowlist de host ou gravar em `ferramenta_execucoes`.
+- **Não tem embedder para Gemini**, logo nada de `task_type`.
+- Depois de uma tool call, o streaming vira não-streaming (comentário do próprio código:
+  *"Maybe it could be improved"*).
+
+O Neuron passa nos quatro casos. Tem provider **nativo** de Gemini que captura
+`thoughtSignature` como metadado e devolve no `MessageMapper` — e faz o mesmo com a
+assinatura de raciocínio da Anthropic e do Bedrock, ou seja, o princípio do **envelope
+opaco** é premissa de projeto dele, não remendo. `Tool::setCallable()` mantém a nossa
+função no comando, que é onde a validação e a auditoria precisam morar.
+
+Ressalvas registradas: o pacote foi **renomeado** (`inspector-apm/neuron-ai` está
+abandonado) e publica versões em ritmo alto — por isso versão fixa. A documentação do
+pacote está fora de sincronia com o código (usa `NeuronAI\Agent`, a classe é
+`NeuronAI\Agent\Agent`). E o `PdfReader` dele depende de `symfony/process`, ou seja,
+**executa binário externo** — inviável em hospedagem compartilhada. Nosso leitor de PDF
+é o `smalot/pdfparser`, em PHP puro; o de DOCX, `phpoffice/phpword`. Ambos entram como
+dependência direta.
+
 ---
 
 ## 2. As quatro camadas
@@ -61,7 +90,7 @@ simpleAIman/
 ├── app/
 │   ├── Database.php  Auth.php  Mailer.php  Metrics.php     ← do cofre
 │   ├── Llm/
-│   │   ├── ProviderFactory.php   monta config LLPhant a partir da tabela provedores
+│   │   ├── ProviderFactory.php   monta o provider Neuron a partir da tabela provedores
 │   │   ├── ChatService.php       orquestração; modos stream e completo
 │   │   ├── PromptBuilder.php     system + contexto + fontes + guardrails
 │   │   └── ToolLoop.php          loop de tool-calling com tetos
@@ -397,7 +426,7 @@ ferramentas que rodaram.
 | # | Etapa | Fecha funcionando com |
 |---|---|---|
 | 1 | **Esqueleto** — `public_html/`+`app/`, classes do cofre, `schema.sql`, `migrate.php`, admin logando, `benchmark-sqlite.php` | painel acessível, zero IA |
-| 2 | **Provedores + LLPhant** — CRUD, `ProviderFactory`, chat cru sem RAG | conversa com Gemini ponta a ponta |
+| 2 | **Provedores + Neuron AI** — CRUD, `ProviderFactory`, chat cru sem RAG | conversa com Gemini ponta a ponta |
 | 3 | **Ingestão** — jobs, worker retomável, leitores, chunker, embeddings | artefatos indexados com status no admin |
 | 4 | **Retrieval** — `SqliteVectorStore`, FTS5, RRF + tela "testar busca" | calibrar top_k e limiar sem queimar token |
 | 5 | **RAG no chat** — junta 2+4, citações, log de custo | agente que responde citando fonte |
