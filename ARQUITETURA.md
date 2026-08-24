@@ -173,7 +173,7 @@ dataset_linhas      dataset_id, dados(JSON)
 ```sql
 canais              tipo(web|whatsapp|api), nome, agente_id,
                     credenciais_ref, config(JSON), ativo
-conversas           canal_id, agente_id, externo_id, titulo,
+conversas           canal_id, agente_id, externo_id, titulo, ip,
                     modo(bot|aguardando|humano|encerrada),
                     atendente_id, aguardando_desde,
                     ultima_msg_usuario_em,    -- janela de 24h da Meta
@@ -193,11 +193,16 @@ lead_destinos       lead_id, ferramenta_id,
                     proxima_tentativa_em, http_status, resposta, erro
 chamados            conversa_id, setor_id, assunto, descricao, contato,
                     status(aberto|respondido|fechado), resposta
-jobs                tipo, payload(JSON), status, progresso(JSON),
+jobs                tipo, payload(JSON), progresso(JSON), status, prioridade,
                     tentativas, proxima_execucao_em, lock_ate, erro
-usuarios            + setor_id, atende, disponivel     -- Nível 2 do handoff
-log_acoes  metricas
+admin_users         + setor_id, atende, disponivel     -- Nível 2 do handoff
+admin_logs  login_tentativas  metricas
 ```
+
+> **Nomes de `admin_users`, `admin_logs`, `login_tentativas` e `metricas` vêm da base
+> institucional de propósito**: é o que permite copiar `Auth.php` e `Metrics.php` sem
+> tocar numa linha. Renomear para `usuarios`/`log_acoes` custaria reescrever as classes
+> mais testadas do conjunto, em troca de nada.
 
 > **Sem `CHECK`** nas enumerações (`driver`, `tipo`, `status`). SQLite não permite ALTER de
 > constraint e mudar o conjunto exigiria recriar a tabela. Validação fica no PHP.
