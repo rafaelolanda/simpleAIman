@@ -20,6 +20,10 @@ RewriteRule ^robots\.txt$ robots.php [L]
 
 # Redireciona /pagina.php -> /pagina (URL limpa), preservando query string
 # Só em GET: redirect 301 em POST faz o navegador reenviar sem o corpo (perde os dados do form)
+# /api/ fica de fora: endpoints são chamados por código, não digitados. Um 301
+# em cada requisição custaria uma ida e volta extra por mensagem de chat, e o
+# SSE abriria a conexão só depois de seguir o redirecionamento.
+RewriteCond %{REQUEST_URI} !^/api/
 RewriteCond %{REQUEST_METHOD} GET
 RewriteCond %{THE_REQUEST} \s/+([^?\s]+)\.php[\s?] [NC]
 RewriteRule ^ /%1 [R=301,L]

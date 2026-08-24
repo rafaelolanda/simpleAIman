@@ -11,6 +11,7 @@ $grupos = [
     'Agentes' => [
         'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
+        'playground.php' => ['icone' => 'chat', 'label' => 'Playground'],
         'conversas.php' => ['icone' => 'chat', 'label' => 'Conversas'],
     ],
     'Conhecimento' => [
