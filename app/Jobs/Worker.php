@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SimpleAIman\Jobs;
 
 use Database;
+use SimpleAIman\Atendimento\Fila;
 use SimpleAIman\Llm\ErroAgente;
 use SimpleAIman\Rag\Ingestor;
 use Throwable;
@@ -51,6 +52,16 @@ final class Worker
         // e o worker que decide o que ja passou da hora.
         if (Queue::agendarPeriodico('retencao')) {
             $log('retencao do dia enfileirada.');
+        }
+
+        // Conversas que pediram atendente e ninguém assumiu. As telas também
+        // fazem esta varredura, mas só quando alguém está olhando — e o caso
+        // que mais importa é justamente o contrário: ninguém no painel, o
+        // visitante esperando sozinho. Aqui é a rede de segurança.
+        $expiradas = Fila::expirarAbandonadas();
+
+        if ($expiradas > 0) {
+            $log("{$expiradas} conversa(s) devolvida(s) ao assistente por espera longa.");
         }
 
         $liberados = Queue::liberarPresos();

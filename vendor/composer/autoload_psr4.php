@@ -15,6 +15,7 @@ return array(
     'SimpleAIman\\Jobs\\' => array($baseDir . '/app/Jobs'),
     'SimpleAIman\\Http\\' => array($baseDir . '/app/Http'),
     'SimpleAIman\\Canais\\' => array($baseDir . '/app/Canais'),
+    'SimpleAIman\\Atendimento\\' => array($baseDir . '/app/Atendimento'),
     'Psr\\Http\\Message\\' => array($vendorDir . '/psr/http-factory/src', $vendorDir . '/psr/http-message/src'),
     'Psr\\Http\\Client\\' => array($vendorDir . '/psr/http-client/src'),
     'PhpOffice\\PhpWord\\' => array($vendorDir . '/phpoffice/phpword/src/PhpWord'),

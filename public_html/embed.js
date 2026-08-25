@@ -100,6 +100,13 @@
     '.de-bot .balao{background:#fff;border:1px solid #e5e7eb;border-bottom-left-radius:4px}',
     '.de-usuario{justify-content:flex-end}',
     '.de-usuario .balao{background:var(--cor);color:#fff;border-bottom-right-radius:4px}',
+    '.de-atendente .balao{background:#0f766e;color:#fff;border-bottom-left-radius:4px}',
+    '.de-atendente .quem{font-size:11px;opacity:.75;margin:0 0 3px 4px}',
+    '.de-sistema{justify-content:center}',
+    '.de-sistema .balao{background:none;font-size:12px;font-style:italic;opacity:.6;text-align:center;max-width:100%}',
+    '.esperando{display:flex;align-items:center;gap:7px;font-size:12px;opacity:.7;padding:6px 4px}',
+    '.esperando i{width:7px;height:7px;border-radius:50%;background:#0f766e;animation:pulsa 1.2s infinite}',
+    '@keyframes pulsa{0%,100%{opacity:.3}50%{opacity:1}}',
     '.fontes{margin-top:6px;font-size:12px;color:#6b7280}',
 
     '.pensando .balao{color:#6b7280;font-style:italic}',
@@ -154,9 +161,16 @@
   var ocupado = false;
   var abriuAlgumaVez = false;
 
-  function balao(quem, texto) {
+  function balao(quem, texto, autor) {
     var linha = document.createElement('div');
     linha.className = 'msg de-' + quem;
+
+    if (autor) {
+      var nome = document.createElement('div');
+      nome.className = 'quem';
+      nome.textContent = autor;
+      linha.appendChild(nome);
+    }
 
     var b = document.createElement('div');
     b.className = 'balao';
@@ -176,6 +190,88 @@
     ocupado = false;
     btnEnviar.disabled = false;
     campo.focus();
+  }
+
+  // ---------------------------------------------------------------
+  // Atendimento humano
+  //
+  // Enquanto uma pessoa atende, o bot fica calado e as respostas chegam por
+  // CONSULTA PERIÓDICA, não por SSE. Um atendimento dura minutos, e uma
+  // conexão SSE aberta esse tempo todo prenderia um processo PHP no servidor
+  // por visitante — em hospedagem compartilhada, meia dúzia de pessoas
+  // esperando derrubaria o site inteiro.
+  // ---------------------------------------------------------------
+  var ultimaMsg = 0;
+  var timer = null;
+  var aviso = null;
+
+  function mostrarEspera(texto) {
+    if (!aviso) {
+      aviso = document.createElement('div');
+      aviso.className = 'esperando';
+      aviso.innerHTML = '<i></i><span></span>';
+      corpo.appendChild(aviso);
+    }
+
+    aviso.querySelector('span').textContent = texto;
+    corpo.scrollTop = corpo.scrollHeight;
+  }
+
+  function limparEspera() {
+    if (aviso) {
+      aviso.remove();
+      aviso = null;
+    }
+  }
+
+  function consultar() {
+    var url = base + '/api/publico.php?acao=mensagens&t=' + encodeURIComponent(token) +
+      '&sessao=' + encodeURIComponent(sessao) + '&desde=' + ultimaMsg;
+
+    return fetch(url)
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) {
+          return;
+        }
+
+        (d.mensagens || []).forEach(function (m) {
+          if (m.id <= ultimaMsg) {
+            return;
+          }
+
+          ultimaMsg = m.id;
+          limparEspera();
+          balao(m.quem === 'atendente' ? 'atendente' : 'sistema', m.texto, m.autor);
+        });
+
+        if (d.modo === 'aguardando') {
+          mostrarEspera('Procurando um atendente…');
+          ligarConsulta();
+        } else if (d.modo === 'humano') {
+          limparEspera();
+          ligarConsulta();
+        } else {
+          // Voltou para o bot (ou encerrou): parar de consultar é o que evita
+          // o widget ficar batendo no servidor para sempre numa aba esquecida.
+          limparEspera();
+          desligarConsulta();
+        }
+      })
+      .catch(function () { /* rede caiu; a próxima volta resolve */ });
+  }
+
+  function ligarConsulta() {
+    if (!timer) {
+      timer = setInterval(consultar, 4000);
+    }
+  }
+
+  function desligarConsulta() {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
   }
 
   function enviar() {
@@ -249,8 +345,20 @@
       encerrar();
     });
 
-    es.addEventListener('fim', function () {
+    es.addEventListener('fim', function (ev) {
+      // Em modo humano o servidor grava a mensagem e responde só com 'fim',
+      // sem nenhum 'pedaco'. Sem esta limpeza o balão "digitando..." ficaria
+      // na tela para sempre, porque quem o remove é o primeiro pedaço.
+      if (!alvo) {
+        linha.remove();
+      }
+
       encerrar();
+
+      // Uma consulta ao fim de cada turno é o que descobre que a conversa
+      // mudou de mãos — a transferência acontece DENTRO do turno, via
+      // ferramenta, e o SSE já foi embora quando ela ocorre.
+      consultar();
     });
 
     // Queda de rede, aba suspensa, servidor reiniciado. O EventSource tentaria
@@ -281,6 +389,11 @@
     if (!abriuAlgumaVez) {
       abriuAlgumaVez = true;
       carregarConfig();
+
+      // A sessão sobrevive ao recarregar a página. Se a conversa estava com
+      // um atendente, retomar a consulta aqui é o que evita a pessoa voltar e
+      // achar que foi abandonada.
+      consultar();
     }
   });
 

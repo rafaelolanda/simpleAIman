@@ -26,6 +26,7 @@ $grupos = [
         'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
         'setores.php' => ['icone' => 'setor', 'label' => 'Setores'],
         'leads.php' => ['icone' => 'lead', 'label' => 'Leads'],
+        'atendimento.php' => ['icone' => 'usuario', 'label' => 'Atendimento'],
         'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],
     ],
     'Sistema' => [
@@ -41,6 +42,7 @@ if (!empty($ehAdminMaster)) {
 }
 
 $badges = [
+    'atendimento.php' => $filaAtendimento ?? 0,
     'chamados.php' => $chamadosAbertos ?? 0,
     'artefatos.php' => ($artefatosPendentes ?? 0) + ($artefatosComErro ?? 0),
 ];

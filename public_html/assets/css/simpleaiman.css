@@ -367,3 +367,135 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     white-space: pre-wrap;
     word-break: break-all;
 }
+
+/* atendimento humano (handoff Nível 2) ------------------------ */
+
+.atendimento-topo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.atendimento-nota {
+    margin: 0;
+    font-size: 0.85rem;
+    opacity: 0.75;
+    flex: 1 1 320px;
+}
+
+.atendimento-grade {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) 1fr;
+    gap: 1rem;
+    align-items: start;
+}
+
+@media (max-width: 860px) {
+    .atendimento-grade { grid-template-columns: 1fr; }
+}
+
+.fila-lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+}
+
+.fila-lista li {
+    padding: 0.7rem;
+    border: 1px solid var(--borda, #e3e6ec);
+    border-radius: 10px;
+}
+
+.fila-cabeca {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.fila-previa {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    opacity: 0.75;
+    line-height: 1.4;
+}
+
+.fila-lista a { text-decoration: none; color: inherit; }
+.fila-lista a.ativo { font-weight: 700; color: var(--accent); }
+
+/* Espera longa precisa saltar aos olhos: o custo de não notar é uma pessoa
+   desistindo do outro lado. */
+.tag-alerta {
+    background: rgba(220, 38, 38, 0.12);
+    color: #b91c1c;
+}
+
+.chat-historico {
+    max-height: 52vh;
+    overflow-y: auto;
+    display: grid;
+    gap: 0.6rem;
+    padding: 0.25rem;
+    margin-bottom: 0.9rem;
+}
+
+.msg { max-width: 82%; }
+.msg-quem { display: block; font-size: 0.72rem; opacity: 0.6; margin-bottom: 0.15rem; }
+
+.msg-texto {
+    padding: 0.6rem 0.8rem;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 0.9rem;
+}
+
+.msg-usuario { justify-self: start; }
+.msg-usuario .msg-texto { background: rgba(0, 0, 0, 0.05); }
+
+.msg-bot { justify-self: start; }
+.msg-bot .msg-texto { background: rgba(var(--accent-rgb, 37, 99, 235), 0.08); }
+
+.msg-atendente { justify-self: end; text-align: right; }
+.msg-atendente .msg-texto { background: var(--accent); color: var(--on-accent); text-align: left; }
+
+/* Aviso do sistema não é fala de ninguém: fica centralizado e discreto, para
+   não ser confundido com a voz do atendente nem com a do bot. */
+.msg-sistema {
+    max-width: 100%;
+    justify-self: center;
+    text-align: center;
+}
+
+.msg-sistema .msg-texto {
+    background: none;
+    font-size: 0.78rem;
+    font-style: italic;
+    opacity: 0.6;
+    padding: 0.2rem;
+}
+
+.chat-envio textarea { width: 100%; }
+.chat-acoes { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
+
+.chat-encerramento {
+    margin-top: 0.9rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--borda, #e3e6ec);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.chat-encerramento small { flex: 1 1 240px; opacity: 0.65; font-size: 0.78rem; line-height: 1.4; }
+
+.linha-check {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+}

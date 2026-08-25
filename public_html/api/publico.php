@@ -18,6 +18,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/bootstrap.php';
 
+use SimpleAIman\Atendimento\Fila;
 use SimpleAIman\Canais\CanalPublico;
 use SimpleAIman\Http\Sse;
 use SimpleAIman\Llm\ChatService;
@@ -58,6 +59,68 @@ if ($acao === 'config') {
         'titulo' => $canal->titulo(),
         'saudacao' => $canal->saudacao(),
         'cor' => $canal->cor(),
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ---------------------------------------------------------------------
+// Polling do atendimento humano
+//
+// Deliberadamente NÃO usa SSE. Um atendimento dura minutos, e SSE manteria um
+// processo PHP preso esse tempo todo; em hospedagem compartilhada, com 10 a 30
+// processos no total, meia dúzia de visitantes esperando derrubaria o site.
+// Uma consulta indexada a cada poucos segundos custa ordens de grandeza menos.
+//
+// Também não consome a cota do canal: o limite existe para proteger a conta do
+// provedor de LLM, e aqui não há chamada nenhuma a provedor.
+// ---------------------------------------------------------------------
+if ($acao === 'mensagens') {
+    header('Content-Type: application/json; charset=UTF-8');
+    header('Cache-Control: no-store');
+
+    $sessao = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['sessao'] ?? '')) ?: '';
+    $desde = max(0, (int) ($_GET['desde'] ?? 0));
+
+    if ($sessao === '') {
+        echo json_encode(['modo' => 'bot', 'mensagens' => []]);
+        exit;
+    }
+
+    // Fecha o laço de quem ficou esperando e ninguém assumiu. Roda aqui porque
+    // é justamente o momento em que existe alguém do outro lado olhando — não
+    // dá para depender só do cron, que em compartilhada pode nem existir.
+    Fila::expirarAbandonadas();
+
+    $stmt = Database::connection()->prepare(
+        'SELECT id, modo FROM conversas WHERE canal_id = :canal AND externo_id = :externo LIMIT 1'
+    );
+    $stmt->execute(['canal' => (int) $canal->canal['id'], 'externo' => 'web-' . $sessao]);
+    $conversa = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$conversa) {
+        echo json_encode(['modo' => 'bot', 'mensagens' => []]);
+        exit;
+    }
+
+    $mensagens = array_map(
+        static fn (array $m): array => [
+            'id' => (int) $m['id'],
+            'quem' => $m['autor_tipo'],
+            // Só o nome de exibição atravessa; o usuário de LOGIN não — ele é
+            // credencial, e vazá-lo para o site do cliente não traz ganho algum.
+            // Sem nome cadastrado, "Atendente" resolve sem expor nada.
+            'autor' => $m['autor_tipo'] === 'atendente'
+                ? (trim((string) ($m['autor_nome'] ?? '')) ?: 'Atendente')
+                : null,
+            'texto' => $m['conteudo'],
+            'hora' => date('H:i', strtotime((string) $m['criado_em'])),
+        ],
+        Fila::mensagensDesde((int) $conversa['id'], $desde, apenasParaVisitante: true)
+    );
+
+    echo json_encode([
+        'modo' => $conversa['modo'],
+        'mensagens' => $mensagens,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

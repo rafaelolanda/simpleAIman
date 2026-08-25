@@ -456,49 +456,67 @@ Isso vale enquanto ninguém escrever cálculo de similaridade fora da interface 
 
 ---
 
-## 9. Handoff (Nível 1, com o schema do Nível 2 pronto)
+## 9. Handoff — Níveis 1 e 2
 
-**Agora:** `contato_setor` devolve telefone/e-mail/WhatsApp/horário do setor certo;
-`abrir_chamado` registra e dispara e-mail ao responsável. Funciona 24/7, sem ninguém de plantão.
+**Nível 1 (assíncrono).** `contato_setor` devolve telefone/e-mail/WhatsApp/horário do setor
+certo; `abrir_chamado` registra e dispara e-mail ao responsável. Funciona 24/7, sem ninguém
+de plantão, e continua sendo o piso: é para onde o Nível 2 cai quando não há atendente.
 
-**Depois (Nível 2):** `conversas.modo = humano` **cala o bot** — mensagem que chega é gravada
-mas não vai pra LLM. Atendente assume pelo painel vendo o histórico completo, inclusive as
-ferramentas que rodaram.
+**Nível 2 (ao vivo).** `transferir_atendimento` coloca a conversa na fila; um atendente
+assume pelo painel (`admin/atendimento.php`) e digita para o visitante.
 
-- **Chat com humano usa polling de 3–5s, nunca SSE.** Atendimento de 10min segura um processo
-  PHP esse tempo todo; cinco visitantes esperando derrubam o servidor.
-- Ninguém disponível → cai automaticamente no Nível 1.
-- Abandono após N minutos → converte em chamado e avisa.
-- Volta pro bot preservando contexto — é pra isso que existe `mensagens.autor_tipo`.
+### A máquina de estados
 
-### O WhatsApp torna o Nível 2 obrigatório
+```
+bot ──solicitar()──> aguardando ──assumir()──> humano ──encerrar()──> encerrada
+                          │                      │
+                          └──expirar()───────────┴──devolverAoBot()──> bot
+```
 
-No widget web o Nível 1 basta: a pessoa fecha a página e recebe retorno por e-mail depois.
-**No WhatsApp, Instagram e Direct, não.** A conversa continua aberta na mão dela e a resposta
-é esperada *naquela thread* — "alguém vai te retornar por e-mail" ali é resposta errada.
+Toda transição de `conversas.modo` passa por `SimpleAIman\Atendimento\Fila`. É deliberado:
+o modo decide se o bot fala ou cala, e `UPDATE conversas SET modo` espalhado pelo código
+criaria a chance de transferir sem calar o bot, ou calar o bot sem avisar ninguém.
 
-Por isso o canal da Meta (etapa 10) depende do Nível 2 pronto, e não o contrário. O atendente
-precisa de:
+### As regras que sustentam
 
-- **histórico completo da conversa**, incluindo o que o bot respondeu e quais ferramentas
-  rodaram — ele entra no meio e precisa saber o que já foi dito;
-- **responder dentro da mesma thread**, o que exige o driver de saída do canal;
-- **atenção à janela de 24h** da Meta: fora dela só template aprovado, e o painel precisa
-  avisar antes de o atendente escrever uma resposta que não será entregue
-  (`conversas.ultima_msg_usuario_em` existe para isso);
-- **saber de qual canal veio**, porque o tom e o formato mudam entre widget e WhatsApp.
+- **`modo = humano` (e `aguardando`) cala o bot.** `ChatService::botDeveResponder()`. A
+  mensagem do visitante é gravada mas não vai para a LLM.
+- **Não se promete o que não se pode cumprir.** Sem atendente disponível, `solicitar()`
+  **recusa** a transferência e a ferramenta instrui o agente a oferecer o Nível 1. Prometer
+  transferência para uma sala vazia é pior que dizer desde o começo que ninguém está online.
+- **Quem assume, assume sozinho.** O `WHERE modo = 'aguardando'` do `UPDATE` é o que impede
+  dois atendentes de abrirem a mesma conversa; quem perder a corrida recebe `false`.
+- **Ninguém espera para sempre.** Passados `Fila::ESPERA_MAX_MIN`, a conversa volta ao bot
+  com instrução de pedir desculpas e oferecer registrar a dúvida. A varredura roda de forma
+  oportunista (cada carga do painel e cada consulta do widget) **e** no worker — as telas
+  cobrem o caso de alguém estar olhando; o worker cobre justamente o contrário.
+- **Voltar ao bot preserva contexto.** O histórico do atendente fica marcado com
+  `autor_tipo = 'atendente'`. Sem essa coluna, o bot ao retomar leria a fala do atendente
+  como se fosse dele e passaria a se contradizer.
+- **Login não atravessa.** Para o visitante vai o nome de exibição, ou "Atendente". O
+  usuário de login é credencial.
 
-O que já está pronto no schema e no código para isso: `conversas.modo`, `atendente_id`,
-`aguardando_desde`, `ultima_msg_usuario_em`, `mensagens.autor_tipo`, `admin_users.atende` e
-`disponivel`, a tabela `canais`, e `ChatService::botDeveResponder()`, que cala o bot quando a
-conversa está em modo humano — já implementado e testado.
+### Transporte: polling, nunca SSE
 
-Falta a interface: leitura de histórico, tela de atendimento (assumir, responder, devolver ao
-bot), endpoint de polling e o driver de saída por canal.
+Um atendimento dura minutos, e SSE prenderia um processo PHP esse tempo todo. Em
+compartilhada, com 10–30 processos no total, meia dúzia de visitantes esperando derrubaria
+o site. Consulta a cada 4s custa ordens de grandeza menos, e o widget **para de consultar**
+quando o modo volta a `bot` — sem isso, uma aba esquecida bateria no servidor para sempre.
+SSE fica só para a resposta do bot, que dura segundos.
 
-> **A tela de leitura de conversas vale antes disso.** Mesmo só com o widget web, ler o que as
-> pessoas perguntaram é a melhor fonte para saber o que colocar na FAQ — e é o insumo direto
-> da etapa 6.
+O polling do visitante também **não consome a cota do canal**: o limite existe para proteger
+a conta do provedor de LLM, e aqui não há chamada a provedor nenhuma.
+
+### Quem é atendente
+
+`admin_users.atende` e `setor_id` são definidos por quem administra, em **Usuários** — é
+decisão de gestão. Já `disponivel` ("estou aqui agora") é do próprio atendente, na tela de
+**Atendimento**. Desmarcar `atende` zera `disponivel` junto, para não deixar alguém marcado
+como online sem receber nada.
+
+A fila procura primeiro atendentes do setor; não havendo, aceita qualquer um disponível —
+um setor sem plantão nunca transferiria, e alguém que pode redirecionar internamente é
+melhor que ninguém.
 
 ---
 
@@ -515,7 +533,8 @@ bot), endpoint de polling e o driver de saída por canal.
 | 7 | ~~**Ferramentas**~~ ✅ registry, `http`, guardas, `depende_de`, `contato_setor`, `abrir_chamado` | encaminhamento real |
 | 8 | ~~**Leads**~~ ✅ captura, `lead_destinos` com backoff e dead letter, export CSV | leads chegando no CRM |
 | 9 | ~~**Widget**~~ ✅ `embed.js`, token público, canal web, limites de uso | plugável em qualquer site |
-| 10 | *(futuro)* WhatsApp Cloud API | — |
+| 10 | ~~**Handoff Nível 2**~~ ✅ fila, painel do atendente, polling, disponibilidade, abandono | conversa ao vivo com gente |
+| 11 | *(futuro)* WhatsApp Cloud API | — |
 
 Parando na 8, já existe produto.
 

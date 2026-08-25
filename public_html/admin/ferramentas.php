@@ -13,6 +13,7 @@ $TIPOS = [
     'http' => 'Chamar uma API externa',
     'contato_setor' => 'Contato do setor (embutida)',
     'abrir_chamado' => 'Registrar chamado (embutida)',
+    'transferir_atendimento' => 'Transferir para atendente (embutida)',
     'lead' => 'Capturar contato / lead (embutida)',
 ];
 

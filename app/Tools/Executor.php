@@ -226,6 +226,7 @@ final class Executor
         return match ((string) $ferramenta['tipo']) {
             'contato_setor' => (new SetorTool($this->conversaId))->contato($parametros),
             'handoff', 'abrir_chamado' => (new SetorTool($this->conversaId))->abrirChamado($parametros),
+            'transferir_atendimento' => (new AtendimentoTool($this->conversaId))->transferir($parametros),
             'lead' => (new LeadTool($this->conversaId, $this->agenteId))->registrar($parametros),
             'http' => (new HttpTool())->executar($ferramenta, $parametros),
             default => throw new RuntimeException("Tipo de ferramenta não implementado: {$ferramenta['tipo']}."),

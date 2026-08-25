@@ -176,7 +176,7 @@ final class ToolRegistry
             'SELECT COUNT(*) FROM ferramentas f
              JOIN agente_ferramentas af ON af.ferramenta_id = f.id
              WHERE af.agente_id = :a AND f.ativo = 1
-               AND f.tipo IN (\'contato_setor\', \'abrir_chamado\', \'handoff\')'
+               AND f.tipo IN (\'contato_setor\', \'abrir_chamado\', \'handoff\', \'transferir_atendimento\')'
         );
         $stmt->execute(['a' => $agenteId]);
 

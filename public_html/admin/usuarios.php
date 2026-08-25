@@ -109,7 +109,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('usuarios.php');
 }
 
-$usuarios = $pdo->query('SELECT id, usuario, email, admin_master, criado_em FROM admin_users ORDER BY admin_master DESC, usuario ASC')->fetchAll();
+$usuarios = $pdo->query(
+    'SELECT u.id, u.usuario, u.email, u.admin_master, u.criado_em, u.atende, u.disponivel, u.setor_id,
+            s.nome AS setor
+     FROM admin_users u
+     LEFT JOIN setores s ON s.id = u.setor_id
+     ORDER BY u.admin_master DESC, u.usuario ASC'
+)->fetchAll();
+
+$setores = $pdo->query('SELECT id, nome FROM setores WHERE ativo = 1 ORDER BY ordem, nome')->fetchAll();
 
 include __DIR__ . '/partials/head.php';
 ?>
@@ -154,13 +162,43 @@ include __DIR__ . '/partials/head.php';
     <h2>Usuários cadastrados</h2>
     <div class="table-wrap">
     <table class="cards-mobile">
-        <thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Criado em</th><th></th></tr></thead>
+        <thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Atendimento</th><th>Criado em</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($usuarios as $u): ?>
             <tr>
                 <td data-label="Usuário"><?= e($u['usuario']) ?><?= (int) $u['id'] === Auth::userId() ? ' <span class="badge on">você</span>' : '' ?></td>
                 <td data-label="E-mail"><?= e($u['email'] ?? '—') ?></td>
                 <td data-label="Tipo"><?= $u['admin_master'] ? 'Administrador principal' : 'Usuário' ?></td>
+                <td data-label="Atendimento">
+                    <details class="acao-inline">
+                        <summary class="btn btn-secondary btn-sm">
+                            <?php if ($u['atende']): ?>
+                                Atende<?= $u['setor'] ? ' · ' . e((string) $u['setor']) : '' ?>
+                                <?= $u['disponivel'] ? '<span class="badge on">online</span>' : '' ?>
+                            <?php else: ?>
+                                Não atende
+                            <?php endif; ?>
+                        </summary>
+                        <form method="post" action="usuarios.php" class="acao-inline-form">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="atendente">
+                            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                            <label class="linha-check">
+                                <input type="checkbox" name="atende" value="1" <?= $u['atende'] ? 'checked' : '' ?>>
+                                recebe transferências
+                            </label>
+                            <select name="setor_id">
+                                <option value="">Qualquer setor</option>
+                                <?php foreach ($setores as $s): ?>
+                                    <option value="<?= (int) $s['id'] ?>" <?= (int) $u['setor_id'] === (int) $s['id'] ? 'selected' : '' ?>>
+                                        <?= e($s['nome']) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                            <button type="submit" class="btn btn-sm">Salvar</button>
+                        </form>
+                    </details>
+                </td>
                 <td data-label="Criado em"><?= e(date('d/m/Y', strtotime($u['criado_em']))) ?></td>
                 <td data-label="">
                     <details class="acao-inline">

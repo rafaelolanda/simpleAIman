@@ -24,3 +24,8 @@ $ehAdminMaster = (bool) $stmt->fetchColumn();
 $chamadosAbertos = (int) $pdo->query("SELECT COUNT(*) FROM chamados WHERE status = 'aberto'")->fetchColumn();
 $artefatosPendentes = (int) $pdo->query("SELECT COUNT(*) FROM artefatos WHERE status IN ('pendente','processando')")->fetchColumn();
 $artefatosComErro = (int) $pdo->query("SELECT COUNT(*) FROM artefatos WHERE status = 'erro'")->fetchColumn();
+
+// Fila do atendimento humano. Fica aqui, e não na tela, porque o crachá
+// precisa aparecer em QUALQUER página do painel — um visitante esperando não
+// pode depender de o atendente estar justamente na tela de atendimento.
+$filaAtendimento = (int) $pdo->query("SELECT COUNT(*) FROM conversas WHERE modo = 'aguardando'")->fetchColumn();

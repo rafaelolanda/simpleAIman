@@ -24,6 +24,7 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
             'SimpleAIman\\Jobs\\' => 17,
             'SimpleAIman\\Http\\' => 17,
             'SimpleAIman\\Canais\\' => 19,
+            'SimpleAIman\\Atendimento\\' => 24,
         ),
         'P' =>
         array (
@@ -84,6 +85,10 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
         'SimpleAIman\\Canais\\' =>
         array (
             0 => __DIR__ . '/../..' . '/app/Canais',
+        ),
+        'SimpleAIman\\Atendimento\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/app/Atendimento',
         ),
         'Psr\\Http\\Message\\' =>
         array (
@@ -1148,6 +1153,7 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
         'Random\\RandomException' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/Random/RandomException.php',
         'SensitiveParameter' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameter.php',
         'SensitiveParameterValue' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameterValue.php',
+        'SimpleAIman\\Atendimento\\Fila' => __DIR__ . '/../..' . '/app/Atendimento/Fila.php',
         'SimpleAIman\\Canais\\CanalPublico' => __DIR__ . '/../..' . '/app/Canais/CanalPublico.php',
         'SimpleAIman\\Http\\Sse' => __DIR__ . '/../..' . '/app/Http/Sse.php',
         'SimpleAIman\\Jobs\\Queue' => __DIR__ . '/../..' . '/app/Jobs/Queue.php',

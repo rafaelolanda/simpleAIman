@@ -1019,6 +1019,7 @@ return array(
     'Random\\RandomException' => $vendorDir . '/symfony/polyfill-php82/Resources/stubs/Random/RandomException.php',
     'SensitiveParameter' => $vendorDir . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameter.php',
     'SensitiveParameterValue' => $vendorDir . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameterValue.php',
+    'SimpleAIman\\Atendimento\\Fila' => $baseDir . '/app/Atendimento/Fila.php',
     'SimpleAIman\\Canais\\CanalPublico' => $baseDir . '/app/Canais/CanalPublico.php',
     'SimpleAIman\\Http\\Sse' => $baseDir . '/app/Http/Sse.php',
     'SimpleAIman\\Jobs\\Queue' => $baseDir . '/app/Jobs/Queue.php',
