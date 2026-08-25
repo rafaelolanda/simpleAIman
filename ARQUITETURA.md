@@ -465,6 +465,35 @@ ferramentas que rodaram.
 - Abandono após N minutos → converte em chamado e avisa.
 - Volta pro bot preservando contexto — é pra isso que existe `mensagens.autor_tipo`.
 
+### O WhatsApp torna o Nível 2 obrigatório
+
+No widget web o Nível 1 basta: a pessoa fecha a página e recebe retorno por e-mail depois.
+**No WhatsApp, Instagram e Direct, não.** A conversa continua aberta na mão dela e a resposta
+é esperada *naquela thread* — "alguém vai te retornar por e-mail" ali é resposta errada.
+
+Por isso o canal da Meta (etapa 10) depende do Nível 2 pronto, e não o contrário. O atendente
+precisa de:
+
+- **histórico completo da conversa**, incluindo o que o bot respondeu e quais ferramentas
+  rodaram — ele entra no meio e precisa saber o que já foi dito;
+- **responder dentro da mesma thread**, o que exige o driver de saída do canal;
+- **atenção à janela de 24h** da Meta: fora dela só template aprovado, e o painel precisa
+  avisar antes de o atendente escrever uma resposta que não será entregue
+  (`conversas.ultima_msg_usuario_em` existe para isso);
+- **saber de qual canal veio**, porque o tom e o formato mudam entre widget e WhatsApp.
+
+O que já está pronto no schema e no código para isso: `conversas.modo`, `atendente_id`,
+`aguardando_desde`, `ultima_msg_usuario_em`, `mensagens.autor_tipo`, `admin_users.atende` e
+`disponivel`, a tabela `canais`, e `ChatService::botDeveResponder()`, que cala o bot quando a
+conversa está em modo humano — já implementado e testado.
+
+Falta a interface: leitura de histórico, tela de atendimento (assumir, responder, devolver ao
+bot), endpoint de polling e o driver de saída por canal.
+
+> **A tela de leitura de conversas vale antes disso.** Mesmo só com o widget web, ler o que as
+> pessoas perguntaram é a melhor fonte para saber o que colocar na FAQ — e é o insumo direto
+> da etapa 6.
+
 ---
 
 ## 10. Ordem de construção
