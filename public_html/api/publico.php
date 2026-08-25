@@ -181,6 +181,11 @@ try {
 
     Sse::evento('inicio', ['conversa' => $conversa]);
 
+    // Escreveu de novo depois de o atendimento ter sido encerrado: o assunto
+    // volta para o assistente. Sem isto a mensagem seria gravada e ninguém
+    // responderia — nem o bot, que está calado, nem o atendente, que já saiu.
+    Fila::reabrirSeEncerrada($conversa);
+
     // Conversa em modo humano: grava e cala a boca. Sem isto o bot responde
     // por cima do atendente.
     if (!$svc->botDeveResponder($conversa)) {

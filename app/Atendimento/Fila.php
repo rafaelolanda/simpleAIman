@@ -219,13 +219,48 @@ final class Fila
         return true;
     }
 
+    /**
+     * Encerra o ATENDIMENTO, não a conversa.
+     *
+     * A distinção importa: `encerrada` tira a conversa do painel e fecha o
+     * ciclo com a pessoa, mas não pode virar uma porta trancada. Se ela
+     * escrever de novo, `reabrirSeEncerrada()` devolve o assunto ao
+     * assistente — e é por isso que o aviso já avisa que dá para continuar.
+     */
     public static function encerrar(int $conversaId): void
     {
         Database::connection()->prepare(
-            "UPDATE conversas SET modo = 'encerrada', editado_em = :agora WHERE id = :id"
+            "UPDATE conversas SET modo = 'encerrada', atendente_id = NULL, aguardando_desde = NULL, editado_em = :agora
+             WHERE id = :id"
         )->execute(['id' => $conversaId, 'agora' => now()]);
 
-        self::registrarAviso($conversaId, 'Atendimento encerrado.');
+        self::registrarAviso(
+            $conversaId,
+            'Atendimento encerrado. Se precisar de mais alguma coisa, é só escrever.'
+        );
+    }
+
+    /**
+     * Devolve ao assistente uma conversa que tinha sido encerrada.
+     *
+     * Existe porque `encerrada` era um buraco negro: o bot não responde (certo)
+     * e o widget para de consultar (também certo) — só que ninguém assumia. A
+     * pessoa continuava digitando, a mensagem era gravada, e nada acontecia.
+     * Chat que engole mensagem em silêncio é o pior resultado possível: ela não
+     * sabe se falhou, se foi ignorada, ou se alguém vai ler depois.
+     *
+     * Chamada no início do turno, antes de decidir se o bot fala.
+     */
+    public static function reabrirSeEncerrada(int $conversaId): bool
+    {
+        $pdo = Database::connection();
+
+        $stmt = $pdo->prepare(
+            "UPDATE conversas SET modo = 'bot', editado_em = :agora WHERE id = :id AND modo = 'encerrada'"
+        );
+        $stmt->execute(['id' => $conversaId, 'agora' => now()]);
+
+        return $stmt->rowCount() > 0;
     }
 
     /**

@@ -88,6 +88,10 @@ try {
 
     sse('inicio', ['conversa' => $conversa]);
 
+    // Mesma armadilha do widget: conversa encerrada engoliria a mensagem em
+    // silêncio. Escreveu de novo, o assunto volta para o assistente.
+    \SimpleAIman\Atendimento\Fila::reabrirSeEncerrada($conversa);
+
     // Conversa em modo humano: grava e cala a boca. Sem isto o bot responde
     // por cima do atendente.
     if (!$svc->botDeveResponder($conversa)) {
