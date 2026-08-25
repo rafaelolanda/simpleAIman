@@ -5,7 +5,6 @@ declare(strict_types=1);
 require_once __DIR__ . '/_init.php';
 
 use SimpleAIman\Tools\Executor;
-use SimpleAIman\Tools\UrlGuard;
 
 $paginaAtual = 'ferramentas.php';
 $tituloPagina = 'Ferramentas';
@@ -22,7 +21,6 @@ $FONTES = ['' => '(lista fixa abaixo)', 'setores' => 'Setores ativos', 'bases' =
 $TIPOS_PARAM = ['string' => 'Texto', 'number' => 'Número', 'boolean' => 'Sim/não'];
 
 $editando = null;
-$resultadoTeste = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf_token'] ?? null)) {
@@ -38,20 +36,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Auth::log('ferramenta_excluida', 'id=' . $id);
         flash_set('sucesso', 'Ferramenta excluída.');
         redirect('ferramentas.php');
-    }
-
-    // Testa só a GUARDA da URL, sem chamar o endpoint. Disparar a chamada de
-    // verdade a partir do admin executaria efeito colateral real numa
-    // ferramenta de escrita — criaria lead, mandaria dado ao CRM.
-    if ($acao === 'testar_url') {
-        $url = trim((string) ($_POST['url'] ?? ''));
-
-        try {
-            UrlGuard::doAmbiente()->verificar($url);
-            $resultadoTeste = ['ok' => true, 'mensagem' => 'A URL passa na allowlist e não aponta para endereço interno.'];
-        } catch (Throwable $e) {
-            $resultadoTeste = ['ok' => false, 'mensagem' => $e->getMessage()];
-        }
     }
 
     if ($acao === 'salvar') {
@@ -225,12 +209,6 @@ include __DIR__ . '/partials/head.php';
         ele preenche campos declarados aqui, e o endereço é sempre este template fixo.
     </p>
 </div>
-
-<?php if ($resultadoTeste !== null): ?>
-    <div class="card" style="margin-bottom:1.25rem;">
-        <p class="alerta alerta-<?= $resultadoTeste['ok'] ? 'ok' : 'erro' ?>"><?= e($resultadoTeste['mensagem']) ?></p>
-    </div>
-<?php endif; ?>
 
 <?php if (TOOLS_HOSTS_PERMITIDOS === []): ?>
     <div class="card" style="margin-bottom:1.25rem;">
