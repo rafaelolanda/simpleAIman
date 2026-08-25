@@ -15,6 +15,7 @@ $corSecundaria = $config['cor_secundaria'] ?? '#0f172a';
     <meta name="robots" content="noindex, nofollow">
     <title><?= e($tituloPagina) ?> · <?= e($config['nome_instancia'] ?? 'Admin') ?></title>
     <link rel="stylesheet" href="../<?= asset_ver('assets/css/admin.css') ?>">
+    <link rel="stylesheet" href="../<?= asset_ver('assets/css/simpleaiman.css') ?>">
     <style>
         :root { --accent: <?= e($corPrimaria) ?>; --accent-2: <?= e($corSecundaria) ?>; --on-accent: <?= cor_contraste($corPrimaria) ?>; }
     </style>

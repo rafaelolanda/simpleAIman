@@ -21,6 +21,7 @@ $nomeInstancia = $config['nome_instancia'] ?? 'simpleAIman';
     <meta name="robots" content="noindex, nofollow">
     <title><?= e($tituloPagina) ?> · Admin</title>
     <link rel="stylesheet" href="../<?= asset_ver('assets/css/admin.css') ?>">
+    <link rel="stylesheet" href="../<?= asset_ver('assets/css/simpleaiman.css') ?>">
     <style>
         :root { --accent: <?= e($corPrimaria) ?>; --accent-2: <?= e($corSecundaria) ?>; --on-accent: <?= $onPrimaria ?>; }
     </style>
