@@ -22,6 +22,7 @@ $grupos = [
     ],
     'Ações' => [
         'ferramentas.php' => ['icone' => 'ferramenta', 'label' => 'Ferramentas'],
+        'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
         'setores.php' => ['icone' => 'setor', 'label' => 'Setores'],
         'leads.php' => ['icone' => 'lead', 'label' => 'Leads'],
         'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],

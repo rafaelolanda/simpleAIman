@@ -26,10 +26,29 @@ final class HttpTool
      */
     public function executar(array $ferramenta, array $parametros): string
     {
+        $req = $this->montar($ferramenta, $parametros);
+
+        UrlGuard::doAmbiente()->verificar($req['url']);
+
+        return $this->chamar($ferramenta, $req['url'], $req['metodo'], $req['cabecalhos'], $req['corpo']);
+    }
+
+    /**
+     * Monta a requisição SEM enviá-la.
+     *
+     * Separado da execução para que a tela de teste possa mostrar exatamente
+     * o que sairia — inclusive numa ferramenta de escrita, onde disparar de
+     * verdade criaria um registro real no sistema do cliente. Ver o pedido
+     * montado resolve a maior parte das dúvidas ("o parâmetro entrou na URL?",
+     * "o corpo ficou com as aspas certas?") sem efeito colateral nenhum.
+     *
+     * @param array<string, mixed> $ferramenta
+     * @param array<string, mixed> $parametros
+     * @return array{url: string, metodo: string, cabecalhos: list<string>, corpo: string|null}
+     */
+    public function montar(array $ferramenta, array $parametros): array
+    {
         $url = $this->interpolar((string) $ferramenta['url_template'], $parametros, true);
-
-        UrlGuard::doAmbiente()->verificar($url);
-
         $metodo = strtoupper((string) ($ferramenta['metodo'] ?: 'GET'));
         $cabecalhos = $this->cabecalhos($ferramenta);
         $corpo = null;
@@ -46,7 +65,33 @@ final class HttpTool
             $cabecalhos[] = 'Content-Type: application/json';
         }
 
-        return $this->chamar($ferramenta, $url, $metodo, $cabecalhos, $corpo);
+        return ['url' => $url, 'metodo' => $metodo, 'cabecalhos' => $cabecalhos, 'corpo' => $corpo];
+    }
+
+    /**
+     * Oculta o valor de qualquer cabeçalho de autenticação.
+     *
+     * A tela de teste mostra a requisição montada, e o token resolvido do
+     * .env estaria ali. Exibi-lo anularia a razão de ele não ficar no banco:
+     * bastaria abrir a tela para lê-lo.
+     *
+     * @param list<string> $cabecalhos
+     * @return list<string>
+     */
+    public static function ocultarSegredos(array $cabecalhos): array
+    {
+        return array_map(static function (string $linha): string {
+            [$nome, $valor] = array_pad(explode(':', $linha, 2), 2, '');
+
+            if (!preg_match('/authorization|api[-_]?key|token|secret/i', $nome)) {
+                return $linha;
+            }
+
+            $valor = trim($valor);
+            $prefixo = preg_match('/^(Bearer|Basic)\s/i', $valor, $m) ? $m[1] . ' ' : '';
+
+            return $nome . ': ' . $prefixo . '••••••••  (' . strlen($valor) . ' caracteres)';
+        }, $cabecalhos);
     }
 
     /**
