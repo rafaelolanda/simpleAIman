@@ -251,6 +251,52 @@ admin_logs  login_tentativas  metricas
 
 ---
 
+## 4.1 Quem escolhe o agente
+
+**O canal escolhe, nunca o visitante.** Cada lugar onde o chat aparece está
+amarrado a um agente por `canais.agente_id` ou por `agentes.token_publico`:
+
+```
+widget no site institucional  → agente "Atendimento ao candidato"
+widget no portal do aluno     → agente "Aluno matriculado"
+WhatsApp institucional        → agente "Atendimento ao candidato"
+site de outro cliente         → agente daquele cliente
+```
+
+O visitante nunca vê uma lista de agentes. Ele entra numa página, o widget
+carrega com um token, e o token determina quem responde.
+
+### Agente não é assunto
+
+É a distinção que sustenta o desenho. Cria-se agente novo quando muda **o
+público, o canal ou o cliente** — porque aí mudam o tom, as bases e o que ele
+pode fazer. Candidato e aluno matriculado são públicos diferentes: um quer
+preço e forma de ingresso, o outro quer prazo de rematrícula.
+
+**Não** se cria agente por assunto. "Agente do financeiro" e "agente de
+cursos" parecem organização e são armadilha: um candidato pergunta *"quanto
+custa Direito e tem bolsa?"* numa frase só, e não há resposta boa para "qual
+dos dois atende". Dentro de um agente, assunto se resolve com **bases** e
+**setores** — é para isso que os setores existem.
+
+### Por que não roteamento automático
+
+Um agente orquestrador que classifica a pergunta e despacha custa **uma
+chamada de LLM a mais por mensagem**. Como a rede responde por ~99% do tempo
+de um turno (§8), isso dobra latência e custo, cria um modo de falha novo
+(rotear errado) e perde contexto na passagem. Quase sempre é melhor dar
+**mais ferramentas a um agente** do que rotear entre vários.
+
+### A exceção legítima
+
+Mesma página servindo públicos claramente distintos, sem como saber qual é.
+Aí o widget abre com dois botões — *"Você é candidato ou já é aluno?"* — e a
+escolha fixa o agente da conversa. Sem chamada de LLM, sem adivinhação. Só
+vale quando o público difere de fato; se for só assunto, um agente resolve
+melhor.
+
+---
+
 ## 5. Fluxo de um turno
 
 ```
