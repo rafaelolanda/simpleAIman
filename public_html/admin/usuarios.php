@@ -50,6 +50,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('DELETE FROM admin_users WHERE id = :id')->execute(['id' => $id]);
             Auth::log('excluir_usuario', $alvo['usuario']);
             flash_set('sucesso', 'Usuário removido.');
+        } elseif ($acao === 'atendente') {
+            // Marca quem recebe transferências e de qual setor. Fica aqui, e não
+            // no perfil de cada um, porque "quem atende" é decisão de gestão. Já
+            // a disponibilidade ("estou aqui agora") é do próprio atendente e
+            // mora na tela de Atendimento.
+            $stmt = $pdo->prepare('SELECT usuario FROM admin_users WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            $alvo = $stmt->fetch();
+
+            if (!$alvo) {
+                throw new RuntimeException('Usuário não encontrado.');
+            }
+
+            $atende = empty($_POST['atende']) ? 0 : 1;
+            $setorId = (int) ($_POST['setor_id'] ?? 0) ?: null;
+
+            // Tirar a marca de atendente zera a disponibilidade junto: senão a
+            // pessoa ficaria "online" sem receber nada, e a fila contaria com
+            // alguém que não existe.
+            $pdo->prepare(
+                'UPDATE admin_users
+                    SET atende = :a,
+                        setor_id = :s,
+                        disponivel = CASE WHEN :a2 = 0 THEN 0 ELSE disponivel END,
+                        editado_em = :agora
+                  WHERE id = :id'
+            )->execute([
+                'a' => $atende,
+                'a2' => $atende,
+                's' => $setorId,
+                'agora' => now(),
+                'id' => $id,
+            ]);
+
+            Auth::log('usuario_atendente', $alvo['usuario'] . ' → ' . ($atende ? 'atende' : 'não atende'));
+            flash_set('sucesso', 'Atendimento de ' . $alvo['usuario'] . ' atualizado.');
         } elseif ($acao === 'redefinir_senha') {
             $novaSenha = (string) ($_POST['nova_senha'] ?? '');
 
