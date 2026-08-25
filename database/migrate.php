@@ -236,6 +236,19 @@ if (!$pdo->query('SELECT 1 FROM canais LIMIT 1')->fetchColumn()) {
     echo "Canal 'widget web' criado.\n";
 }
 
+// Ferramentas embutidas: a instalação nova nasce com elas VISÍVEIS na lista,
+// e sem vínculo a agente nenhum. Antes disto, elas existiam só como código e
+// como opção num <select> — quem instalava do zero não descobria que havia
+// encaminhamento, transferência ou captura de lead disponíveis.
+$criadas = \SimpleAIman\Tools\Catalogo::semear();
+
+if ($criadas !== []) {
+    echo 'Ferramentas embutidas criadas (' . implode(', ', $criadas) . ").
+";
+    echo "  Vincule as que quiser usar em Ferramentas > o agente.
+";
+}
+
 if (!$pdo->query('SELECT 1 FROM admin_users LIMIT 1')->fetchColumn()) {
     $usuario = 'admin';
     $senha = bin2hex(random_bytes(6));

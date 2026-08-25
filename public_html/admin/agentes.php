@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_init.php';
 
+use SimpleAIman\Tools\ToolRegistry;
+
 $paginaAtual = 'agentes.php';
 $tituloPagina = 'Agentes';
 
@@ -405,6 +407,12 @@ include __DIR__ . '/partials/head.php';
                     <td>
                         <strong><?= e($a['nome']) ?></strong>
                         <?php if (!$a['ativo']): ?><span class="tag tag-neutro">inativo</span><?php endif; ?>
+                        <?php if (!ToolRegistry::temHandoff((int) $a['id'])): ?>
+                            <?php /* Sem caminho para humano, o agente que não sabe responder
+                                     não tem para onde mandar a pessoa — e a saída dele vira
+                                     inventar ou dar de ombros. */ ?>
+                            <span class="tag tag-alerta" title="Sem ferramenta de encaminhamento: contato do setor, registrar chamado ou transferir para atendente">sem encaminhamento</span>
+                        <?php endif; ?>
                         <br><small style="opacity:.6"><?= e((string) $a['descricao']) ?: e((string) $a['slug']) ?></small>
                     </td>
                     <td>

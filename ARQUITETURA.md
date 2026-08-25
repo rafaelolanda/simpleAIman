@@ -365,6 +365,29 @@ worker (cron 1–5min + kick após upload)
 
 ---
 
+### Embutidas são código, mas precisam virar linha
+
+`contato_setor`, `transferir_atendimento`, `abrir_chamado` e `lead` existem como classes,
+mas **só existem para o modelo depois de virarem registro em `ferramentas`**. Isso é
+deliberado: `descricao_llm` é o campo que decide QUANDO o modelo chama, e ele precisa ser
+afinado por cliente — "falar com uma pessoa" numa universidade não é a mesma frase que numa
+concessionária. Uma embutida com descrição fixa no código tiraria justamente o botão que
+mais move o comportamento do agente.
+
+O que isso custava era descoberta: quem instalava do zero não sabia que elas existiam, e
+quem sabia reescrevia descrição e parâmetros toda vez. Resolvido em três pontos, sem abrir
+mão da configurabilidade:
+
+- **`Tools\Catalogo`** guarda os modelos prontos (descrição que funciona, parâmetros certos,
+  enum dinâmico de setores). Um clique instancia; o texto fica editável depois.
+- **`migrate.php` semeia as quatro** numa instalação nova — criadas e visíveis na lista,
+  **sem vínculo a agente nenhum**. Descoberta resolvida sem ligar nada por conta própria.
+- **A tela de agentes marca "sem encaminhamento"** quando nenhuma ferramenta de handoff está
+  vinculada (`ToolRegistry::temHandoff()`). Um agente sem caminho para humano, quando não
+  sabe responder, só tem duas saídas: inventar ou dar de ombros.
+
+---
+
 ## 7. Segurança
 
 ### Camada `http` (maior superfície do projeto)

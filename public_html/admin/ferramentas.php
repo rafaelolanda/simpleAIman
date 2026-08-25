@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/_init.php';
 
+use SimpleAIman\Tools\Catalogo;
 use SimpleAIman\Tools\Executor;
 
 $paginaAtual = 'ferramentas.php';
@@ -21,6 +22,29 @@ $EFEITOS = ['leitura' => 'Leitura — só consulta', 'escrita' => 'Escrita — r
 $AUTHS = ['none' => 'Sem autenticação', 'bearer' => 'Bearer token', 'basic' => 'Basic'];
 $FONTES = ['' => '(lista fixa abaixo)', 'setores' => 'Setores ativos', 'bases' => 'Bases ativas', 'agentes' => 'Agentes ativos'];
 $TIPOS_PARAM = ['string' => 'Texto', 'number' => 'Número', 'boolean' => 'Sim/não'];
+
+// Instanciar uma embutida a partir do catálogo.
+//
+// As embutidas são código, mas só existem para o modelo depois de virarem
+// linha em `ferramentas` — porque `descricao_llm` precisa ser afinado por
+// cliente, e é ele que decide QUANDO o modelo chama. O catálogo tira o
+// trabalho repetido sem tirar o ajuste.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['acao'] ?? '') === 'do_catalogo') {
+    if (!csrf_verify($_POST['csrf_token'] ?? null)) {
+        flash_set('erro', 'Sessão expirada. Tente de novo.');
+        redirect('ferramentas.php');
+    }
+
+    try {
+        $id = Catalogo::instanciar((string) ($_POST['tipo'] ?? ''));
+        Auth::log('ferramenta_do_catalogo', (string) $_POST['tipo']);
+        flash_set('sucesso', 'Ferramenta criada. Ajuste a descrição se quiser e vincule ao agente.');
+        redirect('ferramentas.php?editar=' . $id);
+    } catch (Throwable $e) {
+        flash_set('erro', $e->getMessage());
+        redirect('ferramentas.php');
+    }
+}
 
 $editando = null;
 
@@ -219,6 +243,35 @@ include __DIR__ . '/partials/head.php';
             bloqueada — é o padrão seguro. Liste ali os domínios que as ferramentas podem acessar,
             separados por vírgula.
         </p>
+    </div>
+<?php endif; ?>
+
+<?php if (!$editando): ?>
+    <div class="card" style="margin-bottom:1.25rem;">
+        <h2 class="card-title">Embutidas prontas</h2>
+        <p class="page-sub" style="margin-top:0">
+            Já existem no código. Um clique cria a ferramenta com descrição e parâmetros
+            preenchidos — depois é só ajustar o texto ao seu cliente e vincular ao agente.
+        </p>
+        <div class="catalogo">
+            <?php foreach (Catalogo::embutidas() as $tipo => $modelo): ?>
+                <?php $existe = Catalogo::jaExiste($tipo); ?>
+                <div class="catalogo-item">
+                    <strong><?= e($modelo['nome']) ?></strong>
+                    <small><?= e($modelo['resumo']) ?></small>
+                    <?php if ($existe): ?>
+                        <span class="tag tag-ok">já criada</span>
+                    <?php else: ?>
+                        <form method="post" style="margin:0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="do_catalogo">
+                            <input type="hidden" name="tipo" value="<?= e($tipo) ?>">
+                            <button type="submit" class="btn btn-secondary btn-sm">Criar</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endforeach; ?>
+        </div>
     </div>
 <?php endif; ?>
 
