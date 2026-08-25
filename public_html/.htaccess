@@ -40,3 +40,20 @@ RewriteRule ^([^.]+)$ $1.php [L,QSA]
     ExpiresByType application/javascript "access plus 1 week"
     ExpiresByType image/webp "access plus 1 month"
 </IfModule>
+
+# embed.js é a EXCEÇÃO, e é uma exceção necessária.
+#
+# Os demais assets são chamados por páginas nossas, que carimbam ?v=<mtime> e
+# invalidam o cache sozinhas. O embed.js não: quem o inclui é o <script> no site
+# do cliente, fora do nosso alcance. Com uma semana de cache, uma correção no
+# widget só chegaria aos visitantes daqui a uma semana — foi assim que uma
+# versão sem o polling do atendimento continuou rodando depois do deploy, e a
+# resposta do atendente não chegava a ninguém.
+<Files "embed.js">
+    <IfModule mod_expires.c>
+        ExpiresDefault "access plus 5 minutes"
+    </IfModule>
+    <IfModule mod_headers.c>
+        Header set Cache-Control "public, max-age=300, must-revalidate"
+    </IfModule>
+</Files>

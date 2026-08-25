@@ -285,12 +285,13 @@ include __DIR__ . '/partials/head.php';
                     $classe = match ($m['autor_tipo']) {
                         'usuario' => 'msg-usuario',
                         'atendente' => 'msg-atendente',
-                        'sistema' => 'msg-sistema',
+                        'sistema', 'aviso' => 'msg-sistema',
                         default => 'msg-bot',
                     };
                     $quem = match ($m['autor_tipo']) {
                         'usuario' => 'Visitante',
                         'atendente' => trim((string) ($m['autor_nome'] ?? '')) ?: 'Atendente',
+                        'aviso' => 'Aviso',
                         'sistema' => 'Sistema',
                         default => 'Assistente',
                     };
@@ -368,20 +369,32 @@ include __DIR__ . '/partials/head.php';
 
                 if (badge) { badge.textContent = d.aguardando; }
 
-                // Alguém novo entrou na fila: avisa quem está com a tela aberta.
-                if (d.aguardando > filaAnterior) { tocar(); }
-                filaAnterior = d.aguardando;
+                // A fila mudou de tamanho. O crachá sozinho não basta: a LISTA
+                // precisa mostrar a conversa nova, senão o atendente vê o número
+                // subir e não tem no que clicar — foi preciso F5 no primeiro teste.
+                //
+                // Recarregar só vale quando não há conversa aberta: dentro de uma,
+                // recarregar apagaria o que o atendente estivesse digitando.
+                if (d.aguardando !== filaAnterior) {
+                    if (d.aguardando > filaAnterior) { tocar(); }
+                    filaAnterior = d.aguardando;
+
+                    if (!conversa) {
+                        location.reload();
+                        return;
+                    }
+                }
 
                 (d.mensagens || []).forEach(function (m) {
                     if (!historico || m.id <= ultimo) { return; }
                     ultimo = m.id;
 
                     var div = document.createElement('div');
-                    div.className = 'msg msg-' + (m.quem === 'usuario' ? 'usuario' : (m.quem === 'atendente' ? 'atendente' : (m.quem === 'sistema' ? 'sistema' : 'bot')));
+                    div.className = 'msg msg-' + (m.quem === 'usuario' ? 'usuario' : (m.quem === 'atendente' ? 'atendente' : (m.quem === 'sistema' || m.quem === 'aviso' ? 'sistema' : 'bot')));
 
                     var cab = document.createElement('span');
                     cab.className = 'msg-quem';
-                    cab.textContent = (m.quem === 'usuario' ? 'Visitante' : m.quem === 'atendente' ? 'Atendente' : m.quem === 'sistema' ? 'Sistema' : 'Assistente') + ' · ' + m.hora;
+                    cab.textContent = (m.quem === 'usuario' ? 'Visitante' : m.quem === 'atendente' ? 'Atendente' : m.quem === 'aviso' ? 'Aviso' : m.quem === 'sistema' ? 'Sistema' : 'Assistente') + ' · ' + m.hora;
 
                     var txt = document.createElement('div');
                     txt.className = 'msg-texto';

@@ -104,7 +104,7 @@ final class Fila
              WHERE id = :id AND modo IN ('bot', 'aguardando')"
         )->execute(['agora' => $agora, 'id' => $conversaId]);
 
-        self::registrarSistema($conversaId, 'Transferência para atendimento humano solicitada.');
+        self::registrarAviso($conversaId, 'Transferência para atendimento humano solicitada.');
 
         Metrics::log('handoff_solicitado', $setorId ?? 0);
 
@@ -136,7 +136,7 @@ final class Fila
         }
 
         $nome = self::nomeDoAtendente($atendenteId);
-        self::registrarSistema($conversaId, $nome . ' entrou na conversa.');
+        self::registrarAviso($conversaId, $nome . ' entrou na conversa.');
 
         return true;
     }
@@ -156,7 +156,7 @@ final class Fila
              WHERE id = :id"
         )->execute(['id' => $conversaId, 'agora' => now()]);
 
-        self::registrarSistema(
+        self::registrarAviso(
             $conversaId,
             $motivo !== '' ? $motivo : 'Atendimento humano encerrado. O assistente voltou a responder.'
         );
@@ -168,7 +168,7 @@ final class Fila
             "UPDATE conversas SET modo = 'encerrada', editado_em = :agora WHERE id = :id"
         )->execute(['id' => $conversaId, 'agora' => now()]);
 
-        self::registrarSistema($conversaId, 'Atendimento encerrado.');
+        self::registrarAviso($conversaId, 'Atendimento encerrado.');
     }
 
     /**
@@ -275,7 +275,7 @@ final class Fila
      */
     public static function mensagensDesde(int $conversaId, int $desde, bool $apenasParaVisitante = false): array
     {
-        $filtro = $apenasParaVisitante ? " AND autor_tipo IN ('atendente', 'sistema')" : '';
+        $filtro = $apenasParaVisitante ? " AND autor_tipo IN ('atendente', 'aviso')" : '';
 
         $stmt = Database::connection()->prepare(
             'SELECT m.id, m.autor_tipo, m.conteudo, m.criado_em,
@@ -290,9 +290,18 @@ final class Fila
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    public static function registrarSistema(int $conversaId, string $texto): void
+    /**
+     * Aviso visível para os DOIS lados ("Fulano entrou na conversa").
+     *
+     * Usa `autor_tipo = 'aviso'`, e não `'sistema'`, porque `'sistema'` já
+     * carrega os diagnósticos internos do provedor (`[provedor_cota 429] …`),
+     * que o próprio ChatService documenta como coisa que nunca vai para o
+     * chat. Eram dois significados na mesma etiqueta, e o filtro do widget
+     * não tinha como distinguir — entregaria erro técnico ao visitante.
+     */
+    public static function registrarAviso(int $conversaId, string $texto): void
     {
-        self::gravar($conversaId, 'sistema', $texto, null);
+        self::gravar($conversaId, 'aviso', $texto, null);
     }
 
     public static function registrarAtendente(int $conversaId, int $atendenteId, string $texto): int
