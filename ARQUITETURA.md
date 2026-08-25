@@ -412,6 +412,12 @@ ao vivo.
 2. Nunca manter transação aberta durante chamada HTTP.
 3. Backup por `VACUUM INTO`, nunca `cp` (arquivo em WAL copiado ingenuamente vem corrompido).
 
+**O JIT é uma alavanca real, e barata.** Medido no PHP 8.4.21, o mesmo benchmark com
+`opcache.jit=tracing` ficou ~37% mais rápido: 768 dim / 5k chunks caiu de 273 ms para
+171 ms, e 20k de 1060 ms para 760 ms. Não muda a classe de escalabilidade — continua sendo
+varredura linear — mas é o ajuste de configuração que mais rende antes de considerar o
+sqlite-vec. Vale conferir se o host permite ligar; muita hospedagem compartilhada não.
+
 **Verificar antes de fechar:** se o host usa storage de rede (NFS), o lock do SQLite é lento
 e não confiável. Único cenário que inviabilizaria a rota. `bin/benchmark-sqlite.php` testa isso.
 
@@ -645,6 +651,13 @@ público, recusado por mensagens que não eram dele.
 é `<label>` dentro de `.form-grid`, e as variáveis são `--border`/`--text`.
 Antes de inventar classe, procure no CSS herdado.
 
+- **O CLI pode não achar o `php.ini` que o servidor web usa.** O PHP procura o arquivo ao
+  lado do binário; stacks que o mantêm em outro lugar (o Devaron usa `etc/php/php.ini`)
+  fazem o CLI subir sem extensão nenhuma — sem `pdo_sqlite`, o erro que aparece é
+  `could not find driver`, que não aponta para a causa. A cron do `bin/worker.php` roda
+  pelo CLI e cai exatamente nisso: **a linha do cron precisa de `php -c <caminho>` ou da
+  variável `PHPRC`**, senão o worker morre em silêncio enquanto o painel funciona normal.
+  Conferir com `php --ini` antes de culpar o código.
 - `php -S` não processa `.htaccess`: URLs limpas, bloqueio de `.sqlite` e cache de assets
   só valem sob **Apache com `mod_rewrite`**. Testar essas rotas exige servidor real — e se
   o ambiente local for nginx, as regras do `.htaccess` precisam de equivalente próprio, ou
