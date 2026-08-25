@@ -520,6 +520,66 @@ pipeline único (stream e completo), como planejado.
 
 ---
 
+## 10.1 Retenção e privacidade
+
+O conteúdo de uma conversa não é um bloco só. São três classes de dado com
+risco e validade muito diferentes:
+
+| dado | risco | valor a longo prazo |
+|---|---|---|
+| o que foi dito (`mensagens.conteudo`) | alto — é onde o CPF aparece | cai rápido |
+| o que foi citado (`mensagem_fontes`) | nenhum | alto: mostra quais documentos respondem de fato |
+| estatística (`metricas`, latência, tokens) | nenhum | alto |
+
+Apagar em bloco jogaria fora as duas últimas junto com a primeira. Por isso a
+retenção tem **dois estágios**, em `app/Jobs/Retencao.php`:
+
+1. **Anonimizar** (`config.anonimizacao_conversas_dias`) — mascara CPF, e-mail
+   e telefone dentro do texto e remove `conversas.ip`. O que sobra continua
+   servindo à curadoria: *"quais cursos vocês têm"* não tem dado pessoal nenhum
+   e é exatamente o insumo da lista de perguntas sem resposta. Essa é a tensão
+   que obriga a existir um primeiro estágio — a melhor fonte de curadoria da
+   FAQ é o texto da pergunta.
+2. **Expurgar** (`config.retencao_conversas_dias`) — apaga o conteúdo das
+   mensagens e os parâmetros das execuções de ferramenta. A **linha** da
+   mensagem é preservada de propósito: `mensagem_fontes` referencia a mensagem,
+   e apagá-la levaria por cascata a informação de quais documentos respondem.
+
+**Os dois nascem em 0 = desligado.** Apagar dado de gente por padrão numa
+instalação nova seria surpresa ruim; a política é uma decisão de quem opera.
+
+`canais.retencao_dias` sobrescreve o prazo global. Existe por causa do
+WhatsApp, que muda uma peça do desenho: ali `conversas.externo_id` é o **número
+de telefone** — dado pessoal que ao mesmo tempo é o *endereço*. Não dá para
+apagar sem perder a forma de responder. E a pessoa volta semanas depois
+esperando continuidade, então um prazo curto faz o agente perder o contexto de
+uma conversa que, para ela, é a mesma.
+
+Duas consequências práticas que valem lembrar antes de prometer algo a quem
+pede exclusão: a thread continua no celular da pessoa (apagar aqui apaga só o
+nosso lado), e "apaguem meus dados" no WhatsApp significa também parar de
+responder ali.
+
+`Retencao::apagarPessoa()` atende o direito de exclusão varrendo `leads`,
+`conversas`, `mensagens`, `chamados` e `ferramenta_execucoes` — o dado pessoal
+se espalha por cinco tabelas e atender à mão erraria alguma. Tem modo
+**simulação**, e a tela obriga a passar por ele: a busca é por aproximação e um
+telefone digitado errado levaria conversa de terceiro junto.
+
+Três detalhes que só apareceram testando:
+
+- **Onze dígitos podem ser CPF ou telefone.** Adivinhar pelo formato erra nos
+  dois sentidos; conferir os dígitos verificadores resolve sem heurística. Por
+  isso o CPF é mascarado primeiro, com validação de verdade.
+- **`` não casa antes de `+` nem de `(`**, e o regex de telefone deixava
+  sobras como `+(telefone removido)`. Âncoras de dígito (`(?<!\d)`) fazem o
+  mesmo serviço sem o efeito.
+- **PDO liga inteiro como TEXTO, e no SQLite todo TEXT é maior que todo
+  número.** `100 >= '90'` é falso e `'1' = 1` também. Isso matou duas consultas
+  em silêncio: nada vencia nunca e a busca não achava ninguém. Onde o valor é
+  numérico, ou `CAST(:x AS INTEGER)`, ou o WHERE montado em PHP com placeholder
+  só para valor.
+
 ## 11. Armadilhas conhecidas
 
 - `php -S` não processa `.htaccess`: URLs limpas, bloqueio de `.sqlite` e cache de assets

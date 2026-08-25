@@ -55,6 +55,9 @@ function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
 // schema), então instância já no ar precisa do UPDATE — e só onde ninguém
 // mexeu no valor, para não desfazer calibragem feita à mão.
 garantir_colunas($pdo, 'agentes', ['idioma' => "TEXT NOT NULL DEFAULT 'pt-BR'"]);
+garantir_colunas($pdo, 'config', ['anonimizacao_conversas_dias' => 'INTEGER NOT NULL DEFAULT 0']);
+garantir_colunas($pdo, 'canais', ['retencao_dias' => 'INTEGER NOT NULL DEFAULT 0']);
+garantir_colunas($pdo, 'conversas', ['anonimizada_em' => 'TEXT', 'expurgada_em' => 'TEXT']);
 garantir_colunas($pdo, 'provedores', [
     'custo_entrada_milhao' => 'REAL NOT NULL DEFAULT 0',
     'custo_saida_milhao' => 'REAL NOT NULL DEFAULT 0',

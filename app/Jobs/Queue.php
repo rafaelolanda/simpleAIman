@@ -26,6 +26,35 @@ final class Queue
      *        retry com backoff, por exemplo. Sem isso o worker acordaria o
      *        job antes da hora e ele sairia sem fazer nada.
      */
+    /**
+     * Enfileira um job de rotina no maximo uma vez por periodo.
+     *
+     * O worker e chamado pelo cron a cada poucos minutos e tambem por "kick"
+     * a cada upload. Um enfileirar() direto criaria dezenas de jobs de
+     * retencao por dia — todos redundantes, competindo pelo mesmo lote.
+     */
+    public static function agendarPeriodico(string $tipo, int $intervaloHoras = 24): bool
+    {
+        $pdo = Database::connection();
+
+        $stmt = $pdo->prepare(
+            "SELECT COUNT(*) FROM jobs
+             WHERE tipo = :tipo
+               AND julianday(:agora) - julianday(criado_em) < :dias"
+        );
+        $stmt->execute(['tipo' => $tipo, 'agora' => now(), 'dias' => $intervaloHoras / 24]);
+
+        if ((int) $stmt->fetchColumn() > 0) {
+            return false;
+        }
+
+        // Prioridade baixa: rotina de manutencao nunca deve passar na frente
+        // de uma ingestao que o admin esta esperando na tela.
+        self::enfileirar($tipo, [], -10);
+
+        return true;
+    }
+
     public static function enfileirar(string $tipo, array $payload, int $prioridade = 0, int $emSegundos = 0): int
     {
         $pdo = Database::connection();

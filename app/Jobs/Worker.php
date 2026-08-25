@@ -46,6 +46,13 @@ final class Worker
     {
         $log ??= static fn (string $m): null => null;
 
+        // Rotinas de manutencao entram aqui, no maximo uma vez por dia. Nao ha
+        // agendador proprio nesta arquitetura: o cron so chama o worker, entao
+        // e o worker que decide o que ja passou da hora.
+        if (Queue::agendarPeriodico('retencao')) {
+            $log('retencao do dia enfileirada.');
+        }
+
         $liberados = Queue::liberarPresos();
 
         if ($liberados > 0) {
@@ -70,6 +77,30 @@ final class Worker
     }
 
     /**
+     * Anonimizacao e expurgo do conteudo das conversas.
+     *
+     * Nasce desligado (dias = 0 nos dois estagios), entao esta rodada custa
+     * duas leituras e termina. So faz alguma coisa depois que alguem escolhe
+     * um prazo em Configuracoes.
+     *
+     * @param array<string, mixed> $job
+     * @param callable(string): void $log
+     * @return 'concluidos'
+     */
+    private function aplicarRetencao(array $job, callable $log): string
+    {
+        $placar = (new \SimpleAIman\Jobs\Retencao())->executar($log);
+
+        Queue::concluir((int) $job['id']);
+
+        if ($placar['anonimizadas'] === 0 && $placar['expurgadas'] === 0) {
+            $log('retencao: nada vencido.');
+        }
+
+        return 'concluidos';
+    }
+
+    /**
      * @param array<string, mixed> $job
      * @param callable(string): void $log
      * @return 'concluidos'|'falhas'|'pausas'
@@ -82,6 +113,7 @@ final class Worker
             return match ($job['tipo']) {
                 'ingestao' => $this->ingerir($job, $log),
                 'entrega_lead' => $this->entregarLead($job, $log),
+                'retencao' => $this->aplicarRetencao($job, $log),
                 default => throw new \RuntimeException("Tipo de job desconhecido: {$job['tipo']}"),
             };
         } catch (ErroAgente $e) {

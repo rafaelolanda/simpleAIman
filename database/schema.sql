@@ -27,7 +27,20 @@ CREATE TABLE IF NOT EXISTS config (
     cor_primaria        TEXT NOT NULL DEFAULT '#2563eb',
     cor_secundaria      TEXT NOT NULL DEFAULT '#0f172a',
     logo                TEXT,
-    retencao_conversas_dias INTEGER NOT NULL DEFAULT 0,   -- 0 = não expurga
+
+    -- Retencao do conteudo das conversas, em DOIS estagios. Ambos nascem em
+    -- 0 = DESLIGADO: apagar dado de gente por padrao seria surpresa ruim.
+    --
+    -- Estagio 1, anonimizar: mascara CPF, e-mail e telefone dentro do texto e
+    -- remove o IP. O que sobra continua servindo a curadoria — "quais cursos
+    -- vcs tem" nao tem dado pessoal nenhum e e exatamente o insumo da lista de
+    -- perguntas sem resposta.
+    --
+    -- Estagio 2, expurgar: apaga o conteudo das mensagens. Preserva conversa,
+    -- fontes citadas e metricas, que nao tem dado pessoal e tem valor longo:
+    -- quantas conversas, quais documentos respondem de fato, custo e latencia.
+    anonimizacao_conversas_dias INTEGER NOT NULL DEFAULT 0,
+    retencao_conversas_dias INTEGER NOT NULL DEFAULT 0,
     criado_em           TEXT NOT NULL,
     editado_em          TEXT NOT NULL
 );
@@ -560,6 +573,13 @@ CREATE TABLE IF NOT EXISTS canais (
     agente_id           INTEGER REFERENCES agentes (id) ON DELETE SET NULL,
     credenciais_ref     TEXT,                           -- nome da var no .env
     config              TEXT,                           -- JSON
+
+    -- Sobrescreve a retencao global para este canal. Existe porque o WhatsApp
+    -- e diferente do widget: ali `externo_id` e o TELEFONE, a pessoa volta
+    -- semanas depois e espera continuidade. Apagar cedo demais faz o agente
+    -- perder o contexto de uma conversa que, para ela, e a mesma. 0 = usa o
+    -- valor global.
+    retencao_dias       INTEGER NOT NULL DEFAULT 0,
     ativo               INTEGER NOT NULL DEFAULT 1,
     criado_em           TEXT NOT NULL,
     editado_em          TEXT NOT NULL
@@ -580,6 +600,12 @@ CREATE TABLE IF NOT EXISTS conversas (
     -- negócio, por isso mora no schema desde já.
     ultima_msg_usuario_em TEXT,
     ip                  TEXT,
+    -- Marcas de controle da retencao. Servem para o job nao reprocessar
+    -- eternamente as mesmas conversas antigas a cada rodada, e para a tela
+    -- conseguir dizer que aquele historico foi tratado em vez de parecer
+    -- que o texto simplesmente sumiu.
+    anonimizada_em      TEXT,
+    expurgada_em        TEXT,
     criado_em           TEXT NOT NULL,
     editado_em          TEXT NOT NULL
 );

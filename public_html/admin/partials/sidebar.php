@@ -28,6 +28,7 @@ $grupos = [
         'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],
     ],
     'Sistema' => [
+        'privacidade.php' => ['icone' => 'chave', 'label' => 'Privacidade'],
         'logs.php' => ['icone' => 'log', 'label' => 'Logs'],
     ],
 ];
