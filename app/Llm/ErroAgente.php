@@ -141,8 +141,10 @@ final class ErroAgente extends RuntimeException
                 . '`auth_ref` no .env e se o projeto tem acesso ao modelo.',
             'configuracao' => 'Modelo ou endpoint não encontrado. O modelo pode ter sido descontinuado — '
                 . 'confira o nome em `provedores.modelo_chat`.',
-            'provedor_indisponivel', 'provedor_timeout' => 'Falha temporária do provedor. Se persistir, '
-                . 'verifique conectividade e o CA bundle (curl.cainfo) no php.ini.',
+            'provedor_indisponivel', 'provedor_timeout' => 'Falha ou lentidão do provedor. Modelos do free '
+                . 'tier degradam sem aviso: rode este teste com outro modelo em `provedores.modelo_chat` e '
+                . 'compare os tokens/s — a diferença entre dois modelos do mesmo fornecedor chega a 50x. '
+                . 'Se todos estiverem lentos, verifique conectividade e o CA bundle (curl.cainfo).',
             'resposta_vazia' => 'Modelo pensante gastou o orçamento de saída antes do texto. Aumente '
                 . '`max_tokens` do agente ou reduza `reasoning_effort`.',
             default => 'Veja o detalhe técnico no log.',

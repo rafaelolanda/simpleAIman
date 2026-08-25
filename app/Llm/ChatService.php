@@ -285,15 +285,17 @@ final class ChatService
             return null;
         }
 
-        try {
-            $vetor = $this->fabrica
-                ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
-                ->embedText($pergunta);
+        $vetor = $this->vetorDaPergunta($pergunta);
 
+        if ($vetor === null) {
+            return null;
+        }
+
+        try {
             $achada = (new FaqBusca())->melhor(
                 $pergunta,
                 $vetor,
-                (float) ($this->agente['limiar_faq_direto'] ?? 0.85),
+                (float) ($this->agente['limiar_faq_direto'] ?? 0.78),
             );
         } catch (Throwable $e) {
             // Falha aqui não pode custar o turno: segue pelo RAG.
@@ -340,6 +342,41 @@ final class ChatService
     private ?array $faqCandidata = null;
 
     /**
+     * Vetor da pergunta do turno, calculado UMA vez.
+     *
+     * A FAQ e o RAG precisam do mesmo vetor, da mesma frase, com o mesmo
+     * task_type. Embeddar duas vezes custava 589 ms por turno — medido, e
+     * mais que o dobro do tempo somado de toda a busca. A chamada de rede é
+     * a parte cara de tudo aqui; repeti-la é o erro mais fácil de cometer.
+     *
+     * @var list<float>|null
+     */
+    private ?array $vetorPergunta = null;
+
+    /**
+     * @return list<float>|null null quando o embedding falha — o turno segue
+     *                          sem busca, e os guardrails cuidam do resto.
+     */
+    private function vetorDaPergunta(string $pergunta): ?array
+    {
+        if ($this->vetorPergunta !== null) {
+            return $this->vetorPergunta;
+        }
+
+        try {
+            $this->vetorPergunta = $this->fabrica
+                ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
+                ->embedText($pergunta);
+        } catch (Throwable $e) {
+            error_log('[simpleAIman] embedding da pergunta falhou: ' . $e->getMessage());
+
+            return null;
+        }
+
+        return $this->vetorPergunta;
+    }
+
+    /**
      * Recupera os trechos da pergunta, se o agente usar RAG.
      *
      * Falha de recuperação NÃO derruba o turno: o agente responde sem
@@ -373,6 +410,10 @@ final class ChatService
                 $bases,
                 (int) $this->agente['top_k'],
                 (float) $this->agente['limiar_similaridade'],
+                true,
+                true,
+                // Reaproveita o vetor já calculado para a FAQ.
+                $this->vetorDaPergunta($pergunta),
             );
 
             $this->tempoBusca = $retriever->tempos;

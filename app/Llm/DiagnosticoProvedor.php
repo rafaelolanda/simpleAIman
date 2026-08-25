@@ -32,6 +32,7 @@ final class DiagnosticoProvedor
     {
         return [
             $this->testarChat(),
+            $this->testarVelocidade(),
             $this->testarFerramenta(),
             $this->testarStreaming(),
             $this->testarEmbeddings(),
@@ -105,6 +106,72 @@ final class DiagnosticoProvedor
             return $this->falha($item, $e);
         } catch (Throwable $e) {
             return $this->falha($item, ErroAgente::deProvedor($e, 'chat'));
+        }
+    }
+
+    /**
+     * Velocidade real do modelo, em tokens por segundo.
+     *
+     * Existe porque a diferença entre modelos é BRUTAL e muda com o tempo:
+     * medido em 2026-08-25, o `gemini-3.5-flash-lite` entregava 2 tokens por
+     * segundo enquanto o `gemini-3.6-flash` entregava 103 — cinquenta vezes
+     * mais rápido, no mesmo minuto e com a mesma chave. O modelo estava
+     * degradado, não a nossa busca (que leva ~650 ms e não varia).
+     *
+     * Sem este número, "o chat está lento" vira caça a fantasma no código.
+     * Com ele, a resposta aparece em dois cliques e a correção é trocar o
+     * modelo do agente.
+     *
+     * @return array{item: string, ok: bool, detalhe: string, sugestao: string, publica: string}
+     */
+    private function testarVelocidade(): array
+    {
+        $item = 'Velocidade';
+
+        try {
+            // Prompt propositalmente parecido com um turno real: contexto de
+            // RAG mais uma pergunta. Medir com "oi" daria número otimista.
+            $contexto = str_repeat('Trecho do edital com prazos, valores e regras da instituição. ', 40);
+
+            $inicio = microtime(true);
+
+            $resposta = Agent::make()
+                ->setAiProvider($this->fabrica->chat($this->opcoes()))
+                ->setInstructions($contexto)
+                ->chat(new UserMessage('Em duas frases, o que é um vestibular?'))
+                ->getMessage();
+
+            $segundos = max(0.001, microtime(true) - $inicio);
+            $uso = $resposta->getUsage();
+            $saida = $uso !== null ? $uso->outputTokens + $uso->reasoningTokens : 0;
+
+            if ($saida === 0) {
+                throw new ErroAgente('resposta_vazia', 'O modelo não produziu tokens de saída.');
+            }
+
+            $porSegundo = $saida / $segundos;
+
+            $detalhe = sprintf(
+                '%.1f tokens/s · %.1fs para %d tokens',
+                $porSegundo,
+                $segundos,
+                $saida,
+            );
+
+            // Abaixo de ~20 tok/s o atendimento fica visivelmente arrastado:
+            // uma resposta comum de 200 tokens passaria de 10 segundos.
+            if ($porSegundo < 20) {
+                throw new ErroAgente(
+                    'provedor_indisponivel',
+                    $detalhe . ' — muito lento para atendimento.'
+                );
+            }
+
+            return $this->ok($item, $detalhe);
+        } catch (ErroAgente $e) {
+            return $this->falha($item, $e);
+        } catch (Throwable $e) {
+            return $this->falha($item, ErroAgente::deProvedor($e, 'velocidade'));
         }
     }
 

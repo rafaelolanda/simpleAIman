@@ -76,6 +76,7 @@ final class Retriever
         float $limiar = 0.0,
         bool $usarLexical = true,
         bool $usarVetorial = true,
+        ?array $vetorPronto = null,
     ): array {
         $pergunta = trim($pergunta);
         $this->tempos = ['embedding' => 0.0, 'vetorial' => 0.0, 'lexical' => 0.0, 'total' => 0.0];
@@ -91,7 +92,7 @@ final class Retriever
         $this->tempos['lexical'] = (microtime(true) - $marco) * 1000;
 
         $marco = microtime(true);
-        $vetorial = $usarVetorial ? $this->vetorial($pergunta, $bases, self::CANDIDATOS) : [];
+        $vetorial = $usarVetorial ? $this->vetorial($pergunta, $bases, self::CANDIDATOS, $vetorPronto) : [];
         $this->tempos['vetorial'] = (microtime(true) - $marco) * 1000 - $this->tempos['embedding'];
 
         $this->tempos['total'] = (microtime(true) - $inicioTotal) * 1000;
@@ -172,8 +173,18 @@ final class Retriever
      *
      * @return list<array{chunk_id: int, score: float}>
      */
-    private function vetorial(string $pergunta, array $bases, int $quantos): array
+    private function vetorial(string $pergunta, array $bases, int $quantos, ?array $vetorPronto = null): array
     {
+        // Vetor reaproveitado quando o chamador já embeddou a pergunta.
+        //
+        // Sem isso, um turno com FAQ e RAG ligados embedda a MESMA frase duas
+        // vezes — medido: 589 ms jogados fora em cada turno, mais que o dobro
+        // do custo somado de toda a busca. A chamada de rede é a parte cara;
+        // repeti-la é o erro mais fácil de cometer aqui.
+        if ($vetorPronto !== null && $vetorPronto !== []) {
+            return $this->store->similares($vetorPronto, $bases, $quantos);
+        }
+
         $provedorId = $this->provedorDaBase($bases);
 
         $fabrica = $provedorId !== null
