@@ -28,6 +28,22 @@ if (!Auth::check()) {
     exit('Acesso negado.');
 }
 
+$usuarioId = Auth::userId();
+
+/**
+ * Libera o arquivo de sessão ANTES de começar o streaming.
+ *
+ * A sessão do PHP é travada em exclusividade enquanto o script roda. Como
+ * este endpoint fica aberto os segundos inteiros da resposta, ele segurava a
+ * trava — e qualquer outra aba do mesmo navegador ficava esperando. O sintoma
+ * é o painel inteiro congelar durante uma conversa, o que parece lock de
+ * banco e não é: o SQLite escreve em milissegundos aqui.
+ *
+ * Depois desta linha a sessão vira somente leitura, então tudo que vem dela
+ * precisa ter sido lido antes.
+ */
+session_write_close();
+
 // ---------------------------------------------------------------------
 // Cabeçalhos anti-buffering.
 //
@@ -67,7 +83,7 @@ function sse(string $evento, array $dados): void
 
 $pergunta = trim((string) ($_GET['q'] ?? ''));
 $agenteId = (int) ($_GET['agente'] ?? 0);
-$sessao = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['sessao'] ?? '')) ?: 'admin-' . Auth::userId();
+$sessao = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) ($_GET['sessao'] ?? '')) ?: 'admin-' . $usuarioId;
 
 if ($pergunta === '') {
     sse('erro', ['mensagem' => 'Envie uma pergunta.']);

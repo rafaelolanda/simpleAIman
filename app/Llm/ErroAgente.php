@@ -95,6 +95,12 @@ final class ErroAgente extends RuntimeException
             $status !== null && $status >= 500 => 'provedor_indisponivel',
             str_contains(strtolower($texto), 'timeout') => 'provedor_timeout',
             str_contains(strtolower($texto), 'could not resolve host') => 'provedor_indisponivel',
+            // "Error creating resource" e "Network error" vêm do cliente HTTP,
+            // não do fornecedor: é falha de transporte, e o visitante deve
+            // receber a mensagem de indisponibilidade temporária.
+            str_contains($texto, 'Error creating resource') => 'provedor_indisponivel',
+            str_contains($texto, 'Network error') => 'provedor_indisponivel',
+            str_contains(strtolower($texto), 'ssl') => 'provedor_indisponivel',
             default => 'desconhecido',
         };
 

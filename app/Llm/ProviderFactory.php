@@ -5,6 +5,10 @@ declare(strict_types=1);
 namespace SimpleAIman\Llm;
 
 use Database;
+use GuzzleHttp\Handler\CurlMultiHandler;
+use GuzzleHttp\HandlerStack;
+use NeuronAI\HttpClient\GuzzleHttpClient;
+use NeuronAI\HttpClient\HttpClientInterface;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\Gemini\Gemini;
@@ -87,6 +91,40 @@ final class ProviderFactory
     }
 
     /**
+     * Cliente HTTP com curl FORÇADO, inclusive em streaming.
+     *
+     * O Guzzle, por padrão, decide o handler assim: requisições normais vão
+     * pelo curl, mas requisições com `stream => true` são desviadas para o
+     * StreamHandler, que usa `fopen()` sobre HTTPS. Isso acontece sempre que
+     * `allow_url_fopen` está ligado, que é o comum.
+     *
+     * Duas consequências ruins, e as duas apareceram em uso real:
+     *
+     *  1. Falha intermitente com "Error creating resource: fopen(...)" — o
+     *     wrapper de stream é bem menos robusto que o curl, especialmente no
+     *     Windows, e derrubava conversas de forma aparentemente aleatória.
+     *  2. Ele **ignora `curl.cainfo`**, então todo o cuidado com o CA bundle
+     *     valia só para metade das chamadas.
+     *
+     * O CurlMultiHandler faz streaming de verdade e usa a configuração de
+     * certificado do curl. Como o chat do widget é todo em streaming, isso
+     * vale para o caminho principal do produto, não para um caso de borda.
+     */
+    private function clienteHttp(): HttpClientInterface
+    {
+        return new GuzzleHttpClient(
+            // 40s, não os 60s padrão. Uma falha de rede que trava a conexão
+            // consumia o timeout inteiro antes de desistir — medido: 61s num
+            // turno que deveria levar 2s. Ninguém espera isso num chat, e o
+            // visitante prefere a mensagem de "tente de novo" em 40s do que
+            // uma tela parada por um minuto.
+            timeout: 40.0,
+            connectTimeout: 8.0,
+            handler: HandlerStack::create(new CurlMultiHandler()),
+        );
+    }
+
+    /**
      * Chave resolvida do .env. Erro aqui é de CONFIGURAÇÃO, não de rede — a
      * distinção importa porque o admin precisa saber que o problema está no
      * .env e não no fornecedor.
@@ -133,6 +171,7 @@ final class ProviderFactory
                 key: $this->chave(),
                 model: $modelo,
                 parameters: $this->parametrosGemini($opcoes),
+                httpClient: $this->clienteHttp(),
                 baseUri: $baseUrl !== '' ? $baseUrl : 'https://generativelanguage.googleapis.com/v1beta/models',
             ),
 
@@ -141,12 +180,14 @@ final class ProviderFactory
                 model: $modelo,
                 max_tokens: (int) ($opcoes['max_tokens'] ?? 1024),
                 parameters: $this->parametrosOpenAI($opcoes, incluirMaxTokens: false),
+                httpClient: $this->clienteHttp(),
             ),
 
             'ollama' => new Ollama(
                 url: $baseUrl !== '' ? $baseUrl : 'http://localhost:11434/api',
                 model: $modelo,
                 parameters: $this->parametrosOpenAI($opcoes),
+                httpClient: $this->clienteHttp(),
             ),
 
             // base_url preenchida cobre Groq, DeepSeek, OpenRouter e qualquer
@@ -157,11 +198,13 @@ final class ProviderFactory
                     key: $this->chave(),
                     model: $modelo,
                     parameters: $this->parametrosOpenAI($opcoes),
+                    httpClient: $this->clienteHttp(),
                 )
                 : new OpenAI(
                     key: $this->chave(),
                     model: $modelo,
                     parameters: $this->parametrosOpenAI($opcoes),
+                    httpClient: $this->clienteHttp(),
                 ),
         };
     }
