@@ -12,6 +12,7 @@ use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use PDO;
 use SimpleAIman\Rag\FaqBusca;
+use SimpleAIman\Tools\ToolRegistry;
 use SimpleAIman\Rag\Retriever;
 use Throwable;
 
@@ -238,7 +239,7 @@ final class ChatService
     }
 
     /** @param list<array<string, mixed>> $trechos */
-    private function montarAgente(array $trechos = []): Agent
+    private function montarAgente(array $trechos, int $conversaId): Agent
     {
         $provider = $this->fabrica->chat([
             'max_tokens' => (int) $this->agente['max_tokens'],
@@ -246,9 +247,25 @@ final class ChatService
             'reasoning_effort' => (string) $this->agente['reasoning_effort'],
         ]);
 
-        return Agent::make()
+        $agenteId = (int) $this->agente['id'];
+
+        // O agente só pode oferecer encaminhamento se tiver a ferramenta
+        // ligada. É o que impede a promessa falsa: enquanto a capacidade nao
+        // existir de fato, o prompt proibe menciona-la.
+        $config = $this->agente;
+        $config['handoff_disponivel'] = ToolRegistry::temHandoff($agenteId);
+
+        $agent = Agent::make()
             ->setAiProvider($provider)
-            ->setInstructions((new PromptBuilder())->montar($this->agente, $trechos));
+            ->setInstructions((new PromptBuilder())->montar($config, $trechos));
+
+        $ferramentas = (new ToolRegistry($agenteId, $conversaId))->paraAgente();
+
+        if ($ferramentas !== []) {
+            $agent->addTool($ferramentas);
+        }
+
+        return $agent;
     }
 
     /**
@@ -447,7 +464,7 @@ final class ChatService
         try {
             $mensagens = [...$this->historico($conversaId)];
 
-            $resposta = $this->montarAgente($trechos)->chat($mensagens)->getMessage();
+            $resposta = $this->montarAgente($trechos, $conversaId)->chat($mensagens)->getMessage();
             $texto = trim((string) $resposta->getContent());
 
             if ($texto === '') {
@@ -502,7 +519,7 @@ final class ChatService
 
         try {
             $mensagens = [...$this->historico($conversaId)];
-            $handler = $this->montarAgente($trechos)->stream($mensagens);
+            $handler = $this->montarAgente($trechos, $conversaId)->stream($mensagens);
 
             foreach ($handler->events() as $evento) {
                 $pedaco = match (true) {

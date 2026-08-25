@@ -500,13 +500,13 @@ bot), endpoint de polling e o driver de saída por canal.
 
 | # | Etapa | Fecha funcionando com |
 |---|---|---|
-| 1 | **Esqueleto** — `public_html/`+`app/`, classes do cofre, `schema.sql`, `migrate.php`, admin logando, `benchmark-sqlite.php` | painel acessível, zero IA |
-| 2 | **Provedores + Neuron AI** — CRUD, `ProviderFactory`, chat cru sem RAG | conversa com Gemini ponta a ponta |
-| 3 | **Ingestão** — jobs, worker retomável, leitores, chunker, embeddings | artefatos indexados com status no admin |
-| 4 | **Retrieval** — `SqliteVectorStore`, FTS5, RRF + tela "testar busca" | calibrar top_k e limiar sem queimar token |
-| 5 | **RAG no chat** — junta 2+4, citações, log de custo | agente que responde citando fonte |
-| 6 | **FAQ + setores** — curadoria, curto-circuito, `contato_setor`, `abrir_chamado` | atendimento com encaminhamento |
-| 7 | **Ferramentas** — registry, `http`, `tabela`, guardas, `depende_de` | simulação de mensalidade |
+| 1 | ~~**Esqueleto**~~ ✅ — `public_html/`+`app/`, classes do cofre, `schema.sql`, `migrate.php`, admin logando, `benchmark-sqlite.php` | painel acessível, zero IA |
+| 2 | ~~**Provedores + Neuron AI**~~ ✅ — CRUD, `ProviderFactory`, chat cru sem RAG | conversa com Gemini ponta a ponta |
+| 3 | ~~**Ingestão**~~ ✅ — jobs, worker retomável, leitores, chunker, embeddings | artefatos indexados com status no admin |
+| 4 | ~~**Retrieval**~~ ✅ — `SqliteVectorStore`, FTS5, RRF + tela "testar busca" | calibrar top_k e limiar sem queimar token |
+| 5 | ~~**RAG no chat**~~ ✅ — junta 2+4, citações, log de custo | agente que responde citando fonte |
+| 6 | ~~**FAQ + setores**~~ ✅ curadoria, curto-circuito, leitura de conversas | atendimento com encaminhamento |
+| 7 | ~~**Ferramentas**~~ ✅ registry, `http`, guardas, `depende_de`, `contato_setor`, `abrir_chamado` | encaminhamento real |
 | 8 | **Leads** — captura, `lead_destinos`, integração CRM/RD | leads chegando no CRM |
 | 9 | **Widget** — `embed.js`, token público, canal web | plugável em qualquer site |
 | 10 | *(futuro)* WhatsApp Cloud API | — |
