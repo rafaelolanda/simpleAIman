@@ -162,6 +162,63 @@ final class Fila
         );
     }
 
+    /**
+     * Um atendente devolve a conversa à fila, para outra pessoa assumir.
+     *
+     * Volta para `aguardando`, e NÃO reserva a conversa para o destinatário.
+     * Reservar seria o desenho intuitivo e o errado: se a pessoa escolhida
+     * saísse para o almoço, a conversa ficaria trancada esperando alguém que
+     * não vai voltar, enquanto três colegas disponíveis olham a fila vazia.
+     * Quem foi escolhido recebe o e-mail; qualquer um pode assumir.
+     *
+     * O relógio de abandono recomeça, então a conversa também não fica presa
+     * caso ninguém pegue.
+     */
+    public static function repassar(int $conversaId, int $deAtendenteId, ?int $paraAtendenteId, string $motivo = ''): bool
+    {
+        $pdo = Database::connection();
+        $agora = now();
+
+        $stmt = $pdo->prepare(
+            "UPDATE conversas SET modo = 'aguardando', atendente_id = NULL, aguardando_desde = :agora, editado_em = :agora
+             WHERE id = :id AND modo = 'humano' AND atendente_id = :de"
+        );
+        $stmt->execute(['agora' => $agora, 'id' => $conversaId, 'de' => $deAtendenteId]);
+
+        if ($stmt->rowCount() === 0) {
+            return false;
+        }
+
+        $de = self::nomeDoAtendente($deAtendenteId);
+        $para = $paraAtendenteId !== null ? self::nomeDoAtendente($paraAtendenteId) : null;
+
+        // O que o VISITANTE vê é neutro e curto. Quem passou para quem, e por
+        // quê, é processo interno: dizer "Fulano devolveu para a fila, pedindo
+        // para Ciclano" expõe a organização por dentro e ainda soa como se
+        // estivessem empurrando a pessoa de mão em mão.
+        self::registrarAviso($conversaId, 'Estamos transferindo você para outro atendente. Um instante.');
+
+        // O detalhe inteiro vira nota interna: quem assumir entra sabendo de
+        // quem veio e por quê, sem que nada disso atravesse.
+        self::registrarNota(
+            $conversaId,
+            $deAtendenteId,
+            'Repassada por ' . $de
+                . ($para !== null ? ', pedindo para ' . $para : '')
+                . ($motivo !== '' ? ' — ' . $motivo : '.')
+        );
+
+        $destinos = $paraAtendenteId !== null
+            ? array_values(array_filter(self::disponiveis(), static fn (array $a): bool => (int) $a['id'] === $paraAtendenteId))
+            : self::disponiveis();
+
+        if ($destinos !== []) {
+            self::avisarAtendentes($conversaId, $destinos, 'Repassada por ' . $de . ($motivo !== '' ? ': ' . $motivo : ''));
+        }
+
+        return true;
+    }
+
     public static function encerrar(int $conversaId): void
     {
         Database::connection()->prepare(
@@ -302,6 +359,20 @@ final class Fila
     public static function registrarAviso(int $conversaId, string $texto): void
     {
         self::gravar($conversaId, 'aviso', $texto, null);
+    }
+
+    /**
+     * Recado visível só para quem trabalha aqui dentro.
+     *
+     * Não vaza por construção, e isso é sorte de projeto que vale manter: o
+     * filtro do visitante é uma LISTA DE PERMISSÃO (`atendente`, `aviso`).
+     * Tipo novo nasce invisível para fora — ninguém precisa lembrar de
+     * excluí-lo. Fosse lista de bloqueio, esquecer uma linha vazaria nota
+     * interna para o visitante.
+     */
+    public static function registrarNota(int $conversaId, int $atendenteId, string $texto): int
+    {
+        return self::gravar($conversaId, 'nota', $texto, $atendenteId);
     }
 
     public static function registrarAtendente(int $conversaId, int $atendenteId, string $texto): int

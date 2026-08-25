@@ -324,3 +324,51 @@ function svg_icon(string $nome, int $tamanho = 20): string
         . 'stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" '
         . 'aria-hidden="true">' . $d . '</svg>';
 }
+
+/**
+ * Texto com marcadores do WhatsApp convertido em HTML seguro.
+ *
+ *   *negrito*  _itálico_  ~riscado~  `mono`
+ *
+ * Por que o formato guardado é o do WhatsApp, e não HTML: o WhatsApp é o
+ * destino que não dá para mudar — ele interpreta esses marcadores literalmente.
+ * Guardar HTML e converter na saída perderia informação e exigiria um conversor
+ * que não faz ida e volta. Assim o mesmo texto serve os dois canais, e o widget
+ * é que renderiza.
+ *
+ * A ordem aqui é a segurança: **escapa primeiro**, formata depois. Assim o que
+ * vira tag é só o que esta função criou, e nada que tenha vindo do visitante,
+ * do modelo ou de um documento ingerido.
+ */
+function formatar_whatsapp(?string $texto): string
+{
+    $texto = (string) $texto;
+
+    // O trecho monoespaçado é separado ANTES de qualquer outra regra: dentro
+    // dele, asterisco é asterisco, não negrito.
+    $partes = preg_split('/(`[^`\n]+`)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$texto];
+    $saida = '';
+
+    foreach ($partes as $parte) {
+        if ($parte === '') {
+            continue;
+        }
+
+        if (str_starts_with($parte, '`') && str_ends_with($parte, '`') && mb_strlen($parte) > 2) {
+            $saida .= '<code>' . e(mb_substr($parte, 1, -1)) . '</code>';
+            continue;
+        }
+
+        $t = e($parte);
+
+        // As bordas (?<![\w…]) e (?![\w…]) evitam que um sublinhado no meio de
+        // nome_de_variavel vire itálico — que é a queixa clássica.
+        $t = preg_replace('/(?<![\w*])\*([^*\n]+)\*(?![\w*])/u', '<strong>$1</strong>', $t) ?? $t;
+        $t = preg_replace('/(?<![\w_])_([^_\n]+)_(?![\w_])/u', '<em>$1</em>', $t) ?? $t;
+        $t = preg_replace('/(?<![\w~])~([^~\n]+)~(?![\w~])/u', '<s>$1</s>', $t) ?? $t;
+
+        $saida .= $t;
+    }
+
+    return nl2br($saida);
+}

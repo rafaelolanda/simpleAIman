@@ -97,6 +97,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('atendimento.php?c=' . $conversaId);
     }
 
+    if ($acao === 'nota') {
+        $texto = trim((string) ($_POST['texto'] ?? ''));
+        $conversa = Fila::conversa($conversaId);
+
+        if ($texto !== '' && $conversa) {
+            Fila::registrarNota($conversaId, $eu, mb_substr(texto_utf8($texto), 0, 4000));
+        }
+
+        redirect('atendimento.php?c=' . $conversaId);
+    }
+
+    if ($acao === 'repassar') {
+        $para = (int) ($_POST['para'] ?? 0) ?: null;
+        $motivo = trim((string) ($_POST['motivo'] ?? ''));
+
+        if (Fila::repassar($conversaId, $eu, $para, mb_substr(texto_utf8($motivo), 0, 500))) {
+            Auth::log('atendimento_repassado', 'conversa #' . $conversaId);
+            flash_set('sucesso', 'Conversa devolvida à fila. Quem estiver disponível pode assumir.');
+        } else {
+            flash_set('erro', 'Não foi possível repassar: a conversa não está com você.');
+        }
+
+        redirect('atendimento.php');
+    }
+
     if ($acao === 'devolver') {
         Fila::devolverAoBot($conversaId);
         Auth::log('atendimento_devolvido', 'conversa #' . $conversaId);
@@ -138,6 +163,7 @@ if (($_GET['acao'] ?? '') === 'json') {
                 'id' => (int) $m['id'],
                 'quem' => $m['autor_tipo'],
                 'texto' => $m['conteudo'],
+                'html' => formatar_whatsapp((string) $m['conteudo']),
                 'hora' => date('H:i', strtotime((string) $m['criado_em'])),
             ],
             Fila::mensagensDesde($abrindo, $desde)
@@ -285,12 +311,14 @@ include __DIR__ . '/partials/head.php';
                     $classe = match ($m['autor_tipo']) {
                         'usuario' => 'msg-usuario',
                         'atendente' => 'msg-atendente',
+                        'nota' => 'msg-nota',
                         'sistema', 'aviso' => 'msg-sistema',
                         default => 'msg-bot',
                     };
                     $quem = match ($m['autor_tipo']) {
                         'usuario' => 'Visitante',
                         'atendente' => trim((string) ($m['autor_nome'] ?? '')) ?: 'Atendente',
+                        'nota' => 'Nota interna · ' . (trim((string) ($m['autor_nome'] ?? '')) ?: 'staff'),
                         'aviso' => 'Aviso',
                         'sistema' => 'Sistema',
                         default => 'Assistente',
@@ -298,19 +326,46 @@ include __DIR__ . '/partials/head.php';
                     ?>
                     <div class="msg <?= $classe ?>" data-id="<?= (int) $m['id'] ?>">
                         <span class="msg-quem"><?= e($quem) ?> · <?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
-                        <div class="msg-texto"><?= nl2br(e((string) $m['conteudo'])) ?></div>
+                        <div class="msg-texto"><?= formatar_whatsapp((string) $m['conteudo']) ?></div>
                     </div>
                 <?php endforeach; ?>
             </div>
 
             <?php if ($conversa['modo'] === 'humano' && (int) $conversa['atendente_id'] === $eu): ?>
-                <form method="post" class="chat-envio">
+                <form method="post" class="chat-envio" id="form-envio">
                     <?= csrf_field() ?>
-                    <input type="hidden" name="acao" value="responder">
+                    <input type="hidden" name="acao" value="responder" id="campo-acao">
                     <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
-                    <textarea name="texto" rows="3" placeholder="Sua resposta ao visitante…" required autofocus></textarea>
+
+                    <div class="editor-barra">
+                        <?php
+                        // Os marcadores são os do WhatsApp de propósito: é o
+                        // destino que não dá para mudar. O widget renderiza.
+                        $marcadores = [
+                            '*' => ['negrito', '<strong>B</strong>'],
+                            '_' => ['itálico', '<em>I</em>'],
+                            '~' => ['riscado', '<s>S</s>'],
+                            '`' => ['mono', '<code>&lt;&gt;</code>'],
+                        ];
+                        foreach ($marcadores as $marca => [$titulo, $rotulo]):
+                            ?>
+                            <button type="button" class="btn-marca" data-marca="<?= e($marca) ?>" title="<?= e($titulo) ?>"><?= $rotulo ?></button>
+                        <?php endforeach; ?>
+                        <span class="editor-sep"></span>
+                        <?php foreach (['🙂', '👍', '🙏', '✅', '⚠️', '📎', '📞', '🎓'] as $emoji): ?>
+                            <button type="button" class="btn-emoji" data-emoji="<?= $emoji ?>"><?= $emoji ?></button>
+                        <?php endforeach; ?>
+                    </div>
+
+                    <textarea name="texto" id="campo-texto" rows="3"
+                              placeholder="Enter envia · Shift+Enter quebra linha · *negrito* _itálico_ ~riscado~ `mono`"
+                              required autofocus></textarea>
+
                     <div class="chat-acoes">
-                        <button type="submit" class="btn btn-primary">Enviar</button>
+                        <label class="linha-check" title="Só o staff vê. O visitante não recebe.">
+                            <input type="checkbox" id="campo-nota"> nota interna
+                        </label>
+                        <button type="submit" class="btn btn-primary" id="btn-enviar">Enviar</button>
                     </div>
                 </form>
 
@@ -327,9 +382,28 @@ include __DIR__ . '/partials/head.php';
                         <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
                         <button type="submit" class="btn btn-secondary btn-sm">Encerrar</button>
                     </form>
+                    <details class="acao-inline">
+                        <summary class="btn btn-secondary btn-sm">Repassar</summary>
+                        <form method="post" class="acao-inline-form">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="repassar">
+                            <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
+                            <select name="para">
+                                <option value="">Qualquer atendente</option>
+                                <?php foreach ($disponiveis as $d): ?>
+                                    <?php if ((int) $d['id'] === $eu) { continue; } ?>
+                                    <option value="<?= (int) $d['id'] ?>"><?= e(trim((string) $d['nome']) ?: (string) $d['usuario']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <input type="text" name="motivo" placeholder="por quê? (vira nota interna)" maxlength="500">
+                            <button type="submit" class="btn btn-sm">Repassar</button>
+                        </form>
+                    </details>
                     <small>
-                        Devolver mantém a conversa viva com o assistente, que continua com todo o
-                        contexto do que você disse. Encerrar fecha de vez.
+                        Repassar devolve à fila — quem você escolher recebe o aviso, mas qualquer um
+                        pode assumir, para a conversa não ficar presa esperando quem saiu.
+                        Devolver manda de volta ao assistente, que segue com todo o contexto.
+                        Encerrar fecha de vez.
                     </small>
                 </div>
             <?php elseif ($conversa['modo'] === 'aguardando'): ?>
@@ -390,15 +464,17 @@ include __DIR__ . '/partials/head.php';
                     ultimo = m.id;
 
                     var div = document.createElement('div');
-                    div.className = 'msg msg-' + (m.quem === 'usuario' ? 'usuario' : (m.quem === 'atendente' ? 'atendente' : (m.quem === 'sistema' || m.quem === 'aviso' ? 'sistema' : 'bot')));
+                    div.className = 'msg msg-' + (m.quem === 'usuario' ? 'usuario' : (m.quem === 'atendente' ? 'atendente' : (m.quem === 'nota' ? 'nota' : m.quem === 'sistema' || m.quem === 'aviso' ? 'sistema' : 'bot')));
 
                     var cab = document.createElement('span');
                     cab.className = 'msg-quem';
-                    cab.textContent = (m.quem === 'usuario' ? 'Visitante' : m.quem === 'atendente' ? 'Atendente' : m.quem === 'aviso' ? 'Aviso' : m.quem === 'sistema' ? 'Sistema' : 'Assistente') + ' · ' + m.hora;
+                    cab.textContent = (m.quem === 'usuario' ? 'Visitante' : m.quem === 'atendente' ? 'Atendente' : m.quem === 'nota' ? 'Nota interna' : m.quem === 'aviso' ? 'Aviso' : m.quem === 'sistema' ? 'Sistema' : 'Assistente') + ' · ' + m.hora;
 
                     var txt = document.createElement('div');
                     txt.className = 'msg-texto';
-                    txt.textContent = m.texto;
+                    // HTML produzido por formatar_whatsapp(), que escapa antes
+                    // de formatar. Ver o comentário no endpoint.
+                    txt.innerHTML = m.html;
 
                     div.appendChild(cab);
                     div.appendChild(txt);
@@ -423,6 +499,73 @@ include __DIR__ . '/partials/head.php';
     }
 
     setInterval(consultar, 4000);
+
+    // -----------------------------------------------------------------
+    // Editor do atendente
+    // -----------------------------------------------------------------
+    var campo = document.getElementById('campo-texto');
+    var form = document.getElementById('form-envio');
+
+    if (campo && form) {
+        // Enter envia, Shift+Enter quebra linha — a convenção de todo chat.
+        // Sem isto o atendente escreve num <textarea> e precisa ir de mouse
+        // até o botão a cada frase, o que numa conversa ao vivo é um atraso
+        // por mensagem.
+        campo.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
+                ev.preventDefault();
+
+                if (campo.value.trim()) {
+                    form.requestSubmit ? form.requestSubmit() : form.submit();
+                }
+            }
+        });
+
+        // Nota interna troca a ação do MESMO formulário, em vez de existir um
+        // segundo formulário embaixo: quem está atendendo escreve num lugar só
+        // e decide na hora se aquilo é resposta ou recado.
+        var check = document.getElementById('campo-nota');
+        var acao = document.getElementById('campo-acao');
+        var botao = document.getElementById('btn-enviar');
+
+        if (check && acao && botao) {
+            check.addEventListener('change', function () {
+                acao.value = check.checked ? 'nota' : 'responder';
+                botao.textContent = check.checked ? 'Salvar nota' : 'Enviar';
+                botao.classList.toggle('btn-secondary', check.checked);
+                botao.classList.toggle('btn-primary', !check.checked);
+                campo.focus();
+            });
+        }
+
+        function envolver(marca) {
+            var i = campo.selectionStart;
+            var f = campo.selectionEnd;
+            var sel = campo.value.slice(i, f);
+
+            campo.value = campo.value.slice(0, i) + marca + sel + marca + campo.value.slice(f);
+            // Cursor entre os marcadores quando nada estava selecionado, para
+            // a pessoa simplesmente continuar digitando.
+            campo.selectionStart = i + marca.length;
+            campo.selectionEnd = f + marca.length;
+            campo.focus();
+        }
+
+        function inserir(texto) {
+            var i = campo.selectionStart;
+            campo.value = campo.value.slice(0, i) + texto + campo.value.slice(campo.selectionEnd);
+            campo.selectionStart = campo.selectionEnd = i + texto.length;
+            campo.focus();
+        }
+
+        document.querySelectorAll('.btn-marca').forEach(function (b) {
+            b.addEventListener('click', function () { envolver(b.dataset.marca); });
+        });
+
+        document.querySelectorAll('.btn-emoji').forEach(function (b) {
+            b.addEventListener('click', function () { inserir(b.dataset.emoji); });
+        });
+    }
 })();
 </script>
 

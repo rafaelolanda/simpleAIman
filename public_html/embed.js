@@ -161,7 +161,7 @@
   var ocupado = false;
   var abriuAlgumaVez = false;
 
-  function balao(quem, texto, autor) {
+  function balao(quem, texto, autor, html) {
     var linha = document.createElement('div');
     linha.className = 'msg de-' + quem;
 
@@ -174,10 +174,17 @@
 
     var b = document.createElement('div');
     b.className = 'balao';
-    // textContent, nunca innerHTML: o texto vem da LLM, que por sua vez leu
-    // documentos que alguém subiu. Interpretar isso como HTML seria abrir XSS
-    // no site do cliente através do nosso widget.
-    b.textContent = texto;
+    if (html) {
+      // Exceção deliberada e estreita: `html` só chega do NOSSO endpoint, gerado
+      // por formatar_whatsapp(), que escapa o texto ANTES de aplicar os
+      // marcadores — as únicas tags no resultado são as que ela criou.
+      b.innerHTML = html;
+    } else {
+      // O padrão continua sendo textContent, nunca innerHTML: o texto vem da
+      // LLM, que por sua vez leu documentos que alguém subiu. Interpretar isso
+      // como HTML seria abrir XSS no site do cliente através do nosso widget.
+      b.textContent = texto;
+    }
 
     linha.appendChild(b);
     corpo.appendChild(linha);
@@ -242,7 +249,7 @@
 
           ultimaMsg = m.id;
           limparEspera();
-          balao(m.quem === 'atendente' ? 'atendente' : 'sistema', m.texto, m.autor);
+          balao(m.quem === 'atendente' ? 'atendente' : 'sistema', m.texto, m.autor, m.html);
         });
 
         if (d.modo === 'aguardando') {

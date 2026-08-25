@@ -113,6 +113,15 @@ if ($acao === 'mensagens') {
                 ? (trim((string) ($m['autor_nome'] ?? '')) ?: 'Atendente')
                 : null,
             'texto' => $m['conteudo'],
+            // HTML já formatado, vindo do servidor. Uma implementação só, em
+            // PHP, em vez de uma cópia em JS aqui e outra no painel — três
+            // versões da mesma regra divergiriam na primeira correção.
+            //
+            // Inserir isto com innerHTML é seguro porque formatar_whatsapp()
+            // ESCAPA antes de formatar: as únicas tags no resultado são as que
+            // ela mesma criou. Se um dia alguém trocar a ordem lá, isto vira
+            // XSS no site do cliente.
+            'html' => formatar_whatsapp((string) $m['conteudo']),
             'hora' => date('H:i', strtotime((string) $m['criado_em'])),
         ],
         Fila::mensagensDesde((int) $conversa['id'], $desde, apenasParaVisitante: true)

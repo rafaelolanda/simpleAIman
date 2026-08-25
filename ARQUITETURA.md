@@ -540,6 +540,46 @@ criaria a chance de transferir sem calar o bot, ou calar o bot sem avisar ningu�
 - **Login não atravessa.** Para o visitante vai o nome de exibição, ou "Atendente". O
   usuário de login é credencial.
 
+### O que o visitante vê, e o que fica dentro
+
+`mensagens.autor_tipo` tem cinco valores, e a distinção entre eles é de
+**visibilidade**, não de estilo:
+
+| tipo | visitante | staff | o que é |
+|---|---|---|---|
+| `usuario` / `bot` | ✅ | ✅ | a conversa |
+| `atendente` | ✅ | ✅ | a pessoa respondendo |
+| `aviso` | ✅ | ✅ | "Fulano entrou na conversa" |
+| `nota` | — | ✅ | recado entre quem atende |
+| `sistema` | — | ✅ | diagnóstico do provedor (`[provedor_cota 429] …`) |
+
+O filtro do widget é uma **lista de permissão** (`atendente`, `aviso`), e isso não é
+detalhe: tipo novo nasce invisível para fora, sem ninguém precisar lembrar de excluí-lo.
+Fosse lista de bloqueio, esquecer uma linha vazaria nota interna ao visitante — foi
+exatamente assim que os diagnósticos do provedor quase atravessaram, quando `sistema`
+ainda acumulava dois significados.
+
+A mesma regra vale para o **texto** dos avisos: o repasse entre atendentes diz ao visitante
+apenas *"Estamos transferindo você para outro atendente"*. Quem passou para quem, e por quê,
+é nota interna — dizer o nome de cada funcionário expõe a organização por dentro e soa como
+empurrar a pessoa de mão em mão.
+
+### Formatação: o WhatsApp manda no formato
+
+Mensagens são guardadas com os marcadores do WhatsApp (`*negrito*`, `_itálico_`,
+`~riscado~`, `` `mono` ``), porque o WhatsApp é o destino que não dá para mudar — ele os
+interpreta literalmente. Guardar HTML e converter na saída perderia informação e exigiria um
+conversor sem ida e volta.
+
+`formatar_whatsapp()` é a **única** implementação, em PHP: os endpoints entregam o HTML
+pronto, em vez de existir uma cópia da regra em JS no painel e outra no widget. Três versões
+divergiriam na primeira correção.
+
+Ela **escapa antes de formatar** — as únicas tags no resultado são as que ela mesma criou. É
+isso, e só isso, que torna aceitável inserir o resultado com `innerHTML` no widget, cuja
+regra padrão é `textContent`. Inverter essa ordem transforma a função em XSS no site do
+cliente.
+
 ### Transporte: polling, nunca SSE
 
 Um atendimento dura minutos, e SSE prenderia um processo PHP esse tempo todo. Em

@@ -519,3 +519,52 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 }
 
 .catalogo-item small { opacity: 0.7; line-height: 1.4; flex: 1; }
+
+/* editor do atendente ------------------------------------------ */
+
+.editor-barra {
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    flex-wrap: wrap;
+    padding: 0.3rem 0;
+}
+
+.btn-marca,
+.btn-emoji {
+    border: 1px solid var(--borda, #e3e6ec);
+    background: transparent;
+    border-radius: 7px;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    line-height: 1.2;
+}
+
+.btn-marca:hover,
+.btn-emoji:hover { border-color: var(--accent); }
+.btn-marca code { font-size: 0.75rem; }
+.editor-sep { width: 1px; align-self: stretch; background: var(--borda, #e3e6ec); margin: 0 0.35rem; }
+
+.chat-acoes { align-items: center; gap: 0.8rem; }
+.chat-acoes .linha-check { margin-right: auto; opacity: 0.8; }
+
+/* Nota interna: cor e etiqueta bem diferentes da resposta, porque confundir
+   as duas significa mandar recado interno para o visitante. */
+.msg-nota { justify-self: stretch; max-width: 100%; }
+
+.msg-nota .msg-texto {
+    background: rgba(217, 119, 6, 0.10);
+    border-left: 3px solid #d97706;
+    border-radius: 6px;
+    font-size: 0.86rem;
+}
+
+.msg-nota .msg-quem { color: #b45309; font-weight: 600; }
+
+.msg-texto code {
+    background: rgba(0, 0, 0, 0.07);
+    padding: 0.05rem 0.3rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
