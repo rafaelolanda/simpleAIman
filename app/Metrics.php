@@ -8,6 +8,7 @@ final class Metrics
         'conversa_iniciada',
         'mensagem_enviada',
         'ferramenta_executada',
+        'faq_direta',
         'lead_capturado',
         'chamado_aberto',
         'contato_setor',

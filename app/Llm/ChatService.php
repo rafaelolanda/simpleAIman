@@ -11,6 +11,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use PDO;
+use SimpleAIman\Rag\FaqBusca;
 use SimpleAIman\Rag\Retriever;
 use Throwable;
 
@@ -23,8 +24,8 @@ use Throwable;
  * o widget web usar SSE e o WhatsApp usar resposta completa sem reescrever a
  * orquestração — ver ARQUITETURA.md §5.
  *
- * Nesta etapa ainda não há RAG nem ferramentas configuráveis: entram nas
- * etapas 5 e 7, dentro deste mesmo pipeline.
+ * A ordem do turno é: FAQ curada (curto-circuito) → RAG → geração. As
+ * ferramentas configuráveis entram na etapa 7, neste mesmo pipeline.
  */
 final class ChatService
 {
@@ -251,6 +252,77 @@ final class ChatService
     }
 
     /**
+     * Tenta responder direto pela FAQ curada.
+     *
+     * Devolve o texto quando o casamento é confiável o bastante; `null`
+     * quando não é, e aí o turno segue pelo caminho normal — a FAQ não some,
+     * ela apenas deixa de ser resposta e vira contexto.
+     *
+     * Vale a chamada de embedding extra? Vale, e por dois motivos: ela
+     * substitui a geração inteira (que é mais cara e mais lenta), e o
+     * resultado é texto escrito por um humano, que não escorrega.
+     */
+    private function faqDireta(int $conversaId, string $pergunta, float $inicio): ?string
+    {
+        if (empty($this->agente['usa_faq'])) {
+            return null;
+        }
+
+        try {
+            $vetor = $this->fabrica
+                ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
+                ->embedText($pergunta);
+
+            $achada = (new FaqBusca())->melhor(
+                $pergunta,
+                $vetor,
+                (float) ($this->agente['limiar_faq_direto'] ?? 0.85),
+            );
+        } catch (Throwable $e) {
+            // Falha aqui não pode custar o turno: segue pelo RAG.
+            error_log('[simpleAIman] busca na FAQ falhou: ' . $e->getMessage());
+
+            return null;
+        }
+
+        if ($achada === null || !$achada['direto']) {
+            $this->faqCandidata = $achada;
+
+            return null;
+        }
+
+        $id = $this->gravarMensagem(
+            $conversaId,
+            'bot',
+            $achada['resposta'],
+            null,
+            (int) ((microtime(true) - $inicio) * 1000),
+        );
+
+        Database::connection()->prepare(
+            'INSERT INTO mensagem_fontes (mensagem_id, tipo, referencia_id, score)
+             VALUES (:msg, \'faq\', :ref, :score)'
+        )->execute(['msg' => $id, 'ref' => $achada['faq_id'], 'score' => $achada['score']]);
+
+        $this->ultimasFontes = [[
+            'numero' => 1,
+            'rotulo' => 'Pergunta frequente: ' . $achada['pergunta'],
+            'chunk_id' => $achada['faq_id'],
+        ]];
+
+        Metrics::log('faq_direta', (int) $this->agente['id']);
+
+        return $achada['resposta'];
+    }
+
+    /**
+     * FAQ que casou, mas abaixo do limiar de resposta direta.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $faqCandidata = null;
+
+    /**
      * Recupera os trechos da pergunta, se o agente usar RAG.
      *
      * Falha de recuperação NÃO derruba o turno: o agente responde sem
@@ -362,6 +434,14 @@ final class ChatService
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
 
+        // FAQ com casamento de alta confiança encerra o turno aqui: o texto
+        // curado sai palavra por palavra, sem geração nenhuma.
+        $curada = $this->faqDireta($conversaId, $pergunta, $inicio);
+
+        if ($curada !== null) {
+            return $curada;
+        }
+
         $trechos = $this->recuperar($pergunta);
 
         try {
@@ -406,6 +486,16 @@ final class ChatService
     {
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
+
+        // Curto-circuito da FAQ também no streaming: o texto curado sai de
+        // uma vez, sem geração. Não é streaming de verdade, mas responder em
+        // 600 ms inteiro é melhor que streamar uma resposta pior em 2 s.
+        $curada = $this->faqDireta($conversaId, $pergunta, $inicio);
+
+        if ($curada !== null) {
+            yield $curada;
+            return;
+        }
 
         $trechos = $this->recuperar($pergunta);
         $texto = '';

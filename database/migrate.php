@@ -63,6 +63,17 @@ garantir_colunas($pdo, 'provedores', [
 // O limiar deixou de ser seletor e passou a ser piso: 0.70 derrubava resposta
 // correta de pergunta informal (medido). Ajusta quem ainda esta nos valores
 // que ja foram padrao, sem tocar em calibragem feita a mao.
+// Mesma medicao mostrou que 0.85 nunca disparava o curto-circuito da FAQ
+// fora do caso de pergunta identica. Ver comentario no schema.
+$faq = $pdo->prepare('UPDATE agentes SET limiar_faq_direto = 0.78, editado_em = :agora
+                      WHERE limiar_faq_direto = 0.85');
+$faq->execute(['agora' => now()]);
+
+if ($faq->rowCount() > 0) {
+    echo "  + limiar de resposta curada de {$faq->rowCount()} agente(s) ajustado de 0.85 para 0.78
+";
+}
+
 $ajustados = $pdo->prepare('UPDATE agentes SET limiar_similaridade = 0.55, editado_em = :agora
                             WHERE limiar_similaridade IN (0.30, 0.70)');
 $ajustados->execute(['agora' => now()]);

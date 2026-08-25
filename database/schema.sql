@@ -242,7 +242,21 @@ CREATE TABLE IF NOT EXISTS agentes (
     -- propria busca (ver Retriever::MARGEM_RELATIVA), que se ajusta a
     -- formulacao. Aqui fica so o piso que descarta busca sem casamento.
     limiar_similaridade REAL NOT NULL DEFAULT 0.55,
-    limiar_faq_direto   REAL NOT NULL DEFAULT 0.85,   -- acima disso, resposta curada curto-circuita o RAG
+    -- Acima disto, a resposta curada sai sem passar pelo modelo.
+    --
+    -- 0.78 e nao 0.85: medido em 2026-08-25 com gemini-embedding-001, uma
+    -- pergunta IDENTICA a FAQ pontua 0.906 e uma quase identica 0.903, mas
+    -- variantes legitimas caem para 0.78-0.81 ("vcs tem medicina?" = 0.811,
+    -- "qual o telefone da central?" = 0.783). Com 0.85 o curto-circuito nunca
+    -- disparava fora do caso identico.
+    --
+    -- Mais importante: as faixas SE CRUZAM. Uma pergunta sem FAQ casou
+    -- erradamente a 0.727, acima de uma parafrase correta a 0.682 — nenhum
+    -- limiar acerta os dois. A escolha e assimetrica e por isso o corte fica
+    -- onde os falsos positivos sao ZERO: responder texto curado a pergunta
+    -- errada sai com autoridade total, enquanto deixar passar apenas cai no
+    -- RAG, que responde bem. Errar de menos, nunca de mais.
+    limiar_faq_direto   REAL NOT NULL DEFAULT 0.78,
     max_iteracoes_tool  INTEGER NOT NULL DEFAULT 5,
     usa_rag             INTEGER NOT NULL DEFAULT 1,
     usa_faq             INTEGER NOT NULL DEFAULT 1,
