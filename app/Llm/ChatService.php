@@ -11,6 +11,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use PDO;
+use SimpleAIman\Rag\Retriever;
 use Throwable;
 
 /**
@@ -180,7 +181,8 @@ final class ChatService
         return $mensagens;
     }
 
-    private function montarAgente(): Agent
+    /** @param list<array<string, mixed>> $trechos */
+    private function montarAgente(array $trechos = []): Agent
     {
         $provider = $this->fabrica->chat([
             'max_tokens' => (int) $this->agente['max_tokens'],
@@ -188,14 +190,110 @@ final class ChatService
             'reasoning_effort' => (string) $this->agente['reasoning_effort'],
         ]);
 
-        $agent = Agent::make()->setAiProvider($provider);
+        return Agent::make()
+            ->setAiProvider($provider)
+            ->setInstructions((new PromptBuilder())->montar($this->agente, $trechos));
+    }
 
-        $prompt = trim((string) ($this->agente['system_prompt'] ?? ''));
-        if ($prompt !== '') {
-            $agent->setInstructions($prompt);
+    /**
+     * Recupera os trechos da pergunta, se o agente usar RAG.
+     *
+     * Falha de recuperação NÃO derruba o turno: o agente responde sem
+     * contexto, e os guardrails o obrigam a admitir que não encontrou a
+     * informação. É melhor que devolver erro a quem só queria uma resposta —
+     * e a falha fica no log para o admin.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function recuperar(string $pergunta): array
+    {
+        if (empty($this->agente['usa_rag'])) {
+            return [];
         }
 
-        return $agent;
+        $bases = array_map('intval', Database::connection()->query(
+            'SELECT b.id FROM bases b
+             JOIN agente_bases ab ON ab.base_id = b.id
+             WHERE ab.agente_id = ' . (int) $this->agente['id'] . ' AND b.ativo = 1'
+        )->fetchAll(PDO::FETCH_COLUMN));
+
+        if ($bases === []) {
+            return [];
+        }
+
+        try {
+            $retriever = new Retriever();
+
+            $trechos = $retriever->buscar(
+                $pergunta,
+                $bases,
+                (int) $this->agente['top_k'],
+                (float) $this->agente['limiar_similaridade'],
+            );
+
+            $this->tempoBusca = $retriever->tempos;
+
+            return $trechos;
+        } catch (Throwable $e) {
+            error_log('[simpleAIman] recuperação falhou: ' . $e->getMessage());
+
+            return [];
+        }
+    }
+
+    /**
+     * Liga a resposta aos trechos que a embasaram.
+     *
+     * Grava TODOS os trechos recuperados, não apenas os citados: saber o que
+     * o agente tinha em mãos e ignorou é o que permite diagnosticar uma
+     * resposta ruim. Só o citado contaria metade da história.
+     *
+     * @param list<array<string, mixed>> $trechos
+     */
+    private function gravarFontes(int $mensagemId, array $trechos): void
+    {
+        if ($trechos === []) {
+            return;
+        }
+
+        $stmt = Database::connection()->prepare(
+            'INSERT INTO mensagem_fontes (mensagem_id, tipo, referencia_id, score)
+             VALUES (:msg, :tipo, :ref, :score)'
+        );
+
+        foreach ($trechos as $t) {
+            $stmt->execute([
+                'msg' => $mensagemId,
+                'tipo' => 'chunk',
+                'ref' => (int) $t['chunk_id'],
+                'score' => $t['score_vetorial'] ?? $t['score'],
+            ]);
+        }
+    }
+
+    /**
+     * Consumo do turno.
+     *
+     * Os tokens de raciocínio somam em `tokens_out` porque é assim que se
+     * paga: o Gemini os reporta em `thoughtsTokenCount`, separado de
+     * `candidatesTokenCount`, e o total do provedor NÃO os inclui. Somar é o
+     * que faz o número bater com a fatura.
+     */
+    private function gravarUso(int $mensagemId, ?object $resposta): void
+    {
+        $uso = $resposta !== null && method_exists($resposta, 'getUsage') ? $resposta->getUsage() : null;
+
+        if ($uso === null) {
+            return;
+        }
+
+        Database::connection()->prepare(
+            'UPDATE mensagens SET tokens_in = :entrada, tokens_out = :saida WHERE id = :id'
+        )->execute([
+            'entrada' => $uso->inputTokens,
+            'saida' => $uso->outputTokens + $uso->reasoningTokens,
+            'id' => $mensagemId,
+        ]);
     }
 
     /**
@@ -209,10 +307,12 @@ final class ChatService
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
 
+        $trechos = $this->recuperar($pergunta);
+
         try {
             $mensagens = [...$this->historico($conversaId)];
 
-            $resposta = $this->montarAgente()->chat($mensagens)->getMessage();
+            $resposta = $this->montarAgente($trechos)->chat($mensagens)->getMessage();
             $texto = trim((string) $resposta->getContent());
 
             if ($texto === '') {
@@ -227,7 +327,12 @@ final class ChatService
             throw $erro;
         }
 
-        $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+        $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+        $this->gravarFontes($id, $trechos);
+        $this->gravarUso($id, $resposta);
+
+        $this->ultimasFontes = (new PromptBuilder())->fontesCitadas($texto, $trechos);
 
         return $texto;
     }
@@ -247,11 +352,12 @@ final class ChatService
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
 
+        $trechos = $this->recuperar($pergunta);
         $texto = '';
 
         try {
             $mensagens = [...$this->historico($conversaId)];
-            $handler = $this->montarAgente()->stream($mensagens);
+            $handler = $this->montarAgente($trechos)->stream($mensagens);
 
             foreach ($handler->events() as $evento) {
                 $pedaco = match (true) {
@@ -280,8 +386,25 @@ final class ChatService
             throw $erro;
         }
 
-        $this->gravarMensagem($conversaId, 'bot', trim($texto), null, (int) ((microtime(true) - $inicio) * 1000));
+        $id = $this->gravarMensagem($conversaId, 'bot', trim($texto), null, (int) ((microtime(true) - $inicio) * 1000));
+
+        $this->gravarFontes($id, $trechos);
+
+        // No streaming o consumo vem no evento final do handler, não numa
+        // mensagem de retorno — por isso não há gravarUso() aqui. Os tokens
+        // do turno em streaming ficam nulos até haver um gancho confiável.
+        $this->ultimasFontes = (new PromptBuilder())->fontesCitadas($texto, $trechos);
     }
+
+    /**
+     * Fontes citadas na última resposta, para o canal exibir sob a mensagem.
+     *
+     * @var list<array{numero: int, rotulo: string, chunk_id: int}>
+     */
+    public array $ultimasFontes = [];
+
+    /** @var array<string, float> tempos da última recuperação, em ms */
+    public array $tempoBusca = [];
 
     /**
      * A falha vira mensagem de SISTEMA na conversa, não de bot.

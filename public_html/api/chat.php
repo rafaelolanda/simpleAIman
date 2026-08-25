@@ -11,6 +11,7 @@ declare(strict_types=1);
  * Eventos emitidos:
  *   inicio  {conversa}
  *   pedaco  {texto}
+ *   fontes  [{numero, rotulo}]   <- documentos que embasaram a resposta
  *   fim     {latencia}
  *   erro    {mensagem}   <- SEMPRE a mensagem pública, nunca o detalhe técnico
  */
@@ -94,6 +95,16 @@ try {
 
     foreach ($svc->stream($conversa, $pergunta) as $pedaco) {
         sse('pedaco', ['texto' => $pedaco]);
+    }
+
+    // Só o rótulo do documento atravessa. O id do chunk fica no banco, para
+    // auditoria — o visitante não tem o que fazer com ele, e expor id interno
+    // é dar pista da estrutura sem nenhum ganho.
+    if ($svc->ultimasFontes !== []) {
+        sse('fontes', array_map(
+            static fn (array $f): array => ['numero' => $f['numero'], 'rotulo' => $f['rotulo']],
+            $svc->ultimasFontes
+        ));
     }
 
     sse('fim', ['latencia' => (int) ((microtime(true) - $inicio) * 1000)]);

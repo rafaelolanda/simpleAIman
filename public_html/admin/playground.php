@@ -20,7 +20,11 @@ include __DIR__ . '/partials/head.php';
 
 <div class="page-header">
     <h1>Playground</h1>
-    <p class="page-sub">Conversa direta com o agente, sem RAG e sem ferramentas — para conferir prompt, modelo e tom de voz.</p>
+    <p class="page-sub">
+        Conversa direta com o agente, já com RAG. As fontes aparecem sob a resposta —
+        se um trecho citado estiver errado, o ajuste é em <a href="testar-busca.php">Testar busca</a>,
+        não no prompt.
+    </p>
 </div>
 
 <?php if (!$agentes): ?>
@@ -100,6 +104,16 @@ include __DIR__ . '/partials/head.php';
             resposta.classList.remove('pensando');
             texto += JSON.parse(e.data).texto;
             resposta.textContent = texto;
+            chat.scrollTop = chat.scrollHeight;
+        });
+
+        es.addEventListener('fontes', (e) => {
+            const fontes = JSON.parse(e.data);
+            if (!fontes.length) return;
+            const bloco = document.createElement('div');
+            bloco.className = 'bolha-fontes';
+            bloco.textContent = 'Fontes: ' + fontes.map(f => '[' + f.numero + '] ' + f.rotulo).join(' · ');
+            resposta.appendChild(bloco);
             chat.scrollTop = chat.scrollHeight;
         });
 

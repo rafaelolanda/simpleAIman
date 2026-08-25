@@ -320,3 +320,12 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     padding-left: 0.7rem;
     border-left: 2px solid var(--border);
 }
+
+.bolha-fontes {
+    margin-top: 0.55rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.73rem;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
