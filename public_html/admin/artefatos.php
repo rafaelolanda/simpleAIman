@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // -----------------------------------------------------------------
     if ($acao === 'enviar') {
         $baseId = (int) ($_POST['base_id'] ?? 0);
-        $titulo = trim((string) ($_POST['titulo'] ?? ''));
+        $titulo = trim(texto_utf8($_POST['titulo'] ?? ''));
         $arquivo = $_FILES['arquivo'] ?? null;
 
         $erro = match (true) {

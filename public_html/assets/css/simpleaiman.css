@@ -329,3 +329,24 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     line-height: 1.5;
     color: var(--text-muted);
 }
+
+/* seções dentro de um formulário longo ----------------------- */
+
+.secao-form {
+    margin: 1.4rem 0 0.7rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+.secao-form:first-of-type { margin-top: 0; }
+
+.form-grid textarea {
+    min-height: 6rem;
+    resize: vertical;
+    line-height: 1.55;
+}

@@ -121,7 +121,10 @@ final class Ingestor
                     'artefato' => $artefatoId,
                     'base' => $artefato['base_id'],
                     'ordem' => $ordem++,
-                    'conteudo' => $chunk['texto'],
+                    // Cobre TODOS os leitores de uma vez: extrator de PDF e de
+                    // DOCX devolve CP1252 com frequencia, e o texto so causaria
+                    // problema muito depois, ao virar prompt.
+                    'conteudo' => texto_utf8($chunk['texto']),
                     'tokens' => Chunker::tokensAproximados($chunk['texto']),
                     'metadados' => json_ou_nulo($chunk['metadados']),
                     'agora' => $agora,

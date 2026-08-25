@@ -167,6 +167,43 @@ function valor_em(mixed $valor, array $permitidos, string $padrao): string
     return in_array($valor, $permitidos, true) ? (string) $valor : $padrao;
 }
 
+/**
+ * Garante que o texto seja UTF-8 válido.
+ *
+ * Texto malformado NÃO dá erro ao ser gravado no SQLite — ele entra, fica
+ * lá, e só explode lá na frente, no `json_encode` que monta a requisição
+ * para a LLM: "Malformed UTF-8 characters". O turno inteiro morre, e o rastro
+ * aponta para dentro do cliente HTTP, longe da origem real.
+ *
+ * As fontes de texto ruim são todas comuns:
+ *   - colar conteúdo vindo de Word ou de sistema legado no admin;
+ *   - PDF e DOCX cujo extrator devolve bytes em CP1252;
+ *   - importação de outro sistema.
+ *
+ * Por isso a limpeza fica na entrada — no que é salvo e no que é indexado —
+ * e não numa checagem antes de cada chamada de API.
+ */
+function texto_utf8(?string $texto): string
+{
+    $texto = (string) $texto;
+
+    if ($texto === '' || mb_check_encoding($texto, 'UTF-8')) {
+        return $texto;
+    }
+
+    // CP1252 antes de ISO-8859-1: é o que o Windows produz, e cobre aspas
+    // curvas e travessão, que o ISO-8859-1 puro transformaria em lixo.
+    $convertido = mb_convert_encoding($texto, 'UTF-8', 'Windows-1252, ISO-8859-1, UTF-8');
+
+    if (mb_check_encoding($convertido, 'UTF-8')) {
+        return $convertido;
+    }
+
+    // Último recurso: descarta as sequências que sobraram inválidas. Perder
+    // um caractere é melhor que derrubar o atendimento inteiro.
+    return mb_convert_encoding($texto, 'UTF-8', 'UTF-8');
+}
+
 function formatar_bytes(int $bytes): string
 {
     $unidades = ['B', 'KB', 'MB', 'GB'];

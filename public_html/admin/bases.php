@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'salvar') {
-        $nome = trim((string) ($_POST['nome'] ?? ''));
+        $nome = trim(texto_utf8($_POST['nome'] ?? ''));
 
         if ($nome === '') {
             flash_set('erro', 'O nome é obrigatório.');
@@ -42,11 +42,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $dados = [
             'nome' => $nome,
-            'slug' => slugify(trim((string) ($_POST['slug'] ?? '')) ?: $nome),
-            'descricao' => trim((string) ($_POST['descricao'] ?? '')),
+            'slug' => slugify(trim(texto_utf8($_POST['slug'] ?? '')) ?: $nome),
+            'descricao' => trim(texto_utf8($_POST['descricao'] ?? '')),
             'setor_id' => ((int) ($_POST['setor_id'] ?? 0)) ?: null,
             'provedor_embedding_id' => ((int) ($_POST['provedor_embedding_id'] ?? 0)) ?: null,
-            'modelo_embedding' => trim((string) ($_POST['modelo_embedding'] ?? '')),
+            'modelo_embedding' => trim(texto_utf8($_POST['modelo_embedding'] ?? '')),
             'dimensoes' => (int) ($_POST['dimensoes'] ?? 768),
             'chunk_tamanho' => max(200, (int) ($_POST['chunk_tamanho'] ?? 800)),
             'chunk_sobreposicao' => max(0, (int) ($_POST['chunk_sobreposicao'] ?? 120)),
