@@ -47,7 +47,21 @@ function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
     }
 }
 
-// (nenhuma ainda — schema.sql é a fonte completa)
+// (nenhuma coluna nova ainda — schema.sql é a fonte completa)
+
+// Mudança de DEFAULT não alcança linha que já existe: `CREATE TABLE IF NOT
+// EXISTS` não recria a tabela, e ALTER de DEFAULT no SQLite não reescreve os
+// registros. O limiar padrão subiu de 0.30 para 0.70 (ver comentário no
+// schema), então instância já no ar precisa do UPDATE — e só onde ninguém
+// mexeu no valor, para não desfazer calibragem feita à mão.
+$ajustados = $pdo->prepare('UPDATE agentes SET limiar_similaridade = 0.70, editado_em = :agora
+                            WHERE limiar_similaridade = 0.30');
+$ajustados->execute(['agora' => now()]);
+
+if ($ajustados->rowCount() > 0) {
+    echo "  + limiar de similaridade de {$ajustados->rowCount()} agente(s) ajustado de 0.30 para 0.70
+";
+}
 
 // ---------------------------------------------------------------
 // Semente: registros sem os quais o painel não abre

@@ -210,7 +210,17 @@ CREATE TABLE IF NOT EXISTS agentes (
     -- recall alto, política interna quer precisão. É o botão que mais move
     -- qualidade na prática.
     top_k               INTEGER NOT NULL DEFAULT 5,
-    limiar_similaridade REAL NOT NULL DEFAULT 0.30,
+
+    -- Corte pela nota do COSSENO (não pela do RRF, que depende de quantas
+    -- listas houve e não é comparável entre buscas).
+    --
+    -- 0.70 e não 0.30: medido em 2026-08-24 com gemini-embedding-001, as
+    -- notas ficam espremidas na faixa alta — trecho relevante por volta de
+    -- 0.78 e irrelevante em 0.62, ou seja, nada desce de 0.6. Um limiar de
+    -- 0.30 deixaria passar absolutamente tudo, o que equivale a não ter
+    -- limiar. O valor certo depende do corpus e do modelo de embedding:
+    -- calibre em Conhecimento > Testar busca, com perguntas reais.
+    limiar_similaridade REAL NOT NULL DEFAULT 0.70,
     limiar_faq_direto   REAL NOT NULL DEFAULT 0.85,   -- acima disso, resposta curada curto-circuita o RAG
     max_iteracoes_tool  INTEGER NOT NULL DEFAULT 5,
     usa_rag             INTEGER NOT NULL DEFAULT 1,
