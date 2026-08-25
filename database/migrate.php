@@ -54,12 +54,21 @@ function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
 // registros. O limiar padrão subiu de 0.30 para 0.70 (ver comentário no
 // schema), então instância já no ar precisa do UPDATE — e só onde ninguém
 // mexeu no valor, para não desfazer calibragem feita à mão.
-$ajustados = $pdo->prepare('UPDATE agentes SET limiar_similaridade = 0.70, editado_em = :agora
-                            WHERE limiar_similaridade = 0.30');
+garantir_colunas($pdo, 'agentes', ['idioma' => "TEXT NOT NULL DEFAULT 'pt-BR'"]);
+garantir_colunas($pdo, 'provedores', [
+    'custo_entrada_milhao' => 'REAL NOT NULL DEFAULT 0',
+    'custo_saida_milhao' => 'REAL NOT NULL DEFAULT 0',
+]);
+
+// O limiar deixou de ser seletor e passou a ser piso: 0.70 derrubava resposta
+// correta de pergunta informal (medido). Ajusta quem ainda esta nos valores
+// que ja foram padrao, sem tocar em calibragem feita a mao.
+$ajustados = $pdo->prepare('UPDATE agentes SET limiar_similaridade = 0.55, editado_em = :agora
+                            WHERE limiar_similaridade IN (0.30, 0.70)');
 $ajustados->execute(['agora' => now()]);
 
 if ($ajustados->rowCount() > 0) {
-    echo "  + limiar de similaridade de {$ajustados->rowCount()} agente(s) ajustado de 0.30 para 0.70
+    echo "  + limiar de similaridade de {$ajustados->rowCount()} agente(s) ajustado para 0.55 (piso)
 ";
 }
 

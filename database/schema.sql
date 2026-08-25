@@ -170,6 +170,15 @@ CREATE TABLE IF NOT EXISTS provedores (
 
     modelo_embedding    TEXT,
     dimensoes           INTEGER,
+
+    -- Preco por MILHAO de tokens, na moeda do painel. Fica no provedor
+    -- porque muda por modelo e por fornecedor, e precisa ser editavel sem
+    -- deploy: tabela de preco de LLM muda sozinha, sem avisar ninguem.
+    -- Zero significa "nao calcular custo" — melhor campo vazio que numero
+    -- inventado numa tela que alguem vai usar para decidir orcamento.
+    custo_entrada_milhao REAL NOT NULL DEFAULT 0,
+    custo_saida_milhao   REAL NOT NULL DEFAULT 0,
+
     suporta_tools       INTEGER NOT NULL DEFAULT 1,
     suporta_stream      INTEGER NOT NULL DEFAULT 1,
     ativo               INTEGER NOT NULL DEFAULT 1,
@@ -191,6 +200,13 @@ CREATE TABLE IF NOT EXISTS agentes (
     modelo              TEXT,
     system_prompt       TEXT,
     mensagem_abertura   TEXT,
+
+    -- Idioma da resposta. Parametro do AGENTE, nao regra fixa no codigo:
+    -- um agente de atendimento a estudante estrangeiro ou um site bilingue
+    -- precisam de comportamento diferente, e isso e configuracao, nao
+    -- arquitetura. 'auto' responde no idioma de quem perguntou.
+    idioma              TEXT NOT NULL DEFAULT 'pt-BR',   -- pt-BR|en|es|auto
+
     temperatura         REAL NOT NULL DEFAULT 0.3,
 
     -- CUIDADO com valor baixo: os Gemini 3.x são modelos "pensantes" e o
@@ -214,13 +230,18 @@ CREATE TABLE IF NOT EXISTS agentes (
     -- Corte pela nota do COSSENO (não pela do RRF, que depende de quantas
     -- listas houve e não é comparável entre buscas).
     --
-    -- 0.70 e não 0.30: medido em 2026-08-24 com gemini-embedding-001, as
-    -- notas ficam espremidas na faixa alta — trecho relevante por volta de
-    -- 0.78 e irrelevante em 0.62, ou seja, nada desce de 0.6. Um limiar de
-    -- 0.30 deixaria passar absolutamente tudo, o que equivale a não ter
-    -- limiar. O valor certo depende do corpus e do modelo de embedding:
-    -- calibre em Conhecimento > Testar busca, com perguntas reais.
-    limiar_similaridade REAL NOT NULL DEFAULT 0.70,
+    -- Age como PISO, nao como seletor. Medido em 2026-08-24 com
+    -- gemini-embedding-001: as notas sao comprimidas e dependem de como a
+    -- pergunta foi escrita — o mesmo trecho correto pontua 0.777 na versao
+    -- bem formada ("qual o valor da mensalidade de Direito?") e 0.683 na
+    -- coloquial ("quais cursos vcs tem"), enquanto irrelevantes chegam a
+    -- 0.66. As faixas se sobrepoem: nenhum corte absoluto separa bem, e um
+    -- limiar de 0.70 derrubava resposta correta de pergunta informal.
+    --
+    -- A selecao fina e feita por margem RELATIVA ao melhor resultado da
+    -- propria busca (ver Retriever::MARGEM_RELATIVA), que se ajusta a
+    -- formulacao. Aqui fica so o piso que descarta busca sem casamento.
+    limiar_similaridade REAL NOT NULL DEFAULT 0.55,
     limiar_faq_direto   REAL NOT NULL DEFAULT 0.85,   -- acima disso, resposta curada curto-circuita o RAG
     max_iteracoes_tool  INTEGER NOT NULL DEFAULT 5,
     usa_rag             INTEGER NOT NULL DEFAULT 1,
