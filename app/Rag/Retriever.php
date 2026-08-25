@@ -98,10 +98,47 @@ final class Retriever
 
         $fundido = $this->fundir($vetorial, $lexical);
 
-        // O limiar corta pela nota do COSSENO, não pela nota do RRF: a do RRF
-        // não tem significado absoluto (depende de quantas listas houve),
-        // enquanto o cosseno é comparável entre buscas e é o número que a
-        // pessoa calibra olhando a tela de teste.
+        $fundido = $this->cortar($fundido, $limiar);
+
+        return $this->hidratar(array_slice($fundido, 0, $k));
+    }
+
+    /**
+     * Margem, em pontos de cosseno, abaixo do melhor resultado.
+     *
+     * Medido em 2026-08-24 com `gemini-embedding-001`: as notas são
+     * COMPRIMIDAS e dependem de como a pergunta foi escrita. O mesmo trecho
+     * correto pontua 0.77 numa pergunta bem formada ("qual o valor da
+     * mensalidade de Direito?") e 0.68 na versão coloquial ("quais cursos vcs
+     * tem"), enquanto trechos irrelevantes chegam a 0.66. As faixas se
+     * sobrepõem, e por isso NENHUM corte absoluto separa bem.
+     *
+     * O ranqueamento, porém, é bom: o trecho certo ficou em 1º em todas as
+     * perguntas testadas. Daí a estratégia — cortar em relação ao melhor da
+     * própria busca, que se ajusta sozinho à formulação da pergunta.
+     */
+    private const MARGEM_RELATIVA = 0.05;
+
+    /**
+     * Aplica dois cortes de naturezas diferentes.
+     *
+     * O `limiar` age como PISO ABSOLUTO: existe para descartar busca que não
+     * casou com nada, não para escolher entre bons resultados.
+     *
+     * A margem relativa é quem faz a seleção fina: mantém o melhor resultado
+     * e quem chegou perto dele. Um corte só absoluto derrubava respostas
+     * corretas de perguntas informais — foi o que aconteceu com "quais cursos
+     * vcs tem", cujo trecho certo pontuou 0.683 contra um limiar de 0.70.
+     *
+     * @param list<array<string, mixed>> $fundido
+     * @return list<array<string, mixed>>
+     */
+    private function cortar(array $fundido, float $limiar): array
+    {
+        if ($fundido === []) {
+            return [];
+        }
+
         if ($limiar > 0.0) {
             $fundido = array_values(array_filter(
                 $fundido,
@@ -109,7 +146,21 @@ final class Retriever
             ));
         }
 
-        return $this->hidratar(array_slice($fundido, 0, $k));
+        $notas = array_filter(array_column($fundido, 'score_vetorial'), static fn ($v): bool => $v !== null);
+
+        if ($notas === []) {
+            return $fundido;
+        }
+
+        $piso = max($notas) - self::MARGEM_RELATIVA;
+
+        return array_values(array_filter(
+            $fundido,
+            // Resultado só lexical (sem nota de cosseno) passa: ele veio de
+            // casamento de termo exato, que é justamente o que a semântica
+            // costuma errar.
+            static fn (array $r): bool => $r['score_vetorial'] === null || $r['score_vetorial'] >= $piso
+        ));
     }
 
     /**

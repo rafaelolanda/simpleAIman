@@ -172,13 +172,68 @@ final class ChatService
         $linhas = array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC));
         $mensagens = [];
 
-        foreach ($linhas as $l) {
-            $mensagens[] = $l['autor_tipo'] === 'usuario'
-                ? new UserMessage((string) $l['conteudo'])
-                : new AssistantMessage((string) $l['conteudo']);
+        foreach ($this->normalizarSequencia($linhas) as $l) {
+            $mensagens[] = $l['papel'] === 'usuario'
+                ? new UserMessage($l['conteudo'])
+                : new AssistantMessage($l['conteudo']);
         }
 
         return $mensagens;
+    }
+
+    /**
+     * Garante alternância estrita usuário → assistente, começando por usuário.
+     *
+     * O Gemini recusa qualquer outra sequência com
+     * "Invalid message sequence at position N". Duas situações quebram isso
+     * naturalmente, e as duas aconteceram em uso real:
+     *
+     *  1. **Turno que falhou.** A pergunta do usuário é gravada, mas nenhuma
+     *     resposta de bot — só uma mensagem de `sistema`, que fica fora do
+     *     histórico. Sobram duas mensagens de usuário seguidas. Sem esta
+     *     normalização, a falha ENVENENA a conversa: todo turno seguinte
+     *     também falha, e o visitante vê a mensagem genérica para sempre.
+     *
+     *  2. **Janela deslizante.** Pegar as N últimas mensagens pode começar
+     *     numa resposta do bot, e position 0 já é inválida.
+     *
+     * Mensagens consecutivas do mesmo papel são unidas em vez de descartadas:
+     * quando o usuário pergunta algo, a resposta falha e ele escreve "sim", o
+     * "sim" só faz sentido junto da pergunta anterior.
+     *
+     * @param list<array<string, mixed>> $linhas em ordem cronológica
+     * @return list<array{papel: string, conteudo: string}>
+     */
+    private function normalizarSequencia(array $linhas): array
+    {
+        $normalizadas = [];
+
+        foreach ($linhas as $l) {
+            // Atendente fala no lugar do assistente: do ponto de vista do
+            // modelo, foi "o atendimento" que respondeu.
+            $papel = $l['autor_tipo'] === 'usuario' ? 'usuario' : 'assistente';
+            $conteudo = trim((string) $l['conteudo']);
+
+            if ($conteudo === '') {
+                continue;
+            }
+
+            // Nada antes da primeira fala do usuário.
+            if ($normalizadas === [] && $papel !== 'usuario') {
+                continue;
+            }
+
+            $ultima = count($normalizadas) - 1;
+
+            if ($ultima >= 0 && $normalizadas[$ultima]['papel'] === $papel) {
+                $normalizadas[$ultima]['conteudo'] .= "\n\n" . $conteudo;
+                continue;
+            }
+
+            $normalizadas[] = ['papel' => $papel, 'conteudo' => $conteudo];
+        }
+
+        return $normalizadas;
     }
 
     /** @param list<array<string, mixed>> $trechos */
