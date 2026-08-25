@@ -18,6 +18,7 @@ $grupos = [
         'bases.php' => ['icone' => 'base', 'label' => 'Bases'],
         'artefatos.php' => ['icone' => 'arquivo', 'label' => 'Artefatos'],
         'faq.php' => ['icone' => 'faq', 'label' => 'FAQ'],
+        'testar-busca.php' => ['icone' => 'grafico', 'label' => 'Testar busca'],
     ],
     'Ações' => [
         'ferramentas.php' => ['icone' => 'ferramenta', 'label' => 'Ferramentas'],

@@ -279,3 +279,44 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 
 .chat-form { display: flex; gap: 0.5rem; }
 .chat-form input { flex: 1; }
+
+/* tela de testar busca --------------------------------------- */
+
+.resultado {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.8rem 0.9rem;
+    margin-bottom: 0.75rem;
+    background: var(--bg-elevated-2);
+}
+
+.resultado-topo {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.45rem;
+}
+
+.resultado-pos {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--accent);
+    margin-right: 0.2rem;
+}
+
+.resultado-fonte {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.resultado-texto {
+    font-size: 0.87rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    max-height: 11rem;
+    overflow-y: auto;
+    padding-left: 0.7rem;
+    border-left: 2px solid var(--border);
+}
