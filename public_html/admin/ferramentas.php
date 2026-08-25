@@ -435,22 +435,11 @@ include __DIR__ . '/partials/head.php';
 
         <div class="form-acoes">
             <button type="submit" class="btn btn-primary"><?= $editando ? 'Salvar' : 'Criar' ?></button>
-            <?php if ($editando): ?><a href="ferramentas.php" class="btn btn-secondary">Cancelar</a><?php endif; ?>
+            <?php if ($editando): ?>
+                <a href="testar-ferramenta.php?f=<?= (int) $editando['id'] ?>" class="btn btn-secondary">Testar</a>
+                <a href="ferramentas.php" class="btn btn-secondary">Cancelar</a>
+            <?php endif; ?>
         </div>
-    </form>
-</div>
-
-<div class="card">
-    <h2 class="card-title">Conferir um endereço</h2>
-    <p class="vazio" style="margin-bottom:0.6rem">
-        Verifica allowlist, HTTPS e se o domínio resolve para endereço interno.
-        <strong>Não chama o endpoint</strong> — numa ferramenta de escrita isso criaria um registro de verdade.
-    </p>
-    <form method="post" class="chat-form">
-        <?= csrf_field() ?>
-        <input type="hidden" name="acao" value="testar_url">
-        <input type="text" name="url" placeholder="https://crm.exemplo.com/api/leads" value="<?= e((string) ($_POST['url'] ?? '')) ?>">
-        <button type="submit" class="btn btn-secondary">Conferir</button>
     </form>
 </div>
 
@@ -487,6 +476,7 @@ include __DIR__ . '/partials/head.php';
                         <?php endif; ?>
                     </td>
                     <td class="acoes">
+                        <a href="testar-ferramenta.php?f=<?= (int) $f['id'] ?>" class="btn btn-secondary btn-sm">Testar</a>
                         <a href="?editar=<?= (int) $f['id'] ?>" class="btn btn-secondary btn-sm">Editar</a>
                         <form method="post" style="display:inline" onsubmit="return confirm('Excluir esta ferramenta?')">
                             <?= csrf_field() ?>
