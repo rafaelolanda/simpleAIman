@@ -350,3 +350,20 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     resize: vertical;
     line-height: 1.55;
 }
+
+/* Trecho de codigo para copiar e colar (instalacao do widget). Precisa
+   quebrar linha: a tag de instalacao e longa e uma barra de rolagem
+   horizontal esconderia justamente o fim, que e onde fica o token. */
+.bloco-codigo {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    margin: 0 0 0.85rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-all;
+}

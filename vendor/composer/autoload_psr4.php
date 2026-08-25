@@ -13,6 +13,7 @@ return array(
     'SimpleAIman\\Rag\\' => array($baseDir . '/app/Rag'),
     'SimpleAIman\\Llm\\' => array($baseDir . '/app/Llm'),
     'SimpleAIman\\Jobs\\' => array($baseDir . '/app/Jobs'),
+    'SimpleAIman\\Http\\' => array($baseDir . '/app/Http'),
     'SimpleAIman\\Canais\\' => array($baseDir . '/app/Canais'),
     'Psr\\Http\\Message\\' => array($vendorDir . '/psr/http-factory/src', $vendorDir . '/psr/http-message/src'),
     'Psr\\Http\\Client\\' => array($vendorDir . '/psr/http-client/src'),

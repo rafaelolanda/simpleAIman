@@ -22,6 +22,7 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
             'SimpleAIman\\Rag\\' => 16,
             'SimpleAIman\\Llm\\' => 16,
             'SimpleAIman\\Jobs\\' => 17,
+            'SimpleAIman\\Http\\' => 17,
             'SimpleAIman\\Canais\\' => 19,
         ),
         'P' =>
@@ -75,6 +76,10 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
         'SimpleAIman\\Jobs\\' =>
         array (
             0 => __DIR__ . '/../..' . '/app/Jobs',
+        ),
+        'SimpleAIman\\Http\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/app/Http',
         ),
         'SimpleAIman\\Canais\\' =>
         array (
@@ -1143,6 +1148,34 @@ class ComposerStaticInit9c9e99222558a19cd18a0a436e959fb6
         'Random\\RandomException' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/Random/RandomException.php',
         'SensitiveParameter' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameter.php',
         'SensitiveParameterValue' => __DIR__ . '/..' . '/symfony/polyfill-php82/Resources/stubs/SensitiveParameterValue.php',
+        'SimpleAIman\\Canais\\CanalPublico' => __DIR__ . '/../..' . '/app/Canais/CanalPublico.php',
+        'SimpleAIman\\Http\\Sse' => __DIR__ . '/../..' . '/app/Http/Sse.php',
+        'SimpleAIman\\Jobs\\Queue' => __DIR__ . '/../..' . '/app/Jobs/Queue.php',
+        'SimpleAIman\\Jobs\\Retencao' => __DIR__ . '/../..' . '/app/Jobs/Retencao.php',
+        'SimpleAIman\\Jobs\\Worker' => __DIR__ . '/../..' . '/app/Jobs/Worker.php',
+        'SimpleAIman\\Llm\\ChatService' => __DIR__ . '/../..' . '/app/Llm/ChatService.php',
+        'SimpleAIman\\Llm\\DiagnosticoProvedor' => __DIR__ . '/../..' . '/app/Llm/DiagnosticoProvedor.php',
+        'SimpleAIman\\Llm\\ErroAgente' => __DIR__ . '/../..' . '/app/Llm/ErroAgente.php',
+        'SimpleAIman\\Llm\\PromptBuilder' => __DIR__ . '/../..' . '/app/Llm/PromptBuilder.php',
+        'SimpleAIman\\Llm\\ProviderFactory' => __DIR__ . '/../..' . '/app/Llm/ProviderFactory.php',
+        'SimpleAIman\\Rag\\Chunker' => __DIR__ . '/../..' . '/app/Rag/Chunker.php',
+        'SimpleAIman\\Rag\\FaqBusca' => __DIR__ . '/../..' . '/app/Rag/FaqBusca.php',
+        'SimpleAIman\\Rag\\FaqIndexador' => __DIR__ . '/../..' . '/app/Rag/FaqIndexador.php',
+        'SimpleAIman\\Rag\\Ingestor' => __DIR__ . '/../..' . '/app/Rag/Ingestor.php',
+        'SimpleAIman\\Rag\\Reader\\DocxLeitor' => __DIR__ . '/../..' . '/app/Rag/Reader/DocxLeitor.php',
+        'SimpleAIman\\Rag\\Reader\\HtmlLeitor' => __DIR__ . '/../..' . '/app/Rag/Reader/HtmlLeitor.php',
+        'SimpleAIman\\Rag\\Reader\\Leitor' => __DIR__ . '/../..' . '/app/Rag/Reader/Leitor.php',
+        'SimpleAIman\\Rag\\Reader\\PdfLeitor' => __DIR__ . '/../..' . '/app/Rag/Reader/PdfLeitor.php',
+        'SimpleAIman\\Rag\\Reader\\TextoLeitor' => __DIR__ . '/../..' . '/app/Rag/Reader/TextoLeitor.php',
+        'SimpleAIman\\Rag\\Retriever' => __DIR__ . '/../..' . '/app/Rag/Retriever.php',
+        'SimpleAIman\\Rag\\SqliteVectorStore' => __DIR__ . '/../..' . '/app/Rag/SqliteVectorStore.php',
+        'SimpleAIman\\Rag\\VectorStore' => __DIR__ . '/../..' . '/app/Rag/VectorStore.php',
+        'SimpleAIman\\Tools\\Executor' => __DIR__ . '/../..' . '/app/Tools/Executor.php',
+        'SimpleAIman\\Tools\\HttpTool' => __DIR__ . '/../..' . '/app/Tools/HttpTool.php',
+        'SimpleAIman\\Tools\\LeadTool' => __DIR__ . '/../..' . '/app/Tools/LeadTool.php',
+        'SimpleAIman\\Tools\\SetorTool' => __DIR__ . '/../..' . '/app/Tools/SetorTool.php',
+        'SimpleAIman\\Tools\\ToolRegistry' => __DIR__ . '/../..' . '/app/Tools/ToolRegistry.php',
+        'SimpleAIman\\Tools\\UrlGuard' => __DIR__ . '/../..' . '/app/Tools/UrlGuard.php',
         'Smalot\\PdfParser\\Config' => __DIR__ . '/..' . '/smalot/pdfparser/src/Smalot/PdfParser/Config.php',
         'Smalot\\PdfParser\\Document' => __DIR__ . '/..' . '/smalot/pdfparser/src/Smalot/PdfParser/Document.php',
         'Smalot\\PdfParser\\Element' => __DIR__ . '/..' . '/smalot/pdfparser/src/Smalot/PdfParser/Element.php',

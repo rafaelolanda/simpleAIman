@@ -13,6 +13,7 @@ $grupos = [
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
         'playground.php' => ['icone' => 'chat', 'label' => 'Playground'],
         'conversas.php' => ['icone' => 'chat', 'label' => 'Conversas'],
+        'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],
     ],
     'Conhecimento' => [
         'bases.php' => ['icone' => 'base', 'label' => 'Bases'],

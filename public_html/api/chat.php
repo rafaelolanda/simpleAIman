@@ -5,8 +5,9 @@ declare(strict_types=1);
 /**
  * Turno de conversa em streaming (SSE).
  *
- * Nesta etapa só atende o playground do admin, com sessão. O canal público
- * por token entra na etapa 9, reaproveitando o mesmo ChatService.
+ * Atende o playground do admin, com sessão. O canal público por token vive
+ * em `api/publico.php` e reaproveita o mesmo ChatService -- separados porque
+ * este aqui exige login e aquele exige token, origem e limite de uso.
  *
  * Eventos emitidos:
  *   inicio  {conversa}
@@ -18,6 +19,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../app/bootstrap.php';
 
+use SimpleAIman\Http\Sse;
 use SimpleAIman\Llm\ChatService;
 use SimpleAIman\Llm\ErroAgente;
 
@@ -44,41 +46,15 @@ $usuarioId = Auth::userId();
  */
 session_write_close();
 
-// ---------------------------------------------------------------------
-// Cabeçalhos anti-buffering.
-//
-// Apache com mod_deflate/proxy segura o stream e o chat parece travado. Sem
-// isto o SSE "funciona" no servidor embutido e falha no servidor real — o
-// pior tipo de bug, porque só aparece em produção.
-// ---------------------------------------------------------------------
-header('Content-Type: text/event-stream; charset=UTF-8');
-header('Cache-Control: no-cache, no-store, must-revalidate');
-header('X-Accel-Buffering: no');       // nginx
-header('Content-Encoding: none');      // impede o mod_deflate de bufferizar
-
-@ini_set('zlib.output_compression', '0');
-@ini_set('output_buffering', '0');
-@ini_set('implicit_flush', '1');
-
-while (ob_get_level() > 0) {
-    ob_end_flush();
-}
-
-ob_implicit_flush(true);
-
-// Alguns proxies só liberam o primeiro byte depois de encher um buffer
-// mínimo. Um comentário SSE de padding destrava sem sujar o stream.
-echo ':' . str_repeat(' ', 4096) . "\n\n";
-
-// O visitante fechar a aba não pode deixar a resposta pela metade sem gravar.
-ignore_user_abort(true);
-set_time_limit(120);
+// O encanamento do SSE (cabecalhos anti-buffering, padding, ignore_user_abort)
+// mora em app/Http/Sse.php desde que o endpoint publico apareceu: sao as
+// mesmas quarenta linhas nos dois, e duplicar significaria consertar um bug
+// de streaming duas vezes -- a segunda seria esquecida.
+Sse::abrir();
 
 function sse(string $evento, array $dados): void
 {
-    echo 'event: ' . $evento . "\n";
-    echo 'data: ' . json_encode($dados, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
-    flush();
+    Sse::evento($evento, $dados);
 }
 
 $pergunta = trim((string) ($_GET['q'] ?? ''));

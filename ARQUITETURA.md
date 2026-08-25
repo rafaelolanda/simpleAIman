@@ -508,7 +508,7 @@ bot), endpoint de polling e o driver de saída por canal.
 | 6 | ~~**FAQ + setores**~~ ✅ curadoria, curto-circuito, leitura de conversas | atendimento com encaminhamento |
 | 7 | ~~**Ferramentas**~~ ✅ registry, `http`, guardas, `depende_de`, `contato_setor`, `abrir_chamado` | encaminhamento real |
 | 8 | ~~**Leads**~~ ✅ captura, `lead_destinos` com backoff e dead letter, export CSV | leads chegando no CRM |
-| 9 | **Widget** — `embed.js`, token público, canal web | plugável em qualquer site |
+| 9 | ~~**Widget**~~ ✅ `embed.js`, token público, canal web, limites de uso | plugável em qualquer site |
 | 10 | *(futuro)* WhatsApp Cloud API | — |
 
 Parando na 8, já existe produto.
@@ -580,7 +580,70 @@ Três detalhes que só apareceram testando:
   numérico, ou `CAST(:x AS INTEGER)`, ou o WHERE montado em PHP com placeholder
   só para valor.
 
+## 10.2 Canal público (widget)
+
+A premissa que define o desenho inteiro: **o token não é segredo**. Ele vai
+dentro de um `<script>` na página de quem instala, visível para qualquer um que
+aperte Ctrl+U. Tratá-lo como senha seria autoengano. Ele diz *qual canal
+responde*; quem autoriza é a **lista de domínios** (`canais.config.dominios`).
+
+Por isso o slug é o token: já é único, já é legível, já não é segredo — uma
+segunda coluna só repetiria a função e criaria mais uma coisa para manter em
+sincronia. O sufixo aleatório no slug não protege nada sozinho; só evita que
+alguém enumere canais para descobrir quais existem.
+
+E autorizar não basta. Um endpoint público que chama a LLM é **torneira ligada
+na conta do provedor**: sem teto, um visitante (ou um bot de scraping) esvazia
+a cota em minutos. Daí `limite_minuto` e `limite_dia`, verificados **antes** de
+tocar no provedor — limite que roda depois da chamada cara não serve para nada.
+
+Decisões que valem lembrar:
+
+- **CORS devolve a origem específica, nunca `*`.** Com curinga, qualquer site
+  poderia embutir o widget e gastar a cota do dono do canal.
+- **Token inválido e origem não autorizada devolvem a mesma resposta.**
+  Distinguir contaria a quem está sondando se o token existe.
+- **Lista de domínios vazia bloqueia todo site externo.** Um canal recém-criado
+  que aceitasse o mundo seria uma janela aberta que ninguém lembraria de fechar.
+- **O slug não muda ao editar.** Ele já está colado no site do cliente; um campo
+  editável ali estaria convidando a derrubar o widget em produção sem aviso.
+- **A contagem do limite é por canal, não por IP puro.** Ver as armadilhas.
+
+No widget (`public_html/embed.js`):
+
+- **Shadow DOM**, porque ele entra em página de terceiro cujo CSS não
+  controlamos: sem isolamento um `button {}` do tema do cliente desconfigura o
+  chat, e um `* { box-sizing }` nosso quebraria o site dele. Verificado contra
+  uma página de CSS hostil de propósito (`admin/demo-widget.php`).
+- **`textContent`, nunca `innerHTML`.** O texto vem da LLM, que leu documentos
+  que alguém subiu. Interpretar isso como HTML abriria XSS no site do cliente
+  através do nosso widget.
+- **`EventSource` fechado na mão em `onerror`.** O padrão dele é reconectar
+  sozinho — e reconectar aqui significaria **refazer a pergunta**, cobrando
+  outra chamada à LLM e duplicando a resposta na tela.
+- **A configuração só é buscada quando alguém abre o chat.** A maioria dos
+  visitantes nunca abre; uma requisição por pageview seria banda do cliente
+  gasta à toa.
+
 ## 11. Armadilhas conhecidas
+
+**PDO liga inteiro como TEXTO, e no SQLite todo TEXT é maior que todo número.**
+`100 >= '90'` é falso; `'1' = 1` também. Não dá erro: a consulta simplesmente
+não acha nada. Custou dois bugs no mesmo dia — a retenção nunca vencia e a
+exclusão a pedido não achava ninguém. Onde o valor é numérico, use
+`CAST(:x AS INTEGER)` ou monte o `WHERE` em PHP com placeholder só para valor.
+
+**Limite de uso precisa ter escopo.** A primeira versão contava mensagens por
+IP em todos os canais, incluindo as do playground do admin (`canal_id` nulo).
+Um dia de testes no painel deixaria o widget do site recusando visitante de
+verdade — e um canal movimentado gastaria a cota do outro, exatamente o
+contrário do que a tela promete. Apareceu no primeiro turno real pelo endpoint
+público, recusado por mensagens que não eram dele.
+
+**Classe CSS que não existe não dá erro, dá tela feia.** `.form-group` e
+`var(--borda)` foram escritos duas vezes em telas diferentes; o padrão da casa
+é `<label>` dentro de `.form-grid`, e as variáveis são `--border`/`--text`.
+Antes de inventar classe, procure no CSS herdado.
 
 - `php -S` não processa `.htaccess`: URLs limpas, bloqueio de `.sqlite` e cache de assets
   só valem sob **Apache com `mod_rewrite`**. Testar essas rotas exige servidor real — e se

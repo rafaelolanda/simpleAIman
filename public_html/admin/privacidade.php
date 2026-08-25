@@ -123,26 +123,26 @@ include __DIR__ . '/partials/head.php';
         <input type="hidden" name="acao" value="salvar">
 
         <div class="form-grid">
-            <div class="form-group">
-                <label for="anon">1. Anonimizar depois de (dias)</label>
-                <input type="number" min="0" id="anon" name="anonimizacao_conversas_dias"
+            <label>
+                1. Anonimizar depois de (dias)
+                <input type="number" min="0" name="anonimizacao_conversas_dias"
                        value="<?= (int) ($cfg['anonimizacao_conversas_dias'] ?? 0) ?>">
                 <small>
                     Mascara CPF, e-mail e telefone dentro do texto e remove o IP. O resto continua
                     legível: "quais cursos vocês têm" não tem dado pessoal nenhum e é exatamente o
                     que alimenta a curadoria da FAQ.
                 </small>
-            </div>
+            </label>
 
-            <div class="form-group">
-                <label for="exp">2. Expurgar depois de (dias)</label>
-                <input type="number" min="0" id="exp" name="retencao_conversas_dias"
+            <label>
+                2. Expurgar depois de (dias)
+                <input type="number" min="0" name="retencao_conversas_dias"
                        value="<?= (int) ($cfg['retencao_conversas_dias'] ?? 0) ?>">
                 <small>
                     Apaga o texto das mensagens de vez. Preserva a conversa, as fontes citadas e as
                     métricas. Precisa ser maior que o prazo de anonimização.
                 </small>
-            </div>
+            </label>
         </div>
 
         <?php if ($canais): ?>
@@ -155,15 +155,12 @@ include __DIR__ . '/partials/head.php';
 
             <div class="form-grid">
                 <?php foreach ($canais as $c): ?>
-                    <div class="form-group">
-                        <label for="canal<?= (int) $c['id'] ?>">
-                            <?= e((string) $c['nome']) ?>
-                            <small style="opacity:.6">(<?= e((string) $c['tipo']) ?>)</small>
-                        </label>
-                        <input type="number" min="0" id="canal<?= (int) $c['id'] ?>"
+                    <label>
+                        <?= e((string) $c['nome']) ?> (<?= e((string) $c['tipo']) ?>)
+                        <input type="number" min="0"
                                name="canal_dias[<?= (int) $c['id'] ?>]"
                                value="<?= (int) $c['retencao_dias'] ?>">
-                    </div>
+                    </label>
                 <?php endforeach; ?>
             </div>
         <?php endif; ?>
@@ -199,10 +196,12 @@ include __DIR__ . '/partials/head.php';
 
     <form method="post">
         <?= csrf_field() ?>
-        <div class="form-group">
-            <label for="ident">E-mail, telefone ou CPF</label>
-            <input type="text" id="ident" name="identificador" value="<?= e($previaAlvo) ?>"
-                   placeholder="fulano@exemplo.com" autocomplete="off" required>
+        <div class="form-grid">
+            <label class="col-2">
+                E-mail, telefone ou CPF
+                <input type="text" name="identificador" value="<?= e($previaAlvo) ?>"
+                       placeholder="fulano@exemplo.com" autocomplete="off" required>
+            </label>
         </div>
         <div class="form-acoes">
             <button type="submit" name="acao" value="simular" class="btn btn-secondary">Simular</button>

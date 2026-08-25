@@ -25,6 +25,7 @@
     "autoload": {
         "psr-4": {
             "SimpleAIman\\Canais\\": "app/Canais/",
+            "SimpleAIman\\Http\\": "app/Http/",
             "SimpleAIman\\Jobs\\": "app/Jobs/",
             "SimpleAIman\\Llm\\": "app/Llm/",
             "SimpleAIman\\Rag\\": "app/Rag/",
