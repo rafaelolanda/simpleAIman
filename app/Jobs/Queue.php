@@ -20,17 +20,24 @@ final class Queue
     /** Quanto tempo um job fica reservado antes de voltar para a fila. */
     private const LOCK_SEGUNDOS = 300;
 
-    public static function enfileirar(string $tipo, array $payload, int $prioridade = 0): int
+    /**
+     * @param int $emSegundos adia a primeira execução. Útil quando quem
+     *        enfileira já sabe que o trabalho só faz sentido depois — um
+     *        retry com backoff, por exemplo. Sem isso o worker acordaria o
+     *        job antes da hora e ele sairia sem fazer nada.
+     */
+    public static function enfileirar(string $tipo, array $payload, int $prioridade = 0, int $emSegundos = 0): int
     {
         $pdo = Database::connection();
 
         $pdo->prepare(
             'INSERT INTO jobs (tipo, payload, status, prioridade, proxima_execucao_em, criado_em, editado_em)
-             VALUES (:tipo, :payload, \'pendente\', :prioridade, :agora, :agora, :agora)'
+             VALUES (:tipo, :payload, \'pendente\', :prioridade, :quando, :agora, :agora)'
         )->execute([
             'tipo' => $tipo,
             'payload' => json_encode($payload, JSON_UNESCAPED_UNICODE),
             'prioridade' => $prioridade,
+            'quando' => date('Y-m-d H:i:s', time() + max(0, $emSegundos)),
             'agora' => now(),
         ]);
 

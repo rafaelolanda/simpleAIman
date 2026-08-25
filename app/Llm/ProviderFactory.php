@@ -160,8 +160,16 @@ final class ProviderFactory
     public function chat(array $opcoes = []): AIProviderInterface
     {
         $driver = (string) ($this->provedor['driver'] ?? 'openai');
-        $modelo = $this->modeloChat();
         $baseUrl = trim((string) ($this->provedor['base_url'] ?? ''));
+
+        // O AGENTE pode sobrescrever o modelo do provedor.
+        //
+        // Sem isto, `agentes.modelo` seria campo morto: a tela deixaria
+        // escolher e o valor não teria efeito — e escolher o modelo por
+        // agente é metade da razão de existir multi-agente. Um agente de FAQ
+        // pode rodar num modelo barato enquanto outro, que encadeia
+        // ferramentas, usa um mais capaz.
+        $modelo = trim((string) ($opcoes['modelo'] ?? '')) ?: $this->modeloChat();
 
         return match ($driver) {
             // Caminho NATIVO, não a camada OpenAI-compatible. É o que trata

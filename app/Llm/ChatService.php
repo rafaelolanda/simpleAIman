@@ -242,6 +242,7 @@ final class ChatService
     private function montarAgente(array $trechos, int $conversaId): Agent
     {
         $provider = $this->fabrica->chat([
+            'modelo' => (string) ($this->agente['modelo'] ?? ''),
             'max_tokens' => (int) $this->agente['max_tokens'],
             'temperatura' => (float) $this->agente['temperatura'],
             'reasoning_effort' => (string) $this->agente['reasoning_effort'],

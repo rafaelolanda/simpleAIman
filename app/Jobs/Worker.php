@@ -81,6 +81,7 @@ final class Worker
         try {
             return match ($job['tipo']) {
                 'ingestao' => $this->ingerir($job, $log),
+                'entrega_lead' => $this->entregarLead($job, $log),
                 default => throw new \RuntimeException("Tipo de job desconhecido: {$job['tipo']}"),
             };
         } catch (ErroAgente $e) {
@@ -172,6 +173,41 @@ final class Worker
         $log("job #{$id}: artefato {$artefatoId} concluído ({$feitos} chunks).");
 
         return 'concluidos';
+    }
+
+    /**
+     * Entrega de lead ao destino externo.
+     *
+     * A falha aqui NÃO marca o job como erro: o `lead_destinos` já registra
+     * tentativa, backoff e dead letter por conta própria, e é ele quem o
+     * painel mostra. Duplicar o estado no job faria o admin ver dois lugares
+     * dizendo coisas diferentes sobre a mesma entrega.
+     *
+     * @param array<string, mixed> $job
+     * @param callable(string): void $log
+     * @return 'concluidos'|'pausas'
+     */
+    private function entregarLead(array $job, callable $log): string
+    {
+        $leadId = (int) ($job['payload']['lead_id'] ?? 0);
+
+        if ($leadId <= 0) {
+            throw new \RuntimeException('Job de entrega sem lead_id.');
+        }
+
+        try {
+            \SimpleAIman\Tools\LeadTool::entregar($leadId);
+            Queue::concluir((int) $job['id']);
+            $log("job #{$job['id']}: lead {$leadId} entregue.");
+
+            return 'concluidos';
+        } catch (Throwable $e) {
+            // O reagendamento já foi feito pelo LeadTool, com backoff.
+            Queue::concluir((int) $job['id']);
+            $log("job #{$job['id']}: {$e->getMessage()}");
+
+            return 'pausas';
+        }
     }
 
     /** @param array<string, mixed> $job */

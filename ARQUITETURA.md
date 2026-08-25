@@ -507,7 +507,7 @@ bot), endpoint de polling e o driver de saída por canal.
 | 5 | ~~**RAG no chat**~~ ✅ — junta 2+4, citações, log de custo | agente que responde citando fonte |
 | 6 | ~~**FAQ + setores**~~ ✅ curadoria, curto-circuito, leitura de conversas | atendimento com encaminhamento |
 | 7 | ~~**Ferramentas**~~ ✅ registry, `http`, guardas, `depende_de`, `contato_setor`, `abrir_chamado` | encaminhamento real |
-| 8 | **Leads** — captura, `lead_destinos`, integração CRM/RD | leads chegando no CRM |
+| 8 | ~~**Leads**~~ ✅ captura, `lead_destinos` com backoff e dead letter, export CSV | leads chegando no CRM |
 | 9 | **Widget** — `embed.js`, token público, canal web | plugável em qualquer site |
 | 10 | *(futuro)* WhatsApp Cloud API | — |
 

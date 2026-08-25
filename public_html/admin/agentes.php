@@ -83,6 +83,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'max_iteracoes_tool' => max(1, min(10, (int) ($_POST['max_iteracoes_tool'] ?? 5))),
             'usa_rag' => isset($_POST['usa_rag']) ? 1 : 0,
             'usa_faq' => isset($_POST['usa_faq']) ? 1 : 0,
+            'captura_lead' => isset($_POST['captura_lead']) ? 1 : 0,
+            'lead_destino_id' => ((int) ($_POST['lead_destino_id'] ?? 0)) ?: null,
             'ativo' => isset($_POST['ativo']) ? 1 : 0,
         ];
 
@@ -98,7 +100,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         idioma=:idioma, temperatura=:temperatura, max_tokens=:max_tokens,
                         reasoning_effort=:reasoning_effort, top_k=:top_k,
                         limiar_similaridade=:limiar_similaridade, max_iteracoes_tool=:max_iteracoes_tool,
-                        usa_rag=:usa_rag, usa_faq=:usa_faq, ativo=:ativo, editado_em=:editado_em
+                        usa_rag=:usa_rag, usa_faq=:usa_faq, captura_lead=:captura_lead,
+                        lead_destino_id=:lead_destino_id, ativo=:ativo, editado_em=:editado_em
                  WHERE id=:id'
             )->execute($dados);
 
@@ -111,12 +114,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare(
                 'INSERT INTO agentes (nome, slug, descricao, provedor_id, modelo, system_prompt,
                         mensagem_abertura, idioma, temperatura, max_tokens, reasoning_effort, top_k,
-                        limiar_similaridade, max_iteracoes_tool, usa_rag, usa_faq, ativo,
-                        token_publico, criado_em, editado_em)
+                        limiar_similaridade, max_iteracoes_tool, usa_rag, usa_faq, captura_lead,
+                        lead_destino_id, ativo, token_publico, criado_em, editado_em)
                  VALUES (:nome, :slug, :descricao, :provedor_id, :modelo, :system_prompt,
                         :mensagem_abertura, :idioma, :temperatura, :max_tokens, :reasoning_effort, :top_k,
-                        :limiar_similaridade, :max_iteracoes_tool, :usa_rag, :usa_faq, :ativo,
-                        :token_publico, :criado_em, :editado_em)'
+                        :limiar_similaridade, :max_iteracoes_tool, :usa_rag, :usa_faq, :captura_lead,
+                        :lead_destino_id, :ativo, :token_publico, :criado_em, :editado_em)'
             )->execute($dados);
 
             $id = (int) $pdo->lastInsertId();
@@ -161,6 +164,10 @@ if ($editando) {
 
 $provedores = $pdo->query('SELECT id, nome, modelo_chat, ativo FROM provedores ORDER BY nome')->fetchAll();
 $bases = $pdo->query('SELECT id, nome, (SELECT COUNT(*) FROM embeddings e WHERE e.base_id = bases.id) AS vetores FROM bases WHERE ativo = 1 ORDER BY nome')->fetchAll();
+
+$destinos = $pdo->query(
+    "SELECT id, nome FROM ferramentas WHERE ativo = 1 AND tipo = 'http' AND efeito = 'escrita' ORDER BY nome"
+)->fetchAll();
 
 $agentes = $pdo->query(
     'SELECT a.*, p.nome AS provedor, p.ativo AS provedor_ativo,
@@ -320,6 +327,32 @@ include __DIR__ . '/partials/head.php';
             <label class="check"><input type="checkbox" name="usa_rag" <?= $v('usa_rag', 1) ? 'checked' : '' ?>> Consultar as bases (RAG)</label>
             <label class="check"><input type="checkbox" name="usa_faq" <?= $v('usa_faq', 1) ? 'checked' : '' ?>> Consultar a FAQ curada</label>
             <label class="check"><input type="checkbox" name="ativo" <?= $v('ativo', 1) ? 'checked' : '' ?>> Ativo</label>
+        </div>
+
+        <h3 class="secao-form">Captação de contato</h3>
+        <div class="form-grid">
+            <label>
+                Destino do lead
+                <select name="lead_destino_id">
+                    <option value="0">Só o painel (sem envio externo)</option>
+                    <?php foreach ($destinos as $d): ?>
+                        <option value="<?= (int) $d['id'] ?>" <?= (int) $v('lead_destino_id', 0) === (int) $d['id'] ? 'selected' : '' ?>><?= e($d['nome']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <small>
+                    Uma ferramenta de escrita — seu CRM, o RD Station. O lead é gravado no painel de
+                    qualquer forma; o destino é para onde ele <em>também</em> vai.
+                </small>
+            </label>
+
+            <label class="check" style="align-self:end">
+                <input type="checkbox" name="captura_lead" <?= $v('captura_lead', 0) ? 'checked' : '' ?>>
+                Captar contato durante a conversa
+                <small>
+                    Ligue também a ferramenta de captura em <a href="ferramentas.php">Ferramentas</a> —
+                    esta caixa só marca a intenção.
+                </small>
+            </label>
         </div>
 
         <div class="form-acoes">
