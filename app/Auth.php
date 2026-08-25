@@ -42,6 +42,30 @@ final class Auth
     }
 
     /**
+     * Papel de quem está logado, lido do banco.
+     *
+     * Não fica na sessão de propósito: um papel guardado no login continuaria
+     * valendo depois de o administrador rebaixar a pessoa, até ela sair e
+     * entrar de novo. Uma consulta por requisição é barata; permissão obsoleta
+     * é o tipo de erro que ninguém percebe até dar errado.
+     */
+    public static function papelAtual(): ?string
+    {
+        $id = self::userId();
+
+        if ($id === null) {
+            return null;
+        }
+
+        $stmt = Database::connection()->prepare('SELECT papel FROM admin_users WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+
+        $papel = $stmt->fetchColumn();
+
+        return $papel === false ? null : (string) $papel;
+    }
+
+    /**
      * Verifica bloqueio por tentativas de login (rate limiting).
      * Chave de identificação: usuario + IP combinados, pra não travar
      * um usuário legítimo por causa de outro IP tentando o mesmo login.

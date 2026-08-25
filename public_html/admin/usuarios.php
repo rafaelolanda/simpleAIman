@@ -50,6 +50,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare('DELETE FROM admin_users WHERE id = :id')->execute(['id' => $id]);
             Auth::log('excluir_usuario', $alvo['usuario']);
             flash_set('sucesso', 'Usuário removido.');
+        } elseif ($acao === 'papel') {
+            $stmt = $pdo->prepare('SELECT usuario, admin_master FROM admin_users WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            $alvo = $stmt->fetch();
+
+            if (!$alvo) {
+                throw new RuntimeException('Usuário não encontrado.');
+            }
+
+            // Duas travas contra tranca-se-fora, e as duas importam: rebaixar o
+            // administrador principal, ou a si mesmo, deixaria o painel sem
+            // ninguém capaz de desfazer — e não há tela para consertar isso.
+            if ((int) $alvo['admin_master'] === 1) {
+                throw new RuntimeException('O administrador principal é sempre administrador.');
+            }
+
+            if ($id === Auth::userId()) {
+                throw new RuntimeException('Você não pode mudar o seu próprio papel.');
+            }
+
+            $papel = Painel::papelValido($_POST['papel'] ?? '');
+
+            $pdo->prepare('UPDATE admin_users SET papel = :p, editado_em = :agora WHERE id = :id')
+                ->execute(['p' => $papel, 'agora' => now(), 'id' => $id]);
+
+            Auth::log('usuario_papel', $alvo['usuario'] . ' → ' . $papel);
+            flash_set('sucesso', 'Papel de ' . $alvo['usuario'] . ' atualizado.');
         } elseif ($acao === 'atendente') {
             // Marca quem recebe transferências e de qual setor. Fica aqui, e não
             // no perfil de cada um, porque "quem atende" é decisão de gestão. Já
@@ -124,18 +151,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // admin_master não é concedido pelo formulário de propósito: o dono do
             // painel é único e definido na instalação
+            $papel = Painel::papelValido($_POST['papel'] ?? '');
+
             $stmt = $pdo->prepare(
-                'INSERT INTO admin_users (usuario, email, senha_hash, admin_master, criado_em, editado_em)
-                 VALUES (:usuario, :email, :hash, 0, :agora, :agora)'
+                'INSERT INTO admin_users (usuario, email, senha_hash, admin_master, papel, criado_em, editado_em)
+                 VALUES (:usuario, :email, :hash, 0, :papel, :agora, :agora)'
             );
             $stmt->execute([
                 'usuario' => $usuario,
                 'email' => $email,
                 'hash' => password_hash($senha, PASSWORD_DEFAULT),
+                'papel' => $papel,
                 'agora' => now(),
             ]);
 
-            Auth::log('criar_usuario', $usuario);
+            Auth::log('criar_usuario', $usuario . ' (' . $papel . ')');
             flash_set('sucesso', 'Usuário criado. Passe as credenciais para a pessoa e peça que troque a senha no primeiro acesso.');
         }
     } catch (RuntimeException $e) {
@@ -146,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $usuarios = $pdo->query(
-    'SELECT u.id, u.usuario, u.email, u.admin_master, u.criado_em, u.atende, u.disponivel, u.setor_id,
+    'SELECT u.id, u.usuario, u.email, u.admin_master, u.papel, u.criado_em, u.atende, u.disponivel, u.setor_id,
             s.nome AS setor
      FROM admin_users u
      LEFT JOIN setores s ON s.id = u.setor_id
@@ -182,6 +212,19 @@ include __DIR__ . '/partials/head.php';
                 <label>E-mail</label>
                 <input type="email" name="email" placeholder="usado para recuperar a senha" autocomplete="off">
             </div>
+            <div class="campo">
+                <label>Papel</label>
+                <select name="papel">
+                    <?php foreach (Painel::PAPEIS as $k => $rotulo): ?>
+                        <option value="<?= e($k) ?>" <?= $k === 'atendente' ? 'selected' : '' ?>><?= e($rotulo) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <small>
+                    Administrador vê tudo. Editor cuida do conteúdo (bases, artefatos, FAQ, setores),
+                    sem tocar em agentes, provedores, ferramentas ou leads. Atendente vê só a fila,
+                    chamados e o próprio perfil.
+                </small>
+            </div>
             <div class="field">
                 <label>Senha provisória</label>
                 <input type="text" name="senha" required minlength="8" autocomplete="new-password">
@@ -198,13 +241,32 @@ include __DIR__ . '/partials/head.php';
     <h2>Usuários cadastrados</h2>
     <div class="table-wrap">
     <table class="cards-mobile">
-        <thead><tr><th>Usuário</th><th>E-mail</th><th>Tipo</th><th>Atendimento</th><th>Criado em</th><th></th></tr></thead>
+        <thead><tr><th>Usuário</th><th>E-mail</th><th>Papel</th><th>Atendimento</th><th>Criado em</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($usuarios as $u): ?>
             <tr>
                 <td data-label="Usuário"><?= e($u['usuario']) ?><?= (int) $u['id'] === Auth::userId() ? ' <span class="badge on">você</span>' : '' ?></td>
                 <td data-label="E-mail"><?= e($u['email'] ?? '—') ?></td>
-                <td data-label="Tipo"><?= $u['admin_master'] ? 'Administrador principal' : 'Usuário' ?></td>
+                <td data-label="Papel">
+                    <?php if ($u['admin_master']): ?>
+                        Administrador principal
+                    <?php elseif ((int) $u['id'] === Auth::userId()): ?>
+                        <?= e(Painel::PAPEIS[$u['papel']] ?? $u['papel']) ?>
+                        <small style="opacity:.6">(você)</small>
+                    <?php else: ?>
+                        <form method="post" action="usuarios.php" class="acao-inline-form" style="margin:0">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="papel">
+                            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                            <select name="papel" onchange="this.form.submit()">
+                                <?php foreach (Painel::PAPEIS as $k => $rotulo): ?>
+                                    <option value="<?= e($k) ?>" <?= $u['papel'] === $k ? 'selected' : '' ?>><?= e($rotulo) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <noscript><button type="submit" class="btn btn-sm">Salvar</button></noscript>
+                        </form>
+                    <?php endif; ?>
+                </td>
                 <td data-label="Atendimento">
                     <details class="acao-inline">
                         <summary class="btn btn-secondary btn-sm">

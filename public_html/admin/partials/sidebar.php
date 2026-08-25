@@ -41,6 +41,11 @@ if (!empty($ehAdminMaster)) {
     $grupos['Sistema']['usuarios.php'] = ['icone' => 'chave', 'label' => 'Usuários'];
 }
 
+// O menu lê exatamente a mesma lista que a trava do _init. Duas listas
+// divergiriam na primeira tela nova — e a divergência aqui é ou link que dá
+// erro, ou item escondido de quem podia ver.
+$grupos = Painel::filtrarMenu($grupos, $meuPapel ?? 'atendente');
+
 $badges = [
     'atendimento.php' => $filaAtendimento ?? 0,
     'chamados.php' => $chamadosAbertos ?? 0,

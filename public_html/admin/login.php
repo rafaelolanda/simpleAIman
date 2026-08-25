@@ -7,7 +7,7 @@ require_once __DIR__ . '/../../app/bootstrap.php';
 Auth::start();
 
 if (Auth::check()) {
-    redirect('index.php');
+    redirect(Painel::inicioDe(Painel::papelValido(Auth::papelAtual())));
 }
 
 $erro = null;
@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $erro = 'Informe usuário e senha.';
         } elseif (Auth::attempt($usuario, $senha)) {
             Auth::log('login', 'Login realizado com sucesso');
-            redirect('index.php');
+            redirect(Painel::inicioDe(Painel::papelValido(Auth::papelAtual())));
         } else {
             $erro = 'Usuário ou senha inválidos.';
         }

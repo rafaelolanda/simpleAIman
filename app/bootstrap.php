@@ -41,5 +41,6 @@ if (is_file($autoload)) {
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/Auth.php';
+require_once __DIR__ . '/Painel.php';
 require_once __DIR__ . '/Metrics.php';
 require_once __DIR__ . '/Mailer.php';

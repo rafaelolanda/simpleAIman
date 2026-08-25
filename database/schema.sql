@@ -52,6 +52,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
     nome                TEXT,
     email               TEXT,
     admin_master        INTEGER NOT NULL DEFAULT 0,
+    -- O que a pessoa ENXERGA no painel: admin | editor | atendente.
+    -- Independente de `atende`, que diz se ela recebe transferências: um
+    -- administrador pode atender também. Validado no PHP (Painel::PAPEIS),
+    -- sem CHECK — SQLite não permite ALTER de constraint.
+    papel               TEXT NOT NULL DEFAULT 'admin',
     -- Nível 2 do handoff: quem atende, de qual setor, e se está disponível agora.
     -- Nasce no schema mesmo sem a tela existir; enfiar depois obrigaria a mexer
     -- em toda conversa já gravada. Ver ARQUITETURA.md §9.

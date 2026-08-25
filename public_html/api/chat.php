@@ -32,6 +32,17 @@ if (!Auth::check()) {
 
 $usuarioId = Auth::userId();
 
+// O playground gasta token de verdade. Estar logado não basta: quem não pode
+// abrir a tela também não pode chamar o endpoint dela por baixo — senão a
+// trava do painel viraria enfeite para quem souber montar a URL.
+$stmt = Database::connection()->prepare('SELECT papel FROM admin_users WHERE id = :id');
+$stmt->execute(['id' => $usuarioId]);
+
+if (!Painel::podeVer(Painel::papelValido($stmt->fetchColumn()), 'playground.php')) {
+    http_response_code(403);
+    exit('Acesso negado.');
+}
+
 /**
  * Libera o arquivo de sessão ANTES de começar o streaming.
  *

@@ -387,6 +387,27 @@ worker (cron 1–5min + kick após upload)
 - Valor de mensalidade sai sempre como **simulação sujeita a confirmação**, com caminho pro humano.
 - Rate limit por IP/telefone; log completo pra auditoria.
 
+### Painel: quem enxerga o quê
+
+Três papéis em `admin_users.papel`: **admin** (tudo), **editor** (conteúdo — bases,
+artefatos, FAQ, setores, além de conversas e playground) e **atendente** (fila, chamados,
+perfil). `admin_master` continua sendo o único que gerencia usuários.
+
+- **A trava é no servidor, não no menu.** `Painel::podeVer()` roda no `_init.php`, que toda
+  tela autenticada carrega. Esconder o link não protege: a pessoa digita o nome do arquivo
+  na barra de endereço.
+- **Menu e trava leem a MESMA lista** (`Painel::TELAS`). Duas listas divergiriam na primeira
+  tela nova, e a divergência é ou link quebrado, ou tela sensível aberta por omissão.
+- **Padrão fechado.** Tela ausente do mapa é acessível só por admin. Esquecer de listar uma
+  tela nova erra para o lado seguro, e o sintoma aparece rápido e é inofensivo.
+- **Endpoint também é tela.** `api/chat.php` gasta token de verdade e é barrado pelo mesmo
+  mapa; senão a trava do painel seria enfeite para quem soubesse montar a URL.
+- **O papel é lido do banco a cada requisição**, nunca guardado na sessão: um papel gravado
+  no login continuaria valendo depois do rebaixamento, até a pessoa sair e entrar de novo.
+- **`papel` é independente de `atende`.** Um administrador pode atender; derivar um do outro
+  tiraria o painel dele no instante em que entrasse na fila.
+- Rebaixar o `admin_master`, ou o próprio usuário, é recusado — não há tela para desfazer.
+
 ### Dados
 
 - Consentimento explícito antes de captar lead; finalidade, retenção e caminho de exclusão.
