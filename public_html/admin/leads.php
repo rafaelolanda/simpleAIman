@@ -172,7 +172,13 @@ include __DIR__ . '/partials/head.php';
                         <?php $extras = json_para_array($l['campos_extra'] ?? null); ?>
                         <?php if ($extras): ?>
                             <br><small style="opacity:.55">
-                                <?php foreach ($extras as $k => $v): ?><?= e((string) $k) ?>: <?= e((string) $v) ?> <?php endforeach; ?>
+                                <?php foreach ($extras as $k => $v): ?>
+                                    <?= e((string) $k) ?>:
+                                    <?php // CPF mascarado na listagem: mostra o suficiente para
+                                          // identificar de quem se trata, sem expor o número
+                                          // inteiro numa tela que alguém pode estar projetando. ?>
+                                    <?= e($k === 'cpf' ? cpf_mascarar((string) $v) : (string) $v) ?>
+                                <?php endforeach; ?>
                             </small>
                         <?php endif; ?>
                     </td>

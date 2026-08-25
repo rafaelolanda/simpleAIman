@@ -204,6 +204,66 @@ function texto_utf8(?string $texto): string
     return mb_convert_encoding($texto, 'UTF-8', 'UTF-8');
 }
 
+/**
+ * Normaliza e confere um CPF pelos dígitos verificadores.
+ *
+ * Devolve os 11 dígitos, ou null se não confere.
+ *
+ * Validar aqui evita mandar lixo ao CRM e, principalmente, evita descobrir o
+ * erro tarde demais: um CPF malformado seria recusado lá na frente, quando
+ * ninguém mais estiver na conversa para corrigir. Conferido enquanto a pessoa
+ * está falando, ela repete na hora.
+ *
+ * Sequências repetidas (111.111.111-11) passam no cálculo mas nunca são CPF
+ * real — e são justamente o que alguém digita para se livrar do formulário.
+ */
+function cpf_normalizar(?string $cpf): ?string
+{
+    $digitos = preg_replace('/\D+/', '', (string) $cpf) ?? '';
+
+    // A retrovinculacao  e o que reprova 111.111.111-11 e similares:
+    // sequencias repetidas passam no calculo dos digitos verificadores,
+    // mas nunca sao CPF real — e sao exatamente o que alguem digita para
+    // se livrar do formulario.
+    if (strlen($digitos) !== 11 || preg_match('/^(\d)\1{10}$/', $digitos) === 1) {
+        return null;
+    }
+
+    foreach ([9, 10] as $posicao) {
+        $soma = 0;
+
+        for ($i = 0; $i < $posicao; $i++) {
+            $soma += ((int) $digitos[$i]) * ($posicao + 1 - $i);
+        }
+
+        $resto = ($soma * 10) % 11;
+        $esperado = $resto === 10 ? 0 : $resto;
+
+        if ((int) $digitos[$posicao] !== $esperado) {
+            return null;
+        }
+    }
+
+    return $digitos;
+}
+
+/**
+ * CPF mascarado para exibição: 123.***.**9-00 vira ***.456.789-**
+ *
+ * Mostra o suficiente para conferir de qual pessoa se trata, sem expor o
+ * número inteiro em tela que alguém pode estar compartilhando.
+ */
+function cpf_mascarar(?string $cpf): string
+{
+    $d = preg_replace('/\D+/', '', (string) $cpf) ?? '';
+
+    if (strlen($d) !== 11) {
+        return (string) $cpf;
+    }
+
+    return '***.' . substr($d, 3, 3) . '.' . substr($d, 6, 3) . '-**';
+}
+
 function formatar_bytes(int $bytes): string
 {
     $unidades = ['B', 'KB', 'MB', 'GB'];

@@ -39,8 +39,28 @@ final class LeadTool
         $email = trim(texto_utf8($parametros['email'] ?? ''));
         $telefone = trim((string) ($parametros['telefone'] ?? ''));
 
-        // Sem forma de retorno, o lead é inútil: alguém leria um nome e não
-        // teria como falar com a pessoa.
+        $agente = $this->agente();
+
+        // O que é OBRIGATÓRIO vem do destino, não daqui.
+        //
+        // A versão anterior exigia e-mail ou telefone, chumbado — o que é uma
+        // suposição sobre o CRM alheio. Um CRM pode identificar contato por
+        // e-mail (RD Station), outro por nome e CPF, outro por telefone. Quem
+        // sabe é a configuração da ferramenta de destino, e é de lá que a
+        // regra tem de sair.
+        $faltando = $this->camposFaltando($agente, $parametros);
+
+        if ($faltando !== []) {
+            return json_encode([
+                'erro' => true,
+                'instrucao' => 'Antes de registrar, peça à pessoa: ' . implode(', ', $faltando)
+                    . '. Peça de forma natural, explicando para que serve.',
+            ], JSON_UNESCAPED_UNICODE);
+        }
+
+        // Sem NENHUMA forma de retorno o lead é inútil, mesmo que o destino
+        // externo não exija: alguém leria um nome no painel e não teria como
+        // falar com a pessoa.
         if ($email === '' && $telefone === '') {
             return json_encode([
                 'erro' => true,
@@ -55,7 +75,21 @@ final class LeadTool
             ], JSON_UNESCAPED_UNICODE);
         }
 
-        $agente = $this->agente();
+        // CPF entra normalizado e conferido pelos dígitos verificadores. Um
+        // CPF malformado não serve ao CRM e seria rejeitado lá na frente,
+        // quando ninguém mais estiver na conversa para corrigir.
+        if (isset($parametros['cpf'])) {
+            $cpf = cpf_normalizar((string) $parametros['cpf']);
+
+            if ($cpf === null) {
+                return json_encode([
+                    'erro' => true,
+                    'instrucao' => 'O CPF informado não confere. Peça para a pessoa repetir, com os 11 dígitos.',
+                ], JSON_UNESCAPED_UNICODE);
+            }
+
+            $parametros['cpf'] = $cpf;
+        }
 
         // Consentimento: registrar contato de alguém é tratamento de dado
         // pessoal, e o momento de perguntar é ANTES de gravar, não depois.
@@ -83,7 +117,7 @@ final class LeadTool
 
         $leadId = (int) $pdo->lastInsertId();
 
-        $destino = $this->prepararEntrega($leadId, $agente, $email);
+        $destino = $this->prepararEntrega($leadId, $agente, $parametros);
 
         Metrics::log('lead_capturado', (int) ($this->agenteId ?? 0));
 
@@ -92,7 +126,7 @@ final class LeadTool
             'protocolo' => $leadId,
             'instrucao' => 'Confirme que os dados foram registrados e agradeça. '
                 . ($destino === 'descartado'
-                    ? 'NÃO prometa contato por e-mail — a pessoa não informou um.'
+                    ? 'Diga apenas que o registro foi feito, SEM prometer por qual canal virá o retorno.'
                     : 'Diga que a equipe vai entrar em contato pelo canal informado.'),
         ], JSON_UNESCAPED_UNICODE);
     }
@@ -102,7 +136,7 @@ final class LeadTool
      *
      * @return string estado da entrega, para o agente saber o que prometer
      */
-    private function prepararEntrega(int $leadId, array $agente, string $email): string
+    private function prepararEntrega(int $leadId, array $agente, array $campos): string
     {
         $destinoId = (int) ($agente['lead_destino_id'] ?? 0);
 
@@ -120,13 +154,13 @@ final class LeadTool
             return 'local';
         }
 
-        // Destino que exige e-mail e não recebeu um: estado `descartado`, não
-        // `erro`. O RD Station identifica contato por e-mail obrigatório, e um
-        // lead vindo do WhatsApp costuma ter só telefone. Não é falha da
-        // integração — é dado que aquele destino não aceita, e marcar como
-        // erro faria alguém investigar um problema que não existe.
-        $exigeEmail = $this->exigeEmail($ferramenta);
-        $estado = ($exigeEmail && $email === '') ? 'descartado' : 'pendente';
+        // Destino que exige um campo ausente: estado `descartado`, não
+        // `erro`. O RD Station identifica contato por e-mail obrigatório, um
+        // CRM próprio pode exigir nome e CPF, e um lead vindo do WhatsApp
+        // costuma ter só telefone. Não é falha da integração — é dado que
+        // aquele destino não aceita, e marcar como erro faria alguém
+        // investigar um problema que não existe.
+        $estado = $this->destinoAceita($ferramenta, $campos) ? 'pendente' : 'descartado';
 
         $agora = now();
 
@@ -140,7 +174,7 @@ final class LeadTool
             's' => $estado,
             'quando' => $estado === 'pendente' ? $agora : null,
             'erro' => $estado === 'descartado'
-                ? 'O destino exige e-mail e o lead não tem um.'
+                ? 'O destino exige um campo que este lead não tem.'
                 : null,
             // Chave de idempotência: o retry não pode criar dois contatos no
             // CRM. Vai como cabeçalho na entrega.
@@ -157,21 +191,72 @@ final class LeadTool
     }
 
     /**
-     * O destino tem `email` como parâmetro obrigatório?
+     * Campos que o destino exige e o lead ainda não tem.
      *
-     * Descobre pela configuração em vez de manter uma lista de integrações
-     * conhecidas — assim vale para o CRM próprio, para o RD e para qualquer
-     * outro que alguém cadastre depois.
+     * Descobre pela configuração da ferramenta de destino em vez de manter
+     * uma lista de integrações conhecidas — assim vale para o CRM próprio
+     * (que pode exigir nome e CPF), para o RD Station (que exige e-mail) e
+     * para qualquer outro que alguém cadastre depois.
+     *
+     * Devolve a DESCRIÇÃO do campo, não o nome técnico: é texto que o agente
+     * vai usar para pedir à pessoa, e "cpf" pedido cru soa mal.
+     *
+     * @param array<string, mixed> $agente
+     * @param array<string, mixed> $parametros
+     * @return list<string>
      */
-    private function exigeEmail(array $ferramenta): bool
+    private function camposFaltando(array $agente, array $parametros): array
+    {
+        $destinoId = (int) ($agente['lead_destino_id'] ?? 0);
+
+        if ($destinoId <= 0) {
+            return [];
+        }
+
+        $stmt = Database::connection()->prepare(
+            'SELECT nome, descricao_llm FROM ferramenta_parametros
+             WHERE ferramenta_id = :id AND obrigatorio = 1 ORDER BY ordem, id'
+        );
+        $stmt->execute(['id' => $destinoId]);
+
+        $faltando = [];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $p) {
+            $nome = (string) $p['nome'];
+            $valor = trim((string) ($parametros[$nome] ?? ''));
+
+            if ($valor === '') {
+                $faltando[] = trim((string) $p['descricao_llm']) ?: $nome;
+            }
+        }
+
+        return $faltando;
+    }
+
+    /**
+     * O destino exige algum campo que este lead não tem?
+     *
+     * Diferente de `camposFaltando()`: aqui já é tarde para pedir — o lead
+     * está sendo gravado. Serve para decidir entre enfileirar a entrega e
+     * marcá-la como `descartado`.
+     *
+     * @param array<string, mixed> $lead campos disponíveis
+     */
+    private function destinoAceita(array $ferramenta, array $lead): bool
     {
         $stmt = Database::connection()->prepare(
-            'SELECT COUNT(*) FROM ferramenta_parametros
-             WHERE ferramenta_id = :id AND nome = \'email\' AND obrigatorio = 1'
+            'SELECT nome FROM ferramenta_parametros
+             WHERE ferramenta_id = :id AND obrigatorio = 1'
         );
         $stmt->execute(['id' => (int) $ferramenta['id']]);
 
-        return (int) $stmt->fetchColumn() > 0;
+        foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $nome) {
+            if (trim((string) ($lead[(string) $nome] ?? '')) === '') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /** @return array<string, mixed> */
