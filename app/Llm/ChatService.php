@@ -36,7 +36,7 @@ final class ChatService
     /** @param array<string, mixed> $agente linha de `agentes` */
     private function __construct(
         private readonly array $agente,
-        private readonly ProviderFactory $fabrica,
+        private ?ProviderFactory $fabrica = null,
     ) {
     }
 
@@ -50,11 +50,28 @@ final class ChatService
             throw new ErroAgente('configuracao', "Agente id={$agenteId} não encontrado ou inativo.");
         }
 
-        $fabrica = $agente['provedor_id']
-            ? ProviderFactory::porId((int) $agente['provedor_id'])
-            : ProviderFactory::ativo();
+        // O provedor é resolvido SOB DEMANDA, e não aqui.
+        //
+        // Um agente em modo roteador não usa provedor nenhum — mas montar a
+        // fábrica neste ponto explodia com "atendimento indisponível" antes de
+        // o roteador ter chance de responder, sempre que não houvesse provedor
+        // ativo. Que é exatamente o caso de quem escolheu o roteador para não
+        // precisar de chave de API.
+        return new self($agente);
+    }
 
-        return new self($agente, $fabrica);
+    /**
+     * @throws ErroAgente se não houver provedor utilizável
+     */
+    private function fabrica(): ProviderFactory
+    {
+        if ($this->fabrica === null) {
+            $this->fabrica = $this->agente['provedor_id']
+                ? ProviderFactory::porId((int) $this->agente['provedor_id'])
+                : ProviderFactory::ativo();
+        }
+
+        return $this->fabrica;
     }
 
     /** @return array<string, mixed> */
@@ -242,7 +259,7 @@ final class ChatService
     /** @param list<array<string, mixed>> $trechos */
     private function montarAgente(array $trechos, int $conversaId): Agent
     {
-        $provider = $this->fabrica->chat([
+        $provider = $this->fabrica()->chat([
             'modelo' => (string) ($this->agente['modelo'] ?? ''),
             'max_tokens' => (int) $this->agente['max_tokens'],
             'temperatura' => (float) $this->agente['temperatura'],
@@ -366,7 +383,7 @@ final class ChatService
         }
 
         try {
-            $this->vetorPergunta = $this->fabrica
+            $this->vetorPergunta = $this->fabrica()
                 ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
                 ->embedText($pergunta);
         } catch (Throwable $e) {

@@ -131,6 +131,33 @@ final class CanalPublico
             ->fetchColumn();
     }
 
+    /**
+     * O agente deste canal responde com IA ou é roteador?
+     *
+     * O canal precisa saber disso antes de aplicar o limite de uso: a cota
+     * existe para proteger a conta do provedor, e um roteador não faz chamada
+     * nenhuma a provedor.
+     */
+    public function modoDoAgente(): string
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT a.modo FROM agentes a WHERE a.id = :id'
+        );
+        $stmt->execute(['id' => $this->agenteId()]);
+
+        return (string) ($stmt->fetchColumn() ?: 'ia');
+    }
+
+    /**
+     * Teto de flood para o roteador.
+     *
+     * O roteador não custa token, então a cota diária — que é proteção de
+     * gasto — não se aplica. Mas o endpoint continua público, e um laço
+     * automatizado ainda consome banco e processo: sobra a proteção contra
+     * enxurrada, e só ela.
+     */
+    private const LIMITE_ROTEADOR_MINUTO = 20;
+
     public function limitePorMinuto(): int
     {
         return max(1, (int) ($this->opcoes['limite_minuto'] ?? 6));
@@ -149,9 +176,11 @@ final class CanalPublico
      * expurgar depois. O custo é uma contagem indexada por IP, barata perto de
      * uma chamada à LLM.
      *
+     * @param bool $semCustoDeLlm roteador: pula a cota diária (que é proteção
+     *                             de gasto) e mantém só a de flood
      * @return 'ok'|'minuto'|'dia'
      */
-    public function estadoDoLimite(?string $ip): string
+    public function estadoDoLimite(?string $ip, bool $semCustoDeLlm = false): string
     {
         if ($ip === null || $ip === '') {
             return 'ok';
@@ -176,8 +205,16 @@ final class CanalPublico
 
         $stmt->execute(['ip' => $ip, 'canal' => $canalId, 'desde' => date('Y-m-d H:i:s', time() - 60)]);
 
-        if ((int) $stmt->fetchColumn() >= $this->limitePorMinuto()) {
+        $tetoMinuto = $semCustoDeLlm ? self::LIMITE_ROTEADOR_MINUTO : $this->limitePorMinuto();
+
+        if ((int) $stmt->fetchColumn() >= $tetoMinuto) {
             return 'minuto';
+        }
+
+        // Sem custo de LLM não há cota diária: barrar alguém de navegar um
+        // menu que não gasta nada seria recusar atendimento à toa.
+        if ($semCustoDeLlm) {
+            return 'ok';
         }
 
         $stmt->execute(['ip' => $ip, 'canal' => $canalId, 'desde' => date('Y-m-d H:i:s', time() - 86400)]);

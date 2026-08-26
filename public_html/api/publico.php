@@ -171,7 +171,11 @@ if ($sessao === '') {
 }
 
 $ip = client_ip();
-$limite = $canal->estadoDoLimite($ip);
+
+// O modo do agente decide QUAL limite vale. Um roteador não chama provedor
+// nenhum, então a cota diária — que é proteção de gasto — não faz sentido; só
+// a proteção contra enxurrada continua.
+$limite = $canal->estadoDoLimite($ip, $canal->modoDoAgente() === 'roteador');
 
 if ($limite !== 'ok') {
     // Sai ANTES de tocar no provedor: o limite não serve para nada se a
