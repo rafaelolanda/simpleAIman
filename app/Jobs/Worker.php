@@ -64,6 +64,15 @@ final class Worker
             $log("{$expiradas} conversa(s) devolvida(s) ao assistente por espera longa.");
         }
 
+        // Conversas paradas. Como a varredura de abandono, roda aqui porque o
+        // caso que mais importa e o de NAO haver ninguem no painel olhando.
+        $inativas = Fila::encerrarInativas();
+
+        if (array_sum($inativas) > 0) {
+            $log("inatividade: {$inativas['avisadas']} aviso(s), "
+                . "{$inativas['humano']} atendimento(s) e {$inativas['bot']} conversa(s) encerrada(s).");
+        }
+
         $liberados = Queue::liberarPresos();
 
         if ($liberados > 0) {

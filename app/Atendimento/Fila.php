@@ -29,14 +29,10 @@ use Throwable;
  */
 final class Fila
 {
-    /**
-     * Quanto tempo alguém espera antes de desistirmos por ela.
-     *
-     * Não existe "esperar indefinidamente": a aba fica aberta, a pessoa vai
-     * embora e a conversa morre em `aguardando` sem ninguém saber. Passado o
-     * prazo, a conversa volta para o bot, que oferece registrar um chamado.
-     */
-    public const ESPERA_MAX_MIN = 5;
+    // Os prazos moram no .env (ver app/config.php): ESPERA_MAX_MIN,
+    // INATIVIDADE_AVISO_MIN, INATIVIDADE_HUMANO_MIN e INATIVIDADE_BOT_MIN.
+    // Estavam fixos aqui, e "quanto tempo esperar" é justamente o número que
+    // muda de cliente para cliente sem que ninguém queira mexer em código.
 
     // -----------------------------------------------------------------
     // Disponibilidade
@@ -142,14 +138,6 @@ final class Fila
     }
 
     /**
-     * Devolve a conversa ao bot, preservando o contexto.
-     *
-     * O histórico do atendente continua na conversa, marcado com
-     * `autor_tipo = 'atendente'`. É por isso que aquela coluna existe: sem
-     * ela, o bot ao retomar leria a fala do atendente como se fosse dele
-     * mesmo e passaria a se contradizer.
-     */
-    /**
      * Motivos pelos quais uma conversa volta ao assistente, e o que o VISITANTE
      * lê em cada caso.
      *
@@ -171,6 +159,14 @@ final class Fila
         'expirado' => null, // sem aviso: quem fala é o próprio assistente, abaixo
     ];
 
+    /**
+     * Devolve a conversa ao bot, preservando o contexto.
+     *
+     * O histórico do atendente continua na conversa, marcado com
+     * `autor_tipo = 'atendente'`. É por isso que aquela coluna existe: sem ela,
+     * o bot ao retomar leria a fala do atendente como se fosse dele mesmo e
+     * passaria a se contradizer.
+     */
     public static function devolverAoBot(int $conversaId, string $motivo = 'encerrado'): void
     {
         Database::connection()->prepare(
@@ -255,17 +251,38 @@ final class Fila
      * escrever de novo, `reabrirSeEncerrada()` devolve o assunto ao
      * assistente — e é por isso que o aviso já avisa que dá para continuar.
      */
-    public static function encerrar(int $conversaId): void
+    /**
+     * O que o VISITANTE lê ao ver a conversa encerrar, por motivo.
+     *
+     * Mesmo desenho de MOTIVOS_DEVOLUCAO, e pela mesma razão: quem chama
+     * escolhe um motivo, nunca escreve a frase. Foi assim que uma instrução
+     * destinada ao modelo acabou na tela do visitante.
+     *
+     * `null` = encerra em silêncio.
+     */
+    private const MOTIVOS_ENCERRAMENTO = [
+        'atendente' => 'Atendimento encerrado. Se precisar de mais alguma coisa, é só escrever.',
+        'inatividade' => 'Encerramos por inatividade. Se precisar, é só escrever que retomamos daqui.',
+        // Conversa só com o assistente, parada: ninguém está olhando, e
+        // escrever numa sala vazia não serve a ninguém. Se a pessoa voltar,
+        // reabrirSeEncerrada() retoma sem que ela veja nada estranho.
+        'inatividade_bot' => null,
+    ];
+
+    public static function encerrar(int $conversaId, string $motivo = 'atendente'): void
     {
         Database::connection()->prepare(
             "UPDATE conversas SET modo = 'encerrada', atendente_id = NULL, aguardando_desde = NULL, editado_em = :agora
              WHERE id = :id"
         )->execute(['id' => $conversaId, 'agora' => now()]);
 
-        self::registrarAviso(
-            $conversaId,
-            'Atendimento encerrado. Se precisar de mais alguma coisa, é só escrever.'
-        );
+        $aviso = array_key_exists($motivo, self::MOTIVOS_ENCERRAMENTO)
+            ? self::MOTIVOS_ENCERRAMENTO[$motivo]
+            : self::MOTIVOS_ENCERRAMENTO['atendente'];
+
+        if ($aviso !== null) {
+            self::registrarAviso($conversaId, $aviso);
+        }
     }
 
     /**
@@ -304,7 +321,7 @@ final class Fila
     public static function expirarAbandonadas(): int
     {
         $pdo = Database::connection();
-        $limite = date('Y-m-d H:i:s', time() - (self::ESPERA_MAX_MIN * 60));
+        $limite = date('Y-m-d H:i:s', time() - (ESPERA_MAX_MIN * 60));
 
         $stmt = $pdo->prepare(
             "SELECT id FROM conversas WHERE modo = 'aguardando' AND aguardando_desde IS NOT NULL AND aguardando_desde < :limite"
@@ -334,6 +351,97 @@ final class Fila
         }
 
         return count($ids);
+    }
+
+    /**
+     * Fecha conversas paradas — o visitante calado, não a fila sem atendente.
+     *
+     * O sinal é a última mensagem **do visitante**, e não a última mensagem da
+     * conversa: se o atendente escreveu cinco vezes e ninguém respondeu, quem
+     * foi embora foi o visitante, e é justamente esse o caso a detectar.
+     *
+     * Só é seguro fazer isto porque `encerrada` deixou de ser porta trancada:
+     * quem voltar e escrever reabre a conversa com o assistente.
+     *
+     * @return array{avisadas: int, humano: int, bot: int}
+     */
+    public static function encerrarInativas(): array
+    {
+        $pdo = Database::connection();
+        $placar = ['avisadas' => 0, 'humano' => 0, 'bot' => 0];
+
+        // "Silencioso desde": última fala do visitante, ou o início da conversa
+        // se ele nunca falou.
+        $ultimaFala = "COALESCE((SELECT MAX(m.criado_em) FROM mensagens m
+                                  WHERE m.conversa_id = c.id AND m.autor_tipo = 'usuario'), c.criado_em)";
+
+        $limite = static fn (int $min): string => date('Y-m-d H:i:s', time() - ($min * 60));
+
+        // 1. Em atendimento humano e o visitante sumiu: avisa quem está do
+        //    outro lado, em vez de encerrar por baixo dele. Pode ser que a
+        //    pessoa tenha ido buscar um documento.
+        if (INATIVIDADE_AVISO_MIN > 0) {
+            $stmt = $pdo->prepare(
+                "SELECT c.id, c.atendente_id FROM conversas c
+                  WHERE c.modo = 'humano'
+                    AND {$ultimaFala} < :limite
+                    -- Não avisa quem o passo 2 vai encerrar logo abaixo: seria
+                    -- um bilhete para o atendente sobre uma conversa que fecha
+                    -- no mesmo segundo.
+                    AND {$ultimaFala} >= :limiteFinal
+                    AND NOT EXISTS (
+                        SELECT 1 FROM mensagens n
+                         WHERE n.conversa_id = c.id AND n.autor_tipo = 'nota'
+                           AND n.conteudo LIKE 'Visitante sem responder%'
+                    )"
+            );
+            $stmt->execute([
+                'limite' => $limite(INATIVIDADE_AVISO_MIN),
+                'limiteFinal' => $limite(INATIVIDADE_HUMANO_MIN),
+            ]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+                // A nota também serve de marca: o NOT EXISTS acima usa ela
+                // para não repetir o aviso a cada passada do worker.
+                self::registrarNota(
+                    (int) $c['id'],
+                    (int) $c['atendente_id'],
+                    'Visitante sem responder há ' . INATIVIDADE_AVISO_MIN . ' minutos. '
+                        . 'A conversa encerra sozinha em ' . INATIVIDADE_HUMANO_MIN . ' minutos de silêncio.'
+                );
+                $placar['avisadas']++;
+            }
+        }
+
+        // 2. Silêncio longo demais, mesmo em atendimento: encerra e diz por quê.
+        if (INATIVIDADE_HUMANO_MIN > 0) {
+            $stmt = $pdo->prepare(
+                "SELECT c.id FROM conversas c WHERE c.modo = 'humano' AND {$ultimaFala} < :limite"
+            );
+            $stmt->execute(['limite' => $limite(INATIVIDADE_HUMANO_MIN)]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+                self::encerrar((int) $id, 'inatividade');
+                $placar['humano']++;
+            }
+        }
+
+        // 3. Conversa só com o assistente, parada. Encerra em SILÊNCIO: não há
+        //    ninguém olhando, e um aviso numa aba abandonada não serve a
+        //    ninguém — só apareceria dias depois, fora de contexto.
+        if (INATIVIDADE_BOT_MIN > 0) {
+            $stmt = $pdo->prepare(
+                "SELECT c.id FROM conversas c WHERE c.modo = 'bot' AND {$ultimaFala} < :limite"
+            );
+            $stmt->execute(['limite' => $limite(INATIVIDADE_BOT_MIN)]);
+
+            foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+                self::encerrar((int) $id, 'inatividade_bot');
+                $placar['bot']++;
+            }
+        }
+
+        return $placar;
     }
 
     // -----------------------------------------------------------------
@@ -506,7 +614,7 @@ final class Fila
             . ($motivo !== '' ? "Motivo: {$motivo}\n\n" : '')
             . "Conversa: #{$conversaId}\n"
             . "Atenda em: {$url}\n\n"
-            . 'A conversa volta para o assistente automaticamente após ' . self::ESPERA_MAX_MIN . " minutos sem ninguém assumir.";
+            . 'A conversa volta para o assistente automaticamente após ' . ESPERA_MAX_MIN . " minutos sem ninguém assumir.";
 
         foreach ($destinos as $destino) {
             try {

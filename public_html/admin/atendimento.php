@@ -29,9 +29,11 @@ $tituloPagina = 'Atendimento';
 $eu = (int) Auth::userId();
 $abrindo = (int) ($_GET['c'] ?? 0);
 
-// Fecha o laço de quem esperou demais. Roda a cada carga da tela porque este é
-// o momento em que há alguém olhando — não dá para depender só do cron.
+// Fecha o laço de quem esperou demais e de quem parou de responder. Roda a
+// cada carga da tela porque este é o momento em que há alguém olhando — não
+// dá para depender só do cron, que em compartilhada pode nem existir.
 Fila::expirarAbandonadas();
+Fila::encerrarInativas();
 
 /** Meu próprio cadastro de atendente. */
 $stmt = $pdo->prepare('SELECT atende, disponivel, setor_id FROM admin_users WHERE id = :id');

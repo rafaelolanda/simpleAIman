@@ -89,6 +89,31 @@ define('WORKER_TEMPO_MAX_S', (int) ($env['WORKER_TEMPO_MAX_S'] ?? 20));
 define('WORKER_TOKEN', $env['WORKER_TOKEN'] ?? '');
 
 // ---------------------------------------------------------------------
+// Relógios do atendimento
+//
+// Ficam no .env, e não no banco, porque são operacionais e não regra de
+// negócio: quem ajusta isso é quem opera a instância, e a mesma pessoa já
+// mexe aqui para o worker e os limites. Antes estavam fixos no código.
+//
+// Zero desliga a regra correspondente.
+// ---------------------------------------------------------------------
+
+// Quanto tempo alguém espera na fila antes de o assistente retomar.
+define('ESPERA_MAX_MIN', (int) ($env['ESPERA_MAX_MIN'] ?? 5));
+
+// Visitante calado numa conversa JÁ em atendimento humano. O primeiro prazo
+// só avisa o atendente por nota interna — pode ser que a pessoa tenha ido
+// buscar um documento, e encerrar por baixo dela seria grosseiro. O segundo
+// encerra.
+define('INATIVIDADE_AVISO_MIN', (int) ($env['INATIVIDADE_AVISO_MIN'] ?? 10));
+define('INATIVIDADE_HUMANO_MIN', (int) ($env['INATIVIDADE_HUMANO_MIN'] ?? 30));
+
+// Conversa só com o assistente, parada. Encerra em silêncio: não há ninguém
+// olhando, e escrever numa sala vazia não serve a ninguém. Se a pessoa voltar
+// e escrever, reabrirSeEncerrada() retoma.
+define('INATIVIDADE_BOT_MIN', (int) ($env['INATIVIDADE_BOT_MIN'] ?? 60));
+
+// ---------------------------------------------------------------------
 // Guarda da camada de ferramentas HTTP
 //
 // Allowlist de hosts fica AQUI, no .env, e nunca como campo editável no admin:

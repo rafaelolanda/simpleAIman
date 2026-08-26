@@ -580,6 +580,35 @@ isso, e só isso, que torna aceitável inserir o resultado com `innerHTML` no wi
 regra padrão é `textContent`. Inverter essa ordem transforma a função em XSS no site do
 cliente.
 
+### Os relógios
+
+Quatro prazos, todos no `.env` porque são operacionais e mudam de cliente para cliente:
+
+| variável | padrão | o que faz |
+|---|---|---|
+| `ESPERA_MAX_MIN` | 5 | fila sem ninguém assumir → volta ao assistente |
+| `INATIVIDADE_AVISO_MIN` | 10 | visitante calado em atendimento → **nota interna** ao atendente |
+| `INATIVIDADE_HUMANO_MIN` | 30 | silêncio longo em atendimento → encerra, dizendo o motivo |
+| `INATIVIDADE_BOT_MIN` | 60 | conversa só com o bot, parada → encerra **em silêncio** |
+
+O sinal de inatividade é a última mensagem **do visitante**, não a última da conversa: se o
+atendente escreveu cinco vezes e ninguém respondeu, quem foi embora foi o visitante — e é
+esse o caso a detectar.
+
+Três decisões dentro disso:
+
+- **Avisar antes de encerrar um atendimento em curso.** Encerrar por baixo do atendente seria
+  grosseiro: a pessoa pode ter ido buscar um documento. A própria nota serve de marca para o
+  aviso não se repetir a cada passada do worker — e quem já passou do prazo final não recebe
+  bilhete nenhum, que seria um recado sobre uma conversa fechando no mesmo segundo.
+- **Conversa só com o bot encerra calada.** Não há ninguém olhando, e um aviso numa aba
+  abandonada só apareceria dias depois, fora de contexto.
+- **Isto só é seguro porque `encerrada` deixou de ser porta trancada.** Quem voltar e
+  escrever reabre a conversa com o assistente.
+
+A varredura roda no worker **e** a cada carga do painel: as telas cobrem quando há alguém
+olhando; o worker cobre justamente o contrário.
+
 ### Transporte: polling, nunca SSE
 
 Um atendimento dura minutos, e SSE prenderia um processo PHP esse tempo todo. Em
