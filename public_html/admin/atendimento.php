@@ -29,11 +29,18 @@ $tituloPagina = 'Atendimento';
 $eu = (int) Auth::userId();
 $abrindo = (int) ($_GET['c'] ?? 0);
 
-// Fecha o laço de quem esperou demais e de quem parou de responder. Roda a
-// cada carga da tela porque este é o momento em que há alguém olhando — não
-// dá para depender só do cron, que em compartilhada pode nem existir.
+// Bate ponto ANTES das varreduras. Fora de ordem, `resgatarOrfas()` acharia
+// que quem está abrindo a tela agora sumiu, e devolveria à fila a conversa da
+// própria pessoa que está olhando para ela.
+Fila::baterPonto($eu);
+
+// Fecha o laço de quem esperou demais, de quem parou de responder e das
+// conversas presas com quem saiu. Roda a cada carga da tela porque este é o
+// momento em que há alguém olhando — não dá para depender só do cron, que em
+// compartilhada pode nem existir.
 Fila::expirarAbandonadas();
 Fila::encerrarInativas();
+Fila::resgatarOrfas();
 
 /** Meu próprio cadastro de atendente. */
 $stmt = $pdo->prepare('SELECT atende, disponivel, setor_id FROM admin_users WHERE id = :id');
@@ -57,6 +64,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare('UPDATE admin_users SET disponivel = :d, editado_em = :agora WHERE id = :id')
             ->execute(['d' => $novo, 'agora' => now(), 'id' => $eu]);
+
+        // Marcar-se ausente encerra a presença na hora, em vez de esperar a
+        // janela expirar — quem clicou está dizendo que saiu agora.
+        if (!$novo) {
+            Fila::encerrarPresenca($eu);
+        } else {
+            Fila::baterPonto($eu);
+        }
 
         Auth::log('atendimento_disponibilidade', $novo ? 'disponível' : 'ausente');
         flash_set('sucesso', $novo ? 'Você está disponível para atender.' : 'Você está marcado como ausente.');
@@ -148,6 +163,11 @@ if (($_GET['acao'] ?? '') === 'json') {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
 
+    // Batimento. A presença sai de graça de uma requisição que já existia: a
+    // tela consulta a cada 4s de qualquer forma. Quem fechou o navegador para
+    // de bater e some da fila sozinho, sem depender de lembrar do botão.
+    Fila::baterPonto($eu);
+
     $desde = max(0, (int) ($_GET['desde'] ?? 0));
 
     $resposta = [
@@ -236,9 +256,14 @@ include __DIR__ . '/partials/head.php';
             <strong>Ninguém disponível agora.</strong> O agente não vai oferecer transferência —
             ele cai em registrar chamado, que funciona fora do horário.
         <?php else: ?>
-            <?= count($disponiveis) ?> pessoa(s) disponível(is).
-            Sem ninguém disponível, o agente deixa de oferecer transferência automaticamente.
+            <?= count($disponiveis) ?> pessoa(s) disponível(is) neste momento.
         <?php endif; ?>
+        <br>
+        <small>
+            Você só conta como disponível <strong>com esta tela aberta</strong>. Ao fechar,
+            some da fila sozinho em <?= (int) round(PRESENCA_JANELA_SEG / 60) ?> minuto(s) —
+            e conversa sua que ficar parada volta para a fila em <?= (int) PRESENCA_ORFA_MIN ?>.
+        </small>
     </p>
 </div>
 

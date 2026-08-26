@@ -51,12 +51,25 @@ final class Fila
     {
         $pdo = Database::connection();
 
+        // Três condições, e as três importam:
+        //
+        //   atende      quem administra decidiu que essa pessoa recebe fila
+        //   disponivel  INTENÇÃO dela agora (o botão; serve para almoçar)
+        //   visto_em    PRESENÇA de fato — a tela está aberta neste instante
+        //
+        // Sem a terceira, quem fechasse o navegador sem clicar em "ausente"
+        // continuaria recebendo transferência, e o agente prometeria uma
+        // pessoa que não está lá. Intenção esquecida ligada é o padrão, não a
+        // exceção: ninguém lembra de se desligar ao ir embora.
+        $vivo = "AND visto_em IS NOT NULL AND visto_em >= :desde";
+        $desde = date('Y-m-d H:i:s', time() - PRESENCA_JANELA_SEG);
+
         if ($setorId !== null) {
             $stmt = $pdo->prepare(
-                'SELECT id, usuario, nome, email FROM admin_users
-                 WHERE atende = 1 AND disponivel = 1 AND setor_id = :s ORDER BY id'
+                "SELECT id, usuario, nome, email FROM admin_users
+                 WHERE atende = 1 AND disponivel = 1 AND setor_id = :s {$vivo} ORDER BY id"
             );
-            $stmt->execute(['s' => $setorId]);
+            $stmt->execute(['s' => $setorId, 'desde' => $desde]);
             $doSetor = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             if ($doSetor !== []) {
@@ -64,10 +77,87 @@ final class Fila
             }
         }
 
-        return $pdo->query(
-            'SELECT id, usuario, nome, email FROM admin_users
-             WHERE atende = 1 AND disponivel = 1 ORDER BY id'
-        )->fetchAll(PDO::FETCH_ASSOC);
+        $stmt = $pdo->prepare(
+            "SELECT id, usuario, nome, email FROM admin_users
+             WHERE atende = 1 AND disponivel = 1 {$vivo} ORDER BY id"
+        );
+        $stmt->execute(['desde' => $desde]);
+
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Batimento: o painel passou por aqui agora.
+     *
+     * Chamado pela consulta periódica da tela de atendimento, que já roda a
+     * cada 4 segundos — a presença sai de graça de um mecanismo que já existia,
+     * sem timer novo nem requisição extra.
+     */
+    public static function baterPonto(int $atendenteId): void
+    {
+        Database::connection()
+            ->prepare('UPDATE admin_users SET visto_em = :agora WHERE id = :id')
+            ->execute(['agora' => now(), 'id' => $atendenteId]);
+    }
+
+    /**
+     * Encerra a presença na saída explícita (logout, ou "ausente").
+     *
+     * Não é obrigatório — a janela expira sozinha — mas evita os dois minutos
+     * em que a pessoa já foi embora e a fila ainda conta com ela.
+     */
+    public static function encerrarPresenca(int $atendenteId): void
+    {
+        Database::connection()
+            ->prepare('UPDATE admin_users SET visto_em = NULL WHERE id = :id')
+            ->execute(['id' => $atendenteId]);
+    }
+
+    /**
+     * Devolve à fila as conversas presas com quem sumiu.
+     *
+     * O atendente fechou o navegador no meio de um atendimento: sem isto a
+     * conversa fica dele para sempre, e o visitante espera uma resposta que
+     * não vem de ninguém. Volta para `aguardando`, e quem estiver online
+     * assume.
+     *
+     * O visitante vê o mesmo aviso neutro do repasse comum — ele não precisa
+     * saber que alguém sumiu.
+     *
+     * @return int quantas voltaram
+     */
+    public static function resgatarOrfas(): int
+    {
+        $pdo = Database::connection();
+
+        $stmt = $pdo->prepare(
+            "SELECT c.id, c.atendente_id FROM conversas c
+             JOIN admin_users u ON u.id = c.atendente_id
+             WHERE c.modo = 'humano'
+               AND (u.visto_em IS NULL OR u.visto_em < :limite)"
+        );
+        $stmt->execute(['limite' => date('Y-m-d H:i:s', time() - (PRESENCA_ORFA_MIN * 60))]);
+
+        $orfas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($orfas as $c) {
+            $pdo->prepare(
+                "UPDATE conversas SET modo = 'aguardando', atendente_id = NULL,
+                        aguardando_desde = :agora, editado_em = :agora
+                 WHERE id = :id AND modo = 'humano'"
+            )->execute(['id' => (int) $c['id'], 'agora' => now()]);
+
+            self::registrarAviso((int) $c['id'], 'Estamos transferindo você para outro atendente. Um instante.');
+
+            self::registrarNota(
+                (int) $c['id'],
+                (int) $c['atendente_id'],
+                'Devolvida à fila automaticamente: ' . self::nomeDoAtendente((int) $c['atendente_id'])
+                    . ' saiu do painel sem encerrar o atendimento.'
+            );
+        }
+
+        return count($orfas);
     }
 
     public static function haDisponivel(?int $setorId = null): bool

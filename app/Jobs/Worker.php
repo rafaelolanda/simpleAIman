@@ -66,6 +66,14 @@ final class Worker
 
         // Conversas paradas. Como a varredura de abandono, roda aqui porque o
         // caso que mais importa e o de NAO haver ninguem no painel olhando.
+        // Conversa presa com atendente que fechou o navegador. Aqui é a rede
+        // de segurança: se ninguém abrir o painel, ninguém a resgataria.
+        $orfas = Fila::resgatarOrfas();
+
+        if ($orfas > 0) {
+            $log("{$orfas} conversa(s) devolvida(s) a fila: atendente sem presenca.");
+        }
+
         $inativas = Fila::encerrarInativas();
 
         if (array_sum($inativas) > 0) {

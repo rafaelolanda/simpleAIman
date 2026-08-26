@@ -611,6 +611,38 @@ isso, e só isso, que torna aceitável inserir o resultado com `innerHTML` no wi
 regra padrão é `textContent`. Inverter essa ordem transforma a função em XSS no site do
 cliente.
 
+### Presença: quem está de fato com a tela aberta
+
+Disponível de verdade exige **três** condições, e as três significam coisas diferentes:
+
+| campo | o que é | quem decide |
+|---|---|---|
+| `atende` | recebe fila | quem administra, em Usuários |
+| `disponivel` | **intenção** agora (o botão) | o próprio atendente |
+| `visto_em` | **presença** de fato | ninguém — é carimbado automaticamente |
+
+Sem a terceira, quem fechasse o navegador sem clicar em "ausente" continuaria recebendo
+transferência, e o agente prometeria uma pessoa que não está lá. E intenção esquecida ligada
+é o **padrão**, não a exceção: ninguém lembra de se desligar ao ir embora.
+
+O batimento sai de graça de um mecanismo que já existia: a tela de atendimento consulta o
+servidor a cada 4 segundos, e cada consulta carimba `visto_em`. Não há timer novo nem
+requisição extra. Quem fecha a aba para de bater e some da fila em `PRESENCA_JANELA_SEG`
+(padrão 120s — generoso de propósito, porque o navegador estrangula temporizadores em aba de
+fundo, e uma janela curta derrubaria quem apenas minimizou).
+
+Intenção desligada **vence** presença: dá para ficar com a tela aberta e marcar-se ausente
+para almoçar. O contrário não vale.
+
+**Conversa órfã.** O atendente que fecha o navegador no meio de um atendimento levaria a
+conversa junto — ela ficaria dele para sempre, com o visitante esperando uma resposta que não
+vem de ninguém. Passados `PRESENCA_ORFA_MIN` sem batimento, ela volta para `aguardando`. O
+visitante vê o mesmo aviso neutro do repasse comum; que alguém sumiu é nota interna.
+
+Ordem que importa: a tela **bate ponto antes** de rodar as varreduras. Fora de ordem,
+`resgatarOrfas()` acharia que quem está abrindo a tela sumiu, e devolveria à fila a conversa
+da própria pessoa que está olhando para ela.
+
 ### Os relógios
 
 Quatro prazos, todos no `.env` porque são operacionais e mudam de cliente para cliente:

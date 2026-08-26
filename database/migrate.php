@@ -56,6 +56,7 @@ function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
 // mexeu no valor, para não desfazer calibragem feita à mão.
 garantir_colunas($pdo, 'admin_users', ['papel' => "TEXT NOT NULL DEFAULT 'admin'"]);
 garantir_colunas($pdo, 'agentes', ['modo' => "TEXT NOT NULL DEFAULT 'ia'"]);
+garantir_colunas($pdo, 'admin_users', ['visto_em' => 'TEXT']);
 garantir_colunas($pdo, 'agentes', ['idioma' => "TEXT NOT NULL DEFAULT 'pt-BR'"]);
 garantir_colunas($pdo, 'config', ['anonimizacao_conversas_dias' => 'INTEGER NOT NULL DEFAULT 0']);
 garantir_colunas($pdo, 'canais', ['retencao_dias' => 'INTEGER NOT NULL DEFAULT 0']);

@@ -113,6 +113,15 @@ define('INATIVIDADE_HUMANO_MIN', (int) ($env['INATIVIDADE_HUMANO_MIN'] ?? 30));
 // e escrever, reabrirSeEncerrada() retoma.
 define('INATIVIDADE_BOT_MIN', (int) ($env['INATIVIDADE_BOT_MIN'] ?? 60));
 
+// Presenca do atendente: quanto tempo sem batimento ate ele sumir da fila.
+// Generoso de proposito — o navegador estrangula temporizadores em aba de
+// fundo, e o painel consulta a cada 4s. Uma janela curta derrubaria quem
+// apenas minimizou a janela.
+define('PRESENCA_JANELA_SEG', (int) ($env['PRESENCA_JANELA_SEG'] ?? 120));
+
+// Conversa presa com quem sumiu volta para a fila depois disto.
+define('PRESENCA_ORFA_MIN', (int) ($env['PRESENCA_ORFA_MIN'] ?? 3));
+
 // ---------------------------------------------------------------------
 // Guarda da camada de ferramentas HTTP
 //

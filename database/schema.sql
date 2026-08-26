@@ -63,6 +63,11 @@ CREATE TABLE IF NOT EXISTS admin_users (
     setor_id            INTEGER REFERENCES setores (id) ON DELETE SET NULL,
     atende              INTEGER NOT NULL DEFAULT 0,
     disponivel          INTEGER NOT NULL DEFAULT 0,
+    -- Presenca automatica: carimbada pelo painel a cada consulta. `disponivel`
+    -- sozinho e INTENCAO, e intencao esquecida ligada faz o agente transferir
+    -- para uma sala vazia. Disponivel de verdade = atende + disponivel +
+    -- visto_em recente.
+    visto_em            TEXT,
     reset_token_hash    TEXT,
     reset_expira        TEXT,
     criado_em           TEXT NOT NULL,
