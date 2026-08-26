@@ -237,7 +237,10 @@ final class CanalPublico
     {
         return $estado === 'minuto'
             ? 'Vamos com calma — me dê um instante para acompanhar. Pode repetir sua pergunta em alguns segundos?'
-            : 'Conversamos bastante hoje! Se ainda ficou dúvida, deixe seu contato que alguém retorna.';
+            // Sem promessa de captar contato: esta frase só aparece quando NÃO
+            // há setor cadastrado, ou seja, quando não existe caminho nenhum.
+            // Prometer o que não se cumpre foi exatamente o beco anterior.
+            : 'Conversamos bastante hoje e preciso dar uma pausa por aqui. Tente novamente amanhã.';
     }
 
     public function saudacao(): string

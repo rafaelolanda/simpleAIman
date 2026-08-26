@@ -6,6 +6,8 @@ namespace SimpleAIman\Atendimento;
 
 use Database;
 use PDO;
+use SimpleAIman\Tools\LeadTool;
+use Throwable;
 
 /**
  * Atendimento sem IA: menu de setores, contato e fila.
@@ -53,12 +55,32 @@ final class Roteador
      *                          roteador entra como degradação, para a pessoa
      *                          entender por que o tom mudou)
      */
-    public static function responder(int $conversaId, string $entrada, string $preambulo = ''): string
-    {
+    public static function responder(
+        int $conversaId,
+        string $entrada,
+        string $preambulo = '',
+        bool $captarContato = false,
+    ): string {
+        // Captação vem ANTES de tudo, e só quando foi oferecida.
+        //
+        // Não é opcional por preciosismo: gravar e-mail ou telefone de quem não
+        // ofereceu é coletar dado pessoal sem pedido. Quem chama com `true` é
+        // quem acabou de dizer "deixe seu contato" — a permissão vem do
+        // convite, não do formato do texto.
+        if ($captarContato) {
+            $contato = self::extrairContato($entrada);
+
+            if ($contato !== null) {
+                return self::registrarContato($conversaId, $contato);
+            }
+        }
+
         $setores = self::setores();
 
         if ($setores === []) {
-            return 'No momento não consigo encaminhar seu atendimento. Tente novamente mais tarde.';
+            return $captarContato
+                ? 'Deixe seu e-mail ou telefone que alguém retorna assim que possível.'
+                : 'No momento não consigo encaminhar seu atendimento. Tente novamente mais tarde.';
         }
 
         $chave = self::normalizar($entrada);
@@ -183,6 +205,60 @@ final class Roteador
                 array_slice($setores, 0, 5)
             ))
             . "\n\nDigite *MENU* para ver todos os assuntos.";
+    }
+
+    /**
+     * E-mail ou telefone dentro de uma frase.
+     *
+     * Deliberadamente tolerante: a pessoa escreve "pode ser 55 99999-8888" ou
+     * "meu email eh joao@x.com", não preenche um formulário. Exigir formato
+     * exato aqui devolveria o menu para quem acabou de fazer o que pedimos.
+     *
+     * @return array{email?: string, telefone?: string}|null
+     */
+    private static function extrairContato(string $texto): ?array
+    {
+        $achado = [];
+
+        if (preg_match('/[\w.+-]+@[\w-]+\.[\w.-]{2,}/u', $texto, $m)) {
+            $achado['email'] = rtrim($m[0], '.');
+        }
+
+        // Telefone brasileiro com DDD, com ou sem separadores. O corte em 10
+        // dígitos evita confundir com CEP, protocolo ou ano.
+        $digitos = preg_replace('/\D+/', '', $texto) ?? '';
+
+        if (strlen($digitos) >= 10 && strlen($digitos) <= 13) {
+            $achado['telefone'] = $digitos;
+        }
+
+        return $achado === [] ? null : $achado;
+    }
+
+    /** @param array{email?: string, telefone?: string} $contato */
+    private static function registrarContato(int $conversaId, array $contato): string
+    {
+        $agenteId = (int) (Database::connection()
+            ->query('SELECT agente_id FROM conversas WHERE id = ' . $conversaId)
+            ->fetchColumn() ?: 0);
+
+        try {
+            // Reaproveita a captação de sempre: mesma tabela, mesma entrega ao
+            // CRM com retry e dead letter. Um caminho paralelo só para este
+            // caso seria um segundo lugar de onde lead some sem ninguém saber.
+            (new LeadTool($conversaId, $agenteId))->registrar($contato);
+        } catch (Throwable $e) {
+            error_log('[simpleAIman] captacao pelo roteador falhou: ' . $e->getMessage());
+
+            return 'Não consegui registrar agora. Se puder, use um dos contatos abaixo — '
+                . 'digite *MENU* para vê-los.';
+        }
+
+        return implode("\n", [
+            'Pronto, anotei seu contato! Alguém retorna assim que possível.',
+            '',
+            'Se preferir falar agora, digite *MENU* para ver os contatos diretos.',
+        ]);
     }
 
     /** @return list<array<string, mixed>> */

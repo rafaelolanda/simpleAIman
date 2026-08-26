@@ -376,6 +376,30 @@ ao modelo, que engoliria a instrução de parar, e ele tentaria de novo. E a rec
 texto acionável ("responda agora com o que já foi obtido"), não erro — "falhou" o faria
 tentar outra ferramenta. Fica registrada como `recusado`, para auditoria.
 
+### Limite de uso: enxurrada e gasto são coisas diferentes
+
+O canal tem dois tetos, e eles pedem tratamentos opostos:
+
+- **Por minuto** é proteção de **carga**. Corta seco: fazer qualquer trabalho ali derrotaria
+  a proteção, que existe justamente para quem (ou o que) está batendo sem parar.
+- **Por dia** é proteção de **gasto** — do provedor de LLM. Cortar seco criava um beco sem
+  saída: a mensagem dizia "deixe seu contato que alguém retorna" e não havia caminho nenhum
+  para deixar. A pessoa repetia e recebia a mesma frase.
+
+Batendo a cota do dia, a conversa passa ao **roteador**, que é PHP e banco — nada toca o
+provedor, então o teto de gasto continua respeitado. Ela vê os contatos dos setores, e o
+contato que deixar é **registrado de verdade**, pela mesma captação de sempre (`leads` +
+`lead_destinos`, com retry e dead letter). Sem caminho paralelo: um segundo lugar de onde
+lead some sem ninguém saber seria pior que o beco.
+
+**A captação só ocorre quando foi oferecida.** `Roteador::responder()` recebe
+`captarContato: true` de quem acabou de convidar. Gravar e-mail ou telefone de quem
+simplesmente escreveu um endereço no meio de outra conversa seria coletar dado pessoal sem
+pedido — a permissão vem do convite, não do formato do texto.
+
+E quando não há setor nenhum cadastrado, a frase volta a ser honesta: *"tente novamente
+amanhã"*, sem prometer contato que ninguém vai recolher.
+
 ### Busca na web com domínio restrito
 
 Não precisa de tipo novo: o tipo `http` já resolve, e a restrição é **estrutural**. O template

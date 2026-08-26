@@ -19,6 +19,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../app/bootstrap.php';
 
 use SimpleAIman\Atendimento\Fila;
+use SimpleAIman\Atendimento\Roteador;
 use SimpleAIman\Canais\CanalPublico;
 use SimpleAIman\Http\Sse;
 use SimpleAIman\Llm\ChatService;
@@ -177,10 +178,42 @@ $ip = client_ip();
 // a proteção contra enxurrada continua.
 $limite = $canal->estadoDoLimite($ip, $canal->modoDoAgente() === 'roteador');
 
-if ($limite !== 'ok') {
-    // Sai ANTES de tocar no provedor: o limite não serve para nada se a
-    // chamada cara já tiver acontecido.
-    Sse::falhar(CanalPublico::mensagemDeLimite($limite));
+// Enxurrada: corta seco. Fazer qualquer trabalho aqui derrotaria a proteção,
+// que existe justamente para o caso de alguém (ou algo) batendo sem parar.
+if ($limite === 'minuto') {
+    Sse::falhar(CanalPublico::mensagemDeLimite('minuto'));
+}
+
+// Cota do dia: é proteção de GASTO, não de carga. Cortar seco criava um beco
+// sem saída — a mensagem dizia "deixe seu contato que alguém retorna" e não
+// havia caminho nenhum para deixar. A pessoa repetia, e recebia a mesma frase.
+//
+// Daqui em diante nada toca o provedor: o roteador é PHP e banco. Ela ainda
+// chega aos contatos dos setores, e o contato que deixar é registrado de
+// verdade, pela mesma captação de sempre.
+if ($limite === 'dia') {
+    $stmt = Database::connection()->prepare(
+        'SELECT id FROM conversas WHERE canal_id = :canal AND externo_id = :externo ORDER BY id DESC LIMIT 1'
+    );
+    $stmt->execute(['canal' => (int) $canal->canal['id'], 'externo' => 'web-' . $sessao]);
+    $conversaId = (int) ($stmt->fetchColumn() ?: 0);
+
+    if ($conversaId > 0) {
+        Sse::evento('inicio', ['conversa' => $conversaId]);
+
+        $texto = Roteador::responder(
+            $conversaId,
+            $pergunta,
+            'Conversamos bastante hoje e preciso dar uma pausa por aqui. Mas posso te encaminhar:',
+            captarContato: true,
+        );
+
+        Sse::evento('pedaco', ['texto' => $texto]);
+        Sse::evento('fim', ['latencia' => 0, 'html' => formatar_whatsapp($texto)]);
+        exit;
+    }
+
+    Sse::falhar(CanalPublico::mensagemDeLimite('dia'));
 }
 
 $inicio = microtime(true);
