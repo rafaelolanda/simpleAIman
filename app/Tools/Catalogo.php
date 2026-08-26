@@ -96,6 +96,41 @@ final class Catalogo
                 ],
             ],
 
+            'busca_web' => [
+                'nome' => 'Busca na web (domínio restrito)',
+                'slug' => 'busca_web',
+                // Tipo `http`: não é embutida de verdade, é um MODELO de
+                // chamada externa já montado. A restrição de domínio mora no
+                // template, que o modelo não alcança — ele só preenche o termo,
+                // e o valor vai percent-encoded. Não é instrução que ele possa
+                // ignorar; é estrutura.
+                'tipo' => 'http',
+                'efeito' => 'leitura',
+                'resumo' => 'Procura no site da instituição por um buscador externo. Exige chave de API.',
+                'descricao_llm' =>
+                    'Procura páginas públicas do site da instituição. Use quando a pergunta for sobre '
+                    . 'algo que muda com frequência — edital recém-publicado, notícia, data de evento — '
+                    . 'e que provavelmente não está nos documentos já carregados. Para assunto estável '
+                    . '(regras, cursos, procedimentos), prefira os documentos: eles são mais confiáveis '
+                    . 'e você pode citar a fonte. Cite o link dos resultados que usar.',
+                'http' => [
+                    'metodo' => 'GET',
+                    // TROQUE `SEUDOMINIO.COM.BR`. O `site:` fica FORA do
+                    // alcance do modelo de propósito.
+                    'url_template' => 'https://api.search.brave.com/res/v1/web/search'
+                        . '?q=site%3ASEUDOMINIO.COM.BR+{{params.termo}}&count=5',
+                    // O segredo entra por referência ao .env, nunca literal.
+                    'headers' => '{"Accept":"application/json","X-Subscription-Token":"{{env.BUSCA_API_KEY}}"}',
+                    'auth_tipo' => 'none',
+                    'timeout_ms' => 8000,
+                    'resposta_caminho' => 'web.results',
+                ],
+                'parametros' => [
+                    ['nome' => 'termo', 'tipo' => 'string', 'obrigatorio' => 1,
+                     'descricao' => 'Palavras-chave da busca. Só os termos, sem "site:" nem operadores.'],
+                ],
+            ],
+
             'lead' => [
                 'nome' => 'Registrar contato (lead)',
                 'slug' => 'registrar_lead',
@@ -118,11 +153,34 @@ final class Catalogo
         ];
     }
 
-    /** Já existe alguma ferramenta deste tipo embutido? */
-    public static function jaExiste(string $tipo): bool
+    /**
+     * Este modelo já foi instanciado?
+     *
+     * A pergunta é diferente conforme o modelo:
+     *
+     * - **Embutida** (`contato_setor`, `lead`…): identidade é o TIPO. Duas
+     *   ferramentas de contato de setor na mesma instância não fazem sentido.
+     * - **Modelo `http`** (busca web): identidade é o SLUG. Comparar por tipo
+     *   diria "já criada" só porque existe alguma outra chamada externa
+     *   configurada, que não tem relação nenhuma.
+     */
+    public static function jaExiste(string $chave): bool
     {
-        $stmt = Database::connection()->prepare('SELECT 1 FROM ferramentas WHERE tipo = :t LIMIT 1');
-        $stmt->execute(['t' => $tipo]);
+        $modelo = self::embutidas()[$chave] ?? null;
+
+        if ($modelo === null) {
+            return false;
+        }
+
+        $pdo = Database::connection();
+
+        if (($modelo['tipo'] ?? $chave) === 'http') {
+            $stmt = $pdo->prepare('SELECT 1 FROM ferramentas WHERE slug LIKE :s LIMIT 1');
+            $stmt->execute(['s' => $modelo['slug'] . '%']);
+        } else {
+            $stmt = $pdo->prepare('SELECT 1 FROM ferramentas WHERE tipo = :t LIMIT 1');
+            $stmt->execute(['t' => $chave]);
+        }
 
         return (bool) $stmt->fetchColumn();
     }
@@ -146,15 +204,36 @@ final class Catalogo
         $agora = now();
         $slug = self::slugLivre($modelo['slug']);
 
+        // Modelos do tipo `http` trazem a chamada inteira pré-montada. É o que
+        // transforma "descubra a sintaxe do template e do provedor" em "troque
+        // o domínio e ponha a chave no .env".
+        $http = $modelo['http'] ?? [];
+
         $pdo->prepare(
-            'INSERT INTO ferramentas (slug, nome, descricao_llm, tipo, efeito, ativo, criado_em, editado_em)
-             VALUES (:slug, :nome, :descricao, :tipo, :efeito, 1, :agora, :agora)'
+            'INSERT INTO ferramentas
+                (slug, nome, descricao_llm, tipo, efeito, ativo,
+                 metodo, url_template, headers, corpo_template,
+                 auth_tipo, auth_ref, timeout_ms, resposta_caminho,
+                 criado_em, editado_em)
+             VALUES
+                (:slug, :nome, :descricao, :tipo, :efeito, 1,
+                 :metodo, :url, :headers, :corpo,
+                 :auth_tipo, :auth_ref, :timeout, :caminho,
+                 :agora, :agora)'
         )->execute([
             'slug' => $slug,
             'nome' => $modelo['nome'],
             'descricao' => $modelo['descricao_llm'],
-            'tipo' => $tipo,
+            'tipo' => $modelo['tipo'] ?? $tipo,
             'efeito' => $modelo['efeito'],
+            'metodo' => $http['metodo'] ?? 'GET',
+            'url' => $http['url_template'] ?? null,
+            'headers' => $http['headers'] ?? null,
+            'corpo' => $http['corpo_template'] ?? null,
+            'auth_tipo' => $http['auth_tipo'] ?? 'none',
+            'auth_ref' => $http['auth_ref'] ?? null,
+            'timeout' => $http['timeout_ms'] ?? null,
+            'caminho' => $http['resposta_caminho'] ?? null,
             'agora' => $agora,
         ]);
 
@@ -211,10 +290,18 @@ final class Catalogo
     {
         $criadas = [];
 
-        foreach (array_keys(self::embutidas()) as $tipo) {
-            if (!self::jaExiste($tipo)) {
-                self::instanciar($tipo);
-                $criadas[] = $tipo;
+        foreach (self::embutidas() as $chave => $modelo) {
+            // Modelos `http` ficam de fora da semeadura: eles precisam de chave
+            // de API e de um domínio editado à mão. Criados na instalação,
+            // nasceriam quebrados — e ferramenta quebrada visível é pior que
+            // ferramenta ausente, porque o agente tenta usar.
+            if (($modelo['tipo'] ?? $chave) === 'http') {
+                continue;
+            }
+
+            if (!self::jaExiste($chave)) {
+                self::instanciar($chave);
+                $criadas[] = $chave;
             }
         }
 

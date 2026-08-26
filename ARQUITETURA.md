@@ -365,6 +365,47 @@ worker (cron 1–5min + kick após upload)
 
 ---
 
+### Teto de ferramentas por turno
+
+`agentes.max_iteracoes_tool` limita quantas ferramentas o modelo executa numa mesma resposta.
+Cada volta do laço é uma **chamada nova ao provedor**, com o histórico inteiro — é onde o
+crédito some sem ninguém notar.
+
+A checagem fica **fora** do `try` do `Executor`: o `catch` devolve uma frase neutra e genérica
+ao modelo, que engoliria a instrução de parar, e ele tentaria de novo. E a recusa devolve
+texto acionável ("responda agora com o que já foi obtido"), não erro — "falhou" o faria
+tentar outra ferramenta. Fica registrada como `recusado`, para auditoria.
+
+### Busca na web com domínio restrito
+
+Não precisa de tipo novo: o tipo `http` já resolve, e a restrição é **estrutural**. O template
+é fixo pelo admin e o modelo só preenche parâmetros declarados, com o valor percent-encoded —
+ele não alcança o `site:` nem consegue injetar `&` ou `/` para sair da query string.
+
+```
+https://api.search.brave.com/res/v1/web/search?q=site%3ASEUDOMINIO.COM.BR+{{params.termo}}&count=5
+```
+
+O catálogo traz esse modelo pronto (`busca_web`), com cabeçalho, `resposta_caminho` e
+parâmetro preenchidos. Falta trocar o domínio e pôr a chave em `BUSCA_API_KEY`.
+
+Dois limites conhecidos, que valem saber antes de confiar:
+
+- A restrição depende do **provedor honrar o `site:`**. É promessa dele, não garantia nossa.
+  Filtrar os domínios das URLs devolvidas seria a nossa camada, e ainda não existe.
+- A resposta é JSON verboso. `resposta_caminho` extrai o array, mas cada item traz muitos
+  campos, e tudo isso vira contexto — cobrado em toda chamada seguinte do turno.
+
+**Para conteúdo estável, ingerir como artefato ganha da busca ao vivo**: o RAG chunka, embedda
+e cita a fonte, enquanto a busca custa uma ida e volta a mais e devolve texto sem
+ranqueamento semântico. Busca ao vivo vence só para o que muda toda hora — edital de ontem,
+vaga, preço.
+
+> **Pendência conhecida:** `auth_tipo` oferece `header` e `query` no formulário, mas o
+> `HttpTool` só implementa `bearer` e `basic` — os outros dois caem no `default` e não fazem
+> nada. Quem precisa de cabeçalho próprio (como o `X-Subscription-Token` do Brave) usa
+> `auth_tipo = none` e põe `{{env.NOME}}` no cabeçalho, que funciona.
+
 ### Embutidas são código, mas precisam virar linha
 
 `contato_setor`, `transferir_atendimento`, `abrir_chamado` e `lead` existem como classes,
