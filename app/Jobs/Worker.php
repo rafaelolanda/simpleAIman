@@ -6,6 +6,8 @@ namespace SimpleAIman\Jobs;
 
 use Database;
 use SimpleAIman\Atendimento\Fila;
+use SimpleAIman\Canais\CanalWhatsapp;
+use SimpleAIman\Llm\ChatService;
 use SimpleAIman\Llm\ErroAgente;
 use SimpleAIman\Rag\Ingestor;
 use Throwable;
@@ -142,6 +144,7 @@ final class Worker
                 'ingestao' => $this->ingerir($job, $log),
                 'entrega_lead' => $this->entregarLead($job, $log),
                 'retencao' => $this->aplicarRetencao($job, $log),
+                'entrada_whatsapp' => $this->responderWhatsapp($job, $log),
                 default => throw new \RuntimeException("Tipo de job desconhecido: {$job['tipo']}"),
             };
         } catch (ErroAgente $e) {
@@ -271,6 +274,66 @@ final class Worker
     }
 
     /** @param array<string, mixed> $job */
+    /**
+     * Um turno de conversa vindo do WhatsApp.
+     *
+     * Roda aqui, e não no webhook, porque a Meta espera 200 em segundos e
+     * reenvia se demorar — e reenvio vira resposta duplicada para a pessoa.
+     * A LLM leva o tempo que leva; o webhook não pode esperar por ela.
+     *
+     * @param array<string, mixed> $job
+     */
+    private function responderWhatsapp(array $job, callable $log): string
+    {
+        // O payload já chega decodificado — a fila faz isso para todos os
+        // handlers, como em `ingerir()` e `entregarLead()`.
+        $dados = is_array($job['payload'] ?? null) ? $job['payload'] : [];
+
+        $canalId = (int) ($dados['canal_id'] ?? 0);
+
+        // O canal vem pelo id que o webhook gravou, não por uma variável fixa:
+        // uma instalação pode ter mais de um número, cada um com seu prefixo
+        // de credenciais e seu agente.
+        $canal = CanalWhatsapp::porId($canalId);
+        $de = (string) ($dados['de'] ?? '');
+
+        if ($canal === null || $de === '') {
+            return 'canal do WhatsApp não configurado; mensagem descartada.';
+        }
+
+        $svc = ChatService::paraAgente($canal->agenteId());
+        $conversa = $svc->conversa($canalId, $de, null);
+
+        // Mídia ainda não é tratada. Ficar em silêncio faria a pessoa achar
+        // que a mensagem sumiu — pior que dizer que não sabemos ler.
+        if (($dados['tipo'] ?? 'text') !== 'text' || trim((string) $dados['texto']) === '') {
+            $aviso = 'Por enquanto consigo ler apenas mensagens de texto. Pode escrever o que precisa?';
+            $svc->gravarMensagem($conversa, 'bot', $aviso);
+            $canal->enviar($de, $aviso);
+
+            return 'mídia recebida na conversa ' . $conversa . '; respondido com aviso.';
+        }
+
+        $texto = (string) $dados['texto'];
+
+        \SimpleAIman\Atendimento\Fila::reabrirSeEncerrada($conversa);
+
+        // Conversa em atendimento humano: grava e cala. Quem responde é a
+        // pessoa, pelo painel — e a resposta dela sai por `Saida::entregar()`.
+        if (!$svc->botDeveResponder($conversa)) {
+            $svc->gravarMensagem($conversa, 'usuario', $texto);
+
+            return 'conversa ' . $conversa . ' está com atendente; mensagem apenas registrada.';
+        }
+
+        $resposta = $svc->responder($conversa, $texto);
+        $canal->enviar($de, $resposta);
+
+        $log('whatsapp: respondido na conversa ' . $conversa . '.');
+
+        return 'respondido na conversa ' . $conversa . '.';
+    }
+
     private function marcarArtefatoComErro(array $job, string $erro): void
     {
         $artefatoId = (int) ($job['payload']['artefato_id'] ?? 0);

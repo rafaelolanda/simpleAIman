@@ -629,6 +629,10 @@ final class Fila
     public static function registrarAviso(int $conversaId, string $texto): void
     {
         self::gravar($conversaId, 'aviso', $texto, null);
+
+        // Aviso é visível ao visitante, então também precisa ser entregue —
+        // "Fulano entrou na conversa" só faz sentido se a pessoa receber.
+        \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
     }
 
     /**
@@ -645,9 +649,22 @@ final class Fila
         return self::gravar($conversaId, 'nota', $texto, $atendenteId);
     }
 
+    /**
+     * Fala do atendente: grava e ENTREGA.
+     *
+     * Gravar não basta em todo canal. No widget o navegador consulta e a
+     * mensagem aparece sozinha; no WhatsApp ninguém consulta — sem o empurrão,
+     * a resposta existe no banco e não no telefone da pessoa. E o atendente vê
+     * a própria mensagem na tela e acha que respondeu, que é a pior forma de
+     * falhar.
+     */
     public static function registrarAtendente(int $conversaId, int $atendenteId, string $texto): int
     {
-        return self::gravar($conversaId, 'atendente', $texto, $atendenteId);
+        $id = self::gravar($conversaId, 'atendente', $texto, $atendenteId);
+
+        \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
+
+        return $id;
     }
 
     // -----------------------------------------------------------------

@@ -1005,6 +1005,64 @@ máquina de mídia que o WhatsApp vai exigir, que é outro problema.
 - No Chrome o áudio é transcrito nos servidores do Google. É o navegador da pessoa e a
   escolha é dela ao apertar o botão, mas convém saber, porque a pergunta aparece.
 
+## 10.3 Canal WhatsApp (Cloud API)
+
+Duas diferenças em relação ao widget mandam no desenho inteiro:
+
+**A Meta exige 200 em segundos.** O webhook não pode esperar a LLM: valida, enfileira e
+responde. Quem conversa é o worker, depois, e a resposta sai pela API de envio. Demorar faz a
+Meta reenviar o evento — e reenvio vira **resposta duplicada** para a pessoa.
+
+**Sem streaming.** A mensagem sai inteira. É para isso que `ChatService::responder()` existe
+ao lado de `stream()` desde o começo: mesmo pipeline, transportes diferentes.
+
+### Segurança do webhook
+
+O endpoint é público, e a **assinatura é a única prova de origem**. Sem conferir o
+`X-Hub-Signature-256` (HMAC-SHA256 do corpo cru com o *app secret*), qualquer um injeta
+mensagem falsa e faz o agente responder a quem quiser, gastando a conta do cliente.
+
+Canal desconhecido e assinatura inválida devolvem o **mesmo 403** — distinguir contaria a
+quem sonda quais números existem na instalação. Mesma regra do canal público.
+
+O corpo precisa ser lido **cru** (`php://input`) e conferido **antes** de qualquer
+interpretação: assinar o JSON reserializado dá outro hash.
+
+### Credenciais
+
+`canais.credenciais_ref` guarda um **prefixo** (ex.: `WHATSAPP`), e daí saem
+`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_APP_SECRET` e
+`WHATSAPP_VERIFY_TOKEN`. O prefixo permite mais de um número na mesma instalação sem inventar
+tabela de segredo — e cada número pode ter seu agente.
+
+O canal é identificado pelo `phone_number_id` de **destino** que a Meta manda no evento, não
+pelo remetente.
+
+### `Canais\Saida` — o empurrão que o widget não precisa
+
+Os canais puxam e empurram de formas opostas:
+
+| | como a mensagem chega ao visitante |
+|---|---|
+| widget web | o navegador consulta a cada 4s — **gravar já é entregar** |
+| WhatsApp | ninguém consulta — sem envio, a resposta fica só no banco |
+
+Sem esse despachante, o painel do atendente funcionaria no web e **falharia em silêncio** no
+WhatsApp: o atendente vê a própria mensagem na tela e acha que respondeu. Por isso
+`registrarAtendente()` e `registrarAviso()` entregam, não só gravam.
+
+### Limites conhecidos
+
+- **Só texto.** Áudio, imagem e documento recebem uma resposta dizendo isso — ficar em
+  silêncio faria a pessoa achar que a mensagem sumiu. A máquina de mídia é o próximo passo.
+- **Janela de 24h.** Fora dela a Meta recusa texto livre; só template aprovado. `Saida`
+  verifica antes de tentar e registra o motivo, em vez de receber um erro que ninguém liga à
+  causa.
+- **Sem deduplicação por `wamid`.** A Meta reenvia eventos, e hoje nada impede que um reenvio
+  vire segunda resposta. Precisa de uma coluna para guardar o id da mensagem recebida.
+
+---
+
 ## 11. Armadilhas conhecidas
 
 **PDO liga inteiro como TEXTO, e no SQLite todo TEXT é maior que todo número.**
