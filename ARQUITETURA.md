@@ -388,6 +388,37 @@ mão da configurabilidade:
 
 ---
 
+### Modo roteador: atendimento sem IA
+
+`agentes.modo` vale `ia` ou `roteador`. Em `roteador`, o `ChatService` **não chama o provedor
+nenhuma vez** — sai antes da FAQ e do RAG, que também não fazem sentido sem chave de API.
+O menu é montado da tabela `setores`, que já existia como espinha de roteamento.
+
+Serve a três situações com a mesma máquina:
+
+1. **Cliente que não quer pagar LLM.** Um "fale conosco" com roteamento resolve muita gente.
+2. **Degradação quando o provedor cai.** Sem isso, um `429` de cota encerra a conversa com
+   "não consegui responder agora" e a pessoa fica sem nada — justamente quando mais precisava
+   de um caminho. É o ganho maior, e o que menos se pensa antes de acontecer.
+3. **Caminho de adoção.** Começa como roteador, liga a IA depois.
+
+**Menu numerado, não botões**: número funciona igual no widget e no WhatsApp, sem interface
+nova nem mensagem interativa da Meta.
+
+**Sem estado.** Cada mensagem é interpretada sozinha — número escolhe setor, palavra-chave
+dispara ação (`ATENDENTE`, `MENU`), o resto mostra a lista. Guardar "em que passo a pessoa
+está" exigiria coluna e quebraria no instante em que ela digitasse fora de ordem, que é o que
+as pessoas fazem.
+
+**Funciona com zero atendentes.** Telefone, e-mail e horário são dados nossos e não dependem
+de ninguém online; a opção `ATENDENTE` só aparece quando há alguém, e quem digitar assim mesmo
+recebe os contatos. É a regra de sempre: não se promete o que não se pode cumprir.
+
+A degradação não acontece se **parte da resposta já saiu** — emendar um menu no meio de um
+texto que o visitante está lendo confunde mais que o erro.
+
+---
+
 ## 7. Segurança
 
 ### Camada `http` (maior superfície do projeto)

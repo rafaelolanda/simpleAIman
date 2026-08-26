@@ -1,0 +1,241 @@
+<?php
+
+declare(strict_types=1);
+
+namespace SimpleAIman\Atendimento;
+
+use Database;
+use PDO;
+
+/**
+ * Atendimento sem IA: menu de setores, contato e fila.
+ *
+ * Serve a três situações diferentes, e é a mesma máquina nas três:
+ *
+ *  1. **Cliente que não quer pagar LLM.** Um "fale conosco" com roteamento
+ *     resolve muita gente, e agente em `modo = 'roteador'` não chama provedor
+ *     nenhuma vez — não precisa nem de chave de API.
+ *  2. **Degradação quando o provedor cai.** Sem isto, provedor fora do ar
+ *     significa "não consegui responder agora" e a conversa morre ali. Com o
+ *     menu, a pessoa ainda chega a quem resolve. Este é o ganho maior, e o que
+ *     menos se pensa antes de acontecer.
+ *  3. **Caminho de adoção.** Começa como roteador, liga a IA depois.
+ *
+ * **Menu numerado, e não botões**: número funciona igual no widget e no
+ * WhatsApp, sem interface nova nem mensagem interativa da Meta.
+ *
+ * **Sem estado.** Cada mensagem é interpretada sozinha — número escolhe setor,
+ * palavra-chave dispara ação, o resto mostra o menu. Guardar "em que passo a
+ * pessoa está" exigiria coluna, e quebraria assim que ela digitasse algo fora
+ * de ordem, que é o que as pessoas fazem.
+ */
+final class Roteador
+{
+    private const PALAVRAS_ATENDENTE = ['atendente', 'humano', 'pessoa', 'alguem', 'falar com alguem'];
+    private const PALAVRAS_MENU = ['menu', 'voltar', 'opcoes', 'inicio', 'ajuda'];
+
+    /**
+     * Há material para montar um menu?
+     *
+     * Sem setor ativo não há para onde rotear, e um menu vazio é pior que a
+     * mensagem de erro honesta. É esta checagem que decide se a degradação por
+     * falha do provedor vale a pena.
+     */
+    public static function temMenu(): bool
+    {
+        return self::setores() !== [];
+    }
+
+    /**
+     * Responde uma entrada do visitante.
+     *
+     * @param string $preambulo texto opcional antes do menu (usado quando o
+     *                          roteador entra como degradação, para a pessoa
+     *                          entender por que o tom mudou)
+     */
+    public static function responder(int $conversaId, string $entrada, string $preambulo = ''): string
+    {
+        $setores = self::setores();
+
+        if ($setores === []) {
+            return 'No momento não consigo encaminhar seu atendimento. Tente novamente mais tarde.';
+        }
+
+        $chave = self::normalizar($entrada);
+
+        // Pedido explícito de gente vem antes de tudo: quem digitou
+        // "atendente" não quer ver menu.
+        if (self::contem($chave, self::PALAVRAS_ATENDENTE)) {
+            return self::transferir($conversaId, $setores);
+        }
+
+        if (self::contem($chave, self::PALAVRAS_MENU)) {
+            return self::menu($setores, $preambulo);
+        }
+
+        // Número da lista.
+        if (preg_match('/^\D*(\d{1,2})\D*$/', $chave, $m)) {
+            $indice = (int) $m[1] - 1;
+
+            if (isset($setores[$indice])) {
+                return self::fichaDoSetor($setores[$indice], $setores);
+            }
+        }
+
+        return self::menu($setores, $preambulo);
+    }
+
+    /**
+     * Saudação + lista numerada.
+     *
+     * @param list<array<string, mixed>> $setores
+     */
+    private static function menu(array $setores, string $preambulo = ''): string
+    {
+        $linhas = [];
+
+        if ($preambulo !== '') {
+            $linhas[] = $preambulo;
+            $linhas[] = '';
+        }
+
+        $linhas[] = 'Escolha o assunto digitando o *número* correspondente:';
+        $linhas[] = '';
+
+        foreach ($setores as $i => $s) {
+            $rotulo = '*' . ($i + 1) . '* · ' . $s['nome'];
+
+            // A descrição que orienta o modelo serve igualmente para orientar
+            // a pessoa — é a mesma pergunta ("o que este setor resolve?").
+            if (trim((string) $s['descricao_llm']) !== '') {
+                $rotulo .= ' — ' . self::resumir((string) $s['descricao_llm']);
+            }
+
+            $linhas[] = $rotulo;
+        }
+
+        if (Fila::haDisponivel()) {
+            $linhas[] = '';
+            $linhas[] = 'Ou digite *ATENDENTE* para falar com uma pessoa agora.';
+        }
+
+        return implode("\n", $linhas);
+    }
+
+    /**
+     * Contatos de um setor.
+     *
+     * @param array<string, mixed> $setor
+     * @param list<array<string, mixed>> $setores
+     */
+    private static function fichaDoSetor(array $setor, array $setores): string
+    {
+        $linhas = ['*' . $setor['nome'] . '*'];
+
+        if (trim((string) $setor['descricao_llm']) !== '') {
+            $linhas[] = self::resumir((string) $setor['descricao_llm']);
+        }
+
+        $linhas[] = '';
+
+        $contatos = array_filter([
+            $setor['telefone'] ? '📞 ' . $setor['telefone'] . ($setor['ramal'] ? ' (ramal ' . $setor['ramal'] . ')' : '') : null,
+            $setor['whatsapp'] ? '💬 ' . whatsapp_url((string) $setor['whatsapp'], 'Olá! Vim pelo atendimento virtual.') : null,
+            $setor['email'] ? '✉️ ' . $setor['email'] : null,
+            $setor['horario_atendimento'] ? '🕐 ' . $setor['horario_atendimento'] : null,
+            $setor['local'] ? '📍 ' . $setor['local'] : null,
+        ]);
+
+        // Setor sem contato nenhum não pode virar resposta vazia — a mesma
+        // regra do `contato_setor`, e pelo mesmo motivo: a lacuna seria pior
+        // que dizer que não temos.
+        $linhas[] = $contatos === []
+            ? 'Ainda não temos um contato direto cadastrado para este setor.'
+            : implode("\n", $contatos);
+
+        $linhas[] = '';
+        $linhas[] = Fila::haDisponivel()
+            ? 'Digite *MENU* para ver os assuntos, ou *ATENDENTE* para falar com uma pessoa agora.'
+            : 'Digite *MENU* para ver os outros assuntos.';
+
+        return implode("\n", $linhas);
+    }
+
+    /**
+     * @param list<array<string, mixed>> $setores
+     */
+    private static function transferir(int $conversaId, array $setores): string
+    {
+        $resultado = Fila::solicitar($conversaId, null, 'Pedido pelo menu de atendimento');
+
+        if ($resultado['transferido']) {
+            return 'Certo! Estou chamando um atendente. Aguarde um instante nesta janela, por favor.';
+        }
+
+        // Ninguém disponível. A mesma regra de sempre: não se promete o que
+        // não se pode cumprir. Aqui isso importa ainda mais, porque uma
+        // instalação pode simplesmente não ter atendente nenhum — só o menu.
+        return "Não há atendente disponível no momento.\n\n"
+            . implode("\n", array_map(
+                static fn (array $s): string => '*' . $s['nome'] . '*'
+                    . ($s['email'] ? ' — ✉️ ' . $s['email'] : '')
+                    . ($s['telefone'] ? ' — 📞 ' . $s['telefone'] : ''),
+                array_slice($setores, 0, 5)
+            ))
+            . "\n\nDigite *MENU* para ver todos os assuntos.";
+    }
+
+    /** @return list<array<string, mixed>> */
+    private static function setores(): array
+    {
+        return Database::connection()->query(
+            'SELECT id, slug, nome, descricao_llm, email, telefone, whatsapp, ramal,
+                    horario_atendimento, local
+             FROM setores WHERE ativo = 1 ORDER BY ordem, nome LIMIT 12'
+        )->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Primeira frase, para a lista não virar parede de texto. */
+    private static function resumir(string $texto): string
+    {
+        $texto = trim(preg_replace('/\s+/u', ' ', $texto) ?? $texto);
+        $corte = mb_strpos($texto, '. ');
+
+        if ($corte !== false && $corte < 120) {
+            return mb_substr($texto, 0, $corte + 1);
+        }
+
+        return mb_strlen($texto) > 120 ? mb_substr($texto, 0, 117) . '…' : $texto;
+    }
+
+    /**
+     * Minúsculas e sem acento, para "ATENDENTE", "atendente" e "Atendênte"
+     * caírem no mesmo lugar.
+     */
+    private static function normalizar(string $texto): string
+    {
+        $texto = mb_strtolower(trim($texto));
+
+        if (class_exists('Normalizer')) {
+            $n = \Normalizer::normalize($texto, \Normalizer::FORM_D);
+
+            if ($n !== false) {
+                $texto = preg_replace('/\p{Mn}/u', '', $n) ?? $texto;
+            }
+        }
+
+        return $texto;
+    }
+
+    /** @param list<string> $palavras */
+    private static function contem(string $chave, array $palavras): bool
+    {
+        foreach ($palavras as $p) {
+            if (str_contains($chave, $p)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}

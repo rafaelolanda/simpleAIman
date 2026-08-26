@@ -74,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'descricao' => trim(texto_utf8($_POST['descricao'] ?? '')),
             'provedor_id' => ((int) ($_POST['provedor_id'] ?? 0)) ?: null,
             'modelo' => trim(texto_utf8($_POST['modelo'] ?? '')),
+            'modo' => valor_em($_POST['modo'] ?? '', ['ia', 'roteador'], 'ia'),
             'system_prompt' => trim(texto_utf8($_POST['system_prompt'] ?? '')),
             'mensagem_abertura' => trim(texto_utf8($_POST['mensagem_abertura'] ?? '')),
             'idioma' => valor_em($_POST['idioma'] ?? '', array_keys($IDIOMAS), 'pt-BR'),
@@ -98,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->prepare(
                 'UPDATE agentes SET nome=:nome, slug=:slug, descricao=:descricao, provedor_id=:provedor_id,
-                        modelo=:modelo, system_prompt=:system_prompt, mensagem_abertura=:mensagem_abertura,
+                        modelo=:modelo, modo=:modo, system_prompt=:system_prompt, mensagem_abertura=:mensagem_abertura,
                         idioma=:idioma, temperatura=:temperatura, max_tokens=:max_tokens,
                         reasoning_effort=:reasoning_effort, top_k=:top_k,
                         limiar_similaridade=:limiar_similaridade, max_iteracoes_tool=:max_iteracoes_tool,
@@ -114,11 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dados['token_publico'] = bin2hex(random_bytes(16));
 
             $pdo->prepare(
-                'INSERT INTO agentes (nome, slug, descricao, provedor_id, modelo, system_prompt,
+                'INSERT INTO agentes (nome, slug, descricao, provedor_id, modelo, modo, system_prompt,
                         mensagem_abertura, idioma, temperatura, max_tokens, reasoning_effort, top_k,
                         limiar_similaridade, max_iteracoes_tool, usa_rag, usa_faq, captura_lead,
                         lead_destino_id, ativo, token_publico, criado_em, editado_em)
-                 VALUES (:nome, :slug, :descricao, :provedor_id, :modelo, :system_prompt,
+                 VALUES (:nome, :slug, :descricao, :provedor_id, :modelo, :modo, :system_prompt,
                         :mensagem_abertura, :idioma, :temperatura, :max_tokens, :reasoning_effort, :top_k,
                         :limiar_similaridade, :max_iteracoes_tool, :usa_rag, :usa_faq, :captura_lead,
                         :lead_destino_id, :ativo, :token_publico, :criado_em, :editado_em)'
@@ -216,6 +217,25 @@ include __DIR__ . '/partials/head.php';
             <label class="col-2">
                 Descrição interna
                 <input type="text" name="descricao" value="<?= e((string) $v('descricao')) ?>" placeholder="para que serve este agente — não aparece para o visitante">
+            </label>
+
+            <label class="col-2">
+                Modo
+                <select name="modo">
+                    <option value="ia" <?= (string) $v('modo', 'ia') === 'ia' ? 'selected' : '' ?>>
+                        Assistente com IA — responde com base nos documentos e usa ferramentas
+                    </option>
+                    <option value="roteador" <?= (string) $v('modo', 'ia') === 'roteador' ? 'selected' : '' ?>>
+                        Roteador — menu de setores, contato e fila, sem IA
+                    </option>
+                </select>
+                <small>
+                    No modo <strong>roteador</strong> nada é enviado ao provedor: nenhum token é gasto e
+                    não é preciso nem ter chave de API. O menu sai da lista de
+                    <a href="setores.php">setores</a> ativos.
+                    Um agente com IA também cai nesse menu <strong>automaticamente</strong> se o provedor
+                    estiver fora do ar — em vez de dizer que não conseguiu responder.
+                </small>
             </label>
 
             <label class="col-2">
@@ -407,6 +427,9 @@ include __DIR__ . '/partials/head.php';
                     <td>
                         <strong><?= e($a['nome']) ?></strong>
                         <?php if (!$a['ativo']): ?><span class="tag tag-neutro">inativo</span><?php endif; ?>
+                        <?php if (($a['modo'] ?? 'ia') === 'roteador'): ?>
+                            <span class="tag tag-neutro" title="Sem IA: menu de setores, contato e fila">roteador</span>
+                        <?php endif; ?>
                         <?php if (!ToolRegistry::temHandoff((int) $a['id'])): ?>
                             <?php /* Sem caminho para humano, o agente que não sabe responder
                                      não tem para onde mandar a pessoa — e a saída dele vira

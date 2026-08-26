@@ -216,6 +216,10 @@ CREATE TABLE IF NOT EXISTS agentes (
     descricao           TEXT,
     provedor_id         INTEGER REFERENCES provedores (id) ON DELETE SET NULL,
     modelo              TEXT,
+    -- 'ia' usa o provedor; 'roteador' NAO chama provedor nenhuma vez: menu de
+    -- setores, contato e fila. Serve a cliente que nao quer pagar LLM, e e
+    -- tambem o caminho de degradacao quando o provedor cai.
+    modo                TEXT NOT NULL DEFAULT 'ia',
     system_prompt       TEXT,
     mensagem_abertura   TEXT,
 

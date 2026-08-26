@@ -11,6 +11,7 @@ use NeuronAI\Agent\Agent;
 use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\UserMessage;
 use PDO;
+use SimpleAIman\Atendimento\Roteador;
 use SimpleAIman\Rag\FaqBusca;
 use SimpleAIman\Tools\ToolRegistry;
 use SimpleAIman\Rag\Retriever;
@@ -546,6 +547,17 @@ final class ChatService
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
 
+        // Agente em modo roteador não toca no provedor: menu de setores,
+        // contato e fila. Sai antes da FAQ e do RAG, que também não fazem
+        // sentido aqui — sem chave de API, nada disso existe.
+        if (($this->agente['modo'] ?? 'ia') === 'roteador') {
+            $texto = Roteador::responder($conversaId, $pergunta);
+            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+            yield $texto;
+
+            return;
+        }
+
         // Curto-circuito da FAQ também no streaming: o texto curado sai de
         // uma vez, sem geração. Não é streaming de verdade, mas responder em
         // 600 ms inteiro é melhor que streamar uma resposta pior em 2 s.
@@ -583,10 +595,24 @@ final class ChatService
             }
         } catch (ErroAgente $e) {
             $this->registrarFalha($conversaId, $e);
+
+            if (($alternativa = $this->degradarParaMenu($conversaId, $pergunta, $texto)) !== null) {
+                yield $alternativa;
+
+                return;
+            }
+
             throw $e;
         } catch (Throwable $e) {
             $erro = ErroAgente::deProvedor($e, 'streaming');
             $this->registrarFalha($conversaId, $erro);
+
+            if (($alternativa = $this->degradarParaMenu($conversaId, $pergunta, $texto)) !== null) {
+                yield $alternativa;
+
+                return;
+            }
+
             throw $erro;
         }
 
@@ -609,6 +635,37 @@ final class ChatService
 
     /** @var array<string, float> tempos da última recuperação, em ms */
     public array $tempoBusca = [];
+
+    /**
+     * Provedor fora do ar: em vez de morrer, cai no menu de setores.
+     *
+     * Sem isto, uma cota estourada (429) ou instabilidade encerra a conversa
+     * com "não consegui responder agora" — e a pessoa fica sem nada,
+     * justamente quando mais precisava de um caminho. Com o menu, ela ainda
+     * chega a quem resolve, mesmo que a instalação não tenha atendente nenhum:
+     * telefone, e-mail e horário são dados nossos, não dependem de IA.
+     *
+     * Devolve `null` quando não há menu possível (nenhum setor cadastrado) ou
+     * quando parte da resposta já saiu — nesse caso o visitante já está lendo
+     * um texto, e emendar um menu por cima seria mais confuso que o erro.
+     */
+    private function degradarParaMenu(int $conversaId, string $pergunta, string $jaEnviado): ?string
+    {
+        if (trim($jaEnviado) !== '' || !Roteador::temMenu()) {
+            return null;
+        }
+
+        $texto = Roteador::responder(
+            $conversaId,
+            $pergunta,
+            'Estou com uma instabilidade e não consigo consultar os documentos agora. '
+                . 'Mas posso te encaminhar:'
+        );
+
+        $this->gravarMensagem($conversaId, 'bot', $texto);
+
+        return $texto;
+    }
 
     /**
      * A falha vira mensagem de SISTEMA na conversa, não de bot.
