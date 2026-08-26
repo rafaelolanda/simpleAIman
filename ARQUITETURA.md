@@ -400,6 +400,40 @@ pedido — a permissão vem do convite, não do formato do texto.
 E quando não há setor nenhum cadastrado, a frase volta a ser honesta: *"tente novamente
 amanhã"*, sem prometer contato que ninguém vai recolher.
 
+### Autenticação das ferramentas HTTP
+
+Quatro tipos, e agora os quatro funcionam:
+
+| tipo | onde a chave entra | precisa de `auth_nome`? |
+|---|---|---|
+| `bearer` | `Authorization: Bearer …` | não |
+| `basic` | `Authorization: Basic …` | não |
+| `header` | cabeçalho próprio | **sim** — qual cabeçalho |
+| `query` | query string da URL | **sim** — qual parâmetro |
+
+`header` e `query` apareciam no formulário e caíam num `default` silencioso: a chave não era
+enviada e a API respondia 401 sem explicação. Faltava a **informação**, não o código — nada
+dizia *qual* cabeçalho ou *qual* parâmetro. É o que `auth_nome` guarda, e o formulário passa
+a recusar salvar sem ele.
+
+A chave continua saindo do `.env` por `auth_ref`, nunca do banco. E como `query` põe o
+segredo **na URL**, a tela de teste passa a mascará-la também (`ocultarUrl`) — antes só os
+cabeçalhos eram mascarados, e exibir a URL crua anularia a razão de a chave não ficar no
+banco.
+
+### Aviso de origem: quando o dado não veio da base
+
+`ferramentas.aviso_resposta` guarda uma frase acrescentada ao fim da resposta sempre que
+aquela ferramenta for usada. Serve para dizer que a informação **não veio dos documentos
+curados** — busca na web, sistema de terceiro — e precisa ser conferida.
+
+**Anexado pelo código, não pedido ao modelo.** Aviso que depende de o modelo lembrar some
+justamente na resposta em que importava. É o mesmo raciocínio da frase de encaminhamento
+fixa: o que precisa ser dito sempre não se pede, se escreve.
+
+No streaming ele sai como **último pedaço**, porque só existe depois de a ferramenta ter
+rodado — e rodar acontece no meio da geração.
+
 ### Busca na web com domínio restrito
 
 Não precisa de tipo novo: o tipo `http` já resolve, e a restrição é **estrutural**. O template

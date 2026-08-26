@@ -48,7 +48,10 @@ final class HttpTool
      */
     public function montar(array $ferramenta, array $parametros): array
     {
-        $url = $this->interpolar((string) $ferramenta['url_template'], $parametros, true);
+        $url = $this->autenticarUrl(
+            $ferramenta,
+            $this->interpolar((string) $ferramenta['url_template'], $parametros, true)
+        );
         $metodo = strtoupper((string) ($ferramenta['metodo'] ?: 'GET'));
         $cabecalhos = $this->cabecalhos($ferramenta);
         $corpo = null;
@@ -92,6 +95,28 @@ final class HttpTool
 
             return $nome . ': ' . $prefixo . '••••••••  (' . strlen($valor) . ' caracteres)';
         }, $cabecalhos);
+    }
+
+    /**
+     * Oculta a chave que a autenticação por query string põe na URL.
+     *
+     * Sem isto, a tela de teste passaria a exibir o segredo em texto puro —
+     * anulando a razão de ele não ficar no banco. `ocultarSegredos()` cobre só
+     * os cabeçalhos, e a chave em query string é justamente o caso novo.
+     */
+    public static function ocultarUrl(array $ferramenta, string $url): string
+    {
+        $nome = trim((string) ($ferramenta['auth_nome'] ?? ''));
+
+        if ((string) ($ferramenta['auth_tipo'] ?? 'none') !== 'query' || $nome === '') {
+            return $url;
+        }
+
+        return preg_replace(
+            '/([?&]' . preg_quote(rawurlencode($nome), '/') . '=)[^&]*/',
+            '$1••••••••',
+            $url
+        ) ?? $url;
     }
 
     /**
@@ -149,11 +174,52 @@ final class HttpTool
             );
         }
 
+        $nome = trim((string) ($ferramenta['auth_nome'] ?? ''));
+
         return match ($tipo) {
             'bearer' => [...$lista, 'Authorization: Bearer ' . $segredo],
             'basic' => [...$lista, 'Authorization: Basic ' . base64_encode((string) $segredo)],
+
+            // Cabeçalho próprio: `auth_nome` diz QUAL. É a informação que
+            // faltava — o tipo aparecia no formulário e caía no `default`,
+            // então a chave simplesmente não era enviada e a API respondia
+            // 401 sem explicação.
+            'header' => $nome !== ''
+                ? [...$lista, $nome . ': ' . $segredo]
+                : throw new RuntimeException(
+                    'Autenticação por cabeçalho exige o nome do cabeçalho (ex.: X-API-Key).'
+                ),
+
+            // `query` é tratado na montagem da URL, não aqui.
             default => $lista,
         };
+    }
+
+    /**
+     * Acrescenta a chave à query string, quando `auth_tipo = query`.
+     *
+     * Fica separado dos cabeçalhos porque é o único tipo que mexe na URL — e
+     * era o único sem contorno nenhum: a URL não passa pela resolução de
+     * `{{env.}}`, então não havia como pôr uma chave em query string.
+     */
+    private function autenticarUrl(array $ferramenta, string $url): string
+    {
+        if ((string) ($ferramenta['auth_tipo'] ?? 'none') !== 'query') {
+            return $url;
+        }
+
+        $nome = trim((string) ($ferramenta['auth_nome'] ?? ''));
+
+        if ($nome === '') {
+            throw new RuntimeException(
+                'Autenticação por query string exige o nome do parâmetro (ex.: api_key).'
+            );
+        }
+
+        $segredo = (string) env_secret($ferramenta['auth_ref'] ?? null);
+
+        return $url . (str_contains($url, '?') ? '&' : '?')
+            . rawurlencode($nome) . '=' . rawurlencode($segredo);
     }
 
     /** Permite `{{env.NOME}}` dentro de um cabeçalho configurado. */

@@ -87,6 +87,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'corpo_template' => trim((string) ($_POST['corpo_template'] ?? '')) ?: null,
             'auth_tipo' => valor_em($_POST['auth_tipo'] ?? '', array_keys($AUTHS), 'none'),
             'auth_ref' => trim((string) ($_POST['auth_ref'] ?? '')),
+            'auth_nome' => trim((string) ($_POST['auth_nome'] ?? '')),
+            'aviso_resposta' => trim(texto_utf8($_POST['aviso_resposta'] ?? '')),
             'timeout_ms' => ((int) ($_POST['timeout_ms'] ?? 0)) ?: null,
             'retentativas' => max(0, min(3, (int) ($_POST['retentativas'] ?? 0))),
             'resposta_caminho' => trim((string) ($_POST['resposta_caminho'] ?? '')),
@@ -94,6 +96,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         ];
 
         // A chave nunca é digitada aqui: só o NOME da variável do .env.
+        // Os dois tipos que dependem de um nome. Antes eles apareciam no
+        // formulário e caíam num `default` silencioso: a chave não era enviada
+        // e a API respondia 401 sem explicação.
+        if (in_array($dados['auth_tipo'], ['header', 'query'], true) && $dados['auth_nome'] === '') {
+            flash_set('erro', $dados['auth_tipo'] === 'header'
+                ? 'Informe o nome do cabeçalho (ex.: X-API-Key).'
+                : 'Informe o nome do parâmetro (ex.: api_key).');
+            redirect('ferramentas.php' . ($id ? '?editar=' . $id : ''));
+        }
+
         if ($dados['auth_ref'] !== '' && !preg_match('/^[A-Z][A-Z0-9_]*$/', $dados['auth_ref'])) {
             flash_set('erro', 'A referência da chave deve ser o NOME de uma variável do .env (ex.: CRM_TOKEN), nunca a chave em si.');
             redirect('ferramentas.php');
@@ -116,7 +128,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'UPDATE ferramentas SET nome=:nome, slug=:slug, descricao_llm=:descricao_llm, tipo=:tipo,
                         efeito=:efeito, setor_id=:setor_id, depende_de=:depende_de, metodo=:metodo,
                         url_template=:url_template, headers=:headers, corpo_template=:corpo_template,
-                        auth_tipo=:auth_tipo, auth_ref=:auth_ref, timeout_ms=:timeout_ms,
+                        auth_tipo=:auth_tipo, auth_ref=:auth_ref, auth_nome=:auth_nome,
+                        aviso_resposta=:aviso_resposta, timeout_ms=:timeout_ms,
                         retentativas=:retentativas, resposta_caminho=:resposta_caminho, ativo=:ativo,
                         editado_em=:editado_em
                  WHERE id=:id'
@@ -129,10 +142,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->prepare(
                 'INSERT INTO ferramentas (nome, slug, descricao_llm, tipo, efeito, setor_id, depende_de,
-                        metodo, url_template, headers, corpo_template, auth_tipo, auth_ref, timeout_ms,
+                        metodo, url_template, headers, corpo_template, auth_tipo, auth_ref, auth_nome,
+                        aviso_resposta, timeout_ms,
                         retentativas, resposta_caminho, ativo, criado_em, editado_em)
                  VALUES (:nome, :slug, :descricao_llm, :tipo, :efeito, :setor_id, :depende_de,
-                        :metodo, :url_template, :headers, :corpo_template, :auth_tipo, :auth_ref, :timeout_ms,
+                        :metodo, :url_template, :headers, :corpo_template, :auth_tipo, :auth_ref, :auth_nome,
+                        :aviso_resposta, :timeout_ms,
                         :retentativas, :resposta_caminho, :ativo, :criado_em, :editado_em)'
             )->execute($dados);
 
@@ -380,6 +395,27 @@ include __DIR__ . '/partials/head.php';
                 Variável do <code>.env</code> com a chave
                 <input type="text" name="auth_ref" value="<?= e((string) $v('auth_ref')) ?>" placeholder="CRM_TOKEN">
                 <small><strong>Não cole a chave aqui</strong> — só o nome da variável.</small>
+            </label>
+
+            <label>
+                Nome do cabeçalho ou parâmetro
+                <input type="text" name="auth_nome" value="<?= e((string) $v('auth_nome')) ?>" placeholder="X-API-Key">
+                <small>
+                    Só para os tipos <strong>cabeçalho</strong> e <strong>query string</strong> —
+                    diz onde a chave entra. Bearer e Basic não usam.
+                </small>
+            </label>
+
+            <label class="col-2">
+                Aviso anexado à resposta
+                <input type="text" name="aviso_resposta" value="<?= e((string) $v('aviso_resposta')) ?>"
+                       placeholder="Esta informação veio de uma busca na web e deve ser conferida.">
+                <small>
+                    Frase acrescentada ao fim da resposta sempre que esta ferramenta for usada.
+                    Serve para avisar que o dado <strong>não veio da base de conhecimento</strong>.
+                    É anexada pelo sistema, não pedida ao modelo — aviso que depende de ele
+                    lembrar some justamente na resposta em que importava.
+                </small>
             </label>
 
             <label>

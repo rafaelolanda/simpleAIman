@@ -503,6 +503,14 @@ CREATE TABLE IF NOT EXISTS ferramentas (
     corpo_template      TEXT,                          -- JSON
     auth_tipo           TEXT DEFAULT 'none',           -- none|bearer|basic|header|query
     auth_ref            TEXT,                          -- nome da var no .env
+    -- QUAL cabecalho (auth_tipo=header) ou QUAL parametro de query
+    -- (auth_tipo=query) leva a chave. Sem isto os dois tipos apareciam no
+    -- formulario e nao faziam nada: faltava a informacao, nao o codigo.
+    auth_nome           TEXT,
+    -- Frase anexada a resposta sempre que esta ferramenta for usada. Serve
+    -- para avisar que o dado nao veio da base curada — busca na web, sistema
+    -- de terceiro — e precisa ser conferido.
+    aviso_resposta      TEXT,
     timeout_ms          INTEGER,
     retentativas        INTEGER NOT NULL DEFAULT 0,
     resposta_caminho    TEXT,                          -- ex.: "data.items"

@@ -124,6 +124,10 @@ final class Catalogo
                     'auth_tipo' => 'none',
                     'timeout_ms' => 8000,
                     'resposta_caminho' => 'web.results',
+                    // O visitante precisa saber que isto não saiu dos
+                    // documentos da instituição. Anexado pelo sistema.
+                    'aviso_resposta' => 'Esta informação veio de uma busca na web, '
+                        . 'não dos documentos oficiais, e deve ser conferida.',
                 ],
                 'parametros' => [
                     ['nome' => 'termo', 'tipo' => 'string', 'obrigatorio' => 1,
@@ -213,12 +217,12 @@ final class Catalogo
             'INSERT INTO ferramentas
                 (slug, nome, descricao_llm, tipo, efeito, ativo,
                  metodo, url_template, headers, corpo_template,
-                 auth_tipo, auth_ref, timeout_ms, resposta_caminho,
+                 auth_tipo, auth_ref, timeout_ms, resposta_caminho, aviso_resposta,
                  criado_em, editado_em)
              VALUES
                 (:slug, :nome, :descricao, :tipo, :efeito, 1,
                  :metodo, :url, :headers, :corpo,
-                 :auth_tipo, :auth_ref, :timeout, :caminho,
+                 :auth_tipo, :auth_ref, :timeout, :caminho, :aviso,
                  :agora, :agora)'
         )->execute([
             'slug' => $slug,
@@ -234,6 +238,7 @@ final class Catalogo
             'auth_ref' => $http['auth_ref'] ?? null,
             'timeout' => $http['timeout_ms'] ?? null,
             'caminho' => $http['resposta_caminho'] ?? null,
+            'aviso' => $http['aviso_resposta'] ?? null,
             'agora' => $agora,
         ]);
 

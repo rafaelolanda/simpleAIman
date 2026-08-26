@@ -312,7 +312,8 @@ final class ChatService
         // nome dele. Uma pergunta de consulta não deve ter efeito colateral —
         // quem age é a pessoa, depois de ler.
         if ($comFerramentas) {
-            $ferramentas = (new ToolRegistry($agenteId, $conversaId))->paraAgente();
+            $this->registro = new ToolRegistry($agenteId, $conversaId);
+            $ferramentas = $this->registro->paraAgente();
 
             if ($ferramentas !== []) {
                 $agent->addTool($ferramentas);
@@ -414,6 +415,9 @@ final class ChatService
      * aviso no prompt, porque a nota não separa "vago" de "informal mas real".
      */
     private bool $buscaFraca = false;
+
+    /** Registro do turno, para colher os avisos das ferramentas usadas. */
+    private ?ToolRegistry $registro = null;
 
     /**
      * @return list<float>|null null quando o embedding falha — o turno segue
@@ -606,6 +610,8 @@ final class ChatService
             throw $erro;
         }
 
+        $texto = $this->comAvisos($texto);
+
         $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
 
         $this->gravarFontes($id, $trechos);
@@ -722,6 +728,26 @@ final class ChatService
      * fora: são ruído para quem precisa entender o caso, e nota interna de um
      * colega não é o assunto do visitante.
      */
+    /**
+     * Anexa os avisos das ferramentas usadas neste turno.
+     *
+     * Anexado pelo CÓDIGO, não pedido ao modelo. Aviso que depende de o modelo
+     * lembrar some justamente na resposta em que importava — e o ponto dele é
+     * dizer que aquele dado não veio da base curada e precisa ser conferido.
+     */
+    private function comAvisos(string $texto): string
+    {
+        $avisos = $this->registro?->avisos() ?? [];
+
+        if ($avisos === [] || trim($texto) === '') {
+            return $texto;
+        }
+
+        return rtrim($texto) . "
+
+_" . implode(' ', $avisos) . '_';
+    }
+
     private function transcricao(int $conversaId, int $limite = 12): string
     {
         $stmt = Database::connection()->prepare(
@@ -849,7 +875,15 @@ final class ChatService
             throw $erro;
         }
 
-        $id = $this->gravarMensagem($conversaId, 'bot', trim($texto), null, (int) ((microtime(true) - $inicio) * 1000));
+        // O aviso sai como último pedaço do stream: ele só existe depois de a
+        // ferramenta ter rodado, e rodar acontece no meio da geração.
+        $completo = $this->comAvisos(trim($texto));
+
+        if ($completo !== trim($texto)) {
+            yield mb_substr($completo, mb_strlen(trim($texto)));
+        }
+
+        $id = $this->gravarMensagem($conversaId, 'bot', $completo, null, (int) ((microtime(true) - $inicio) * 1000));
 
         $this->gravarFontes($id, $trechos);
 

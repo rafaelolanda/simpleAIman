@@ -26,6 +26,19 @@ final class ToolRegistry
     ) {
     }
 
+    private ?Executor $executor = null;
+
+    /**
+     * Avisos das ferramentas usadas no turno. Só faz sentido depois de
+     * `paraAgente()` ter montado o executor.
+     *
+     * @return list<string>
+     */
+    public function avisos(): array
+    {
+        return $this->executor?->avisos() ?? [];
+    }
+
     /**
      * Ferramentas ativas vinculadas ao agente.
      *
@@ -33,7 +46,7 @@ final class ToolRegistry
      */
     public function paraAgente(): array
     {
-        $executor = new Executor($this->conversaId, $this->agenteId);
+        $executor = $this->executor = new Executor($this->conversaId, $this->agenteId);
         $tools = [];
 
         foreach ($this->linhas() as $f) {

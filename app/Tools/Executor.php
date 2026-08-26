@@ -39,6 +39,18 @@ final class Executor
      */
     private int $nesteTurno = 0;
 
+    /**
+     * Avisos das ferramentas que rodaram, para anexar à resposta.
+     *
+     * Existem para dizer ao visitante que o dado NÃO veio da base curada — de
+     * busca na web, de sistema de terceiro — e precisa ser conferido. Vai
+     * anexado pelo código, e não pedido ao modelo: aviso que depende de o
+     * modelo lembrar é aviso que some justamente na resposta em que importava.
+     *
+     * @var list<string>
+     */
+    private array $avisos = [];
+
     public function __construct(
         private readonly int $conversaId,
         private readonly ?int $agenteId = null,
@@ -100,6 +112,12 @@ final class Executor
 
             $this->jaExecutadas[$id] = true;
             $this->nesteTurno++;
+
+            $aviso = trim((string) ($ferramenta['aviso_resposta'] ?? ''));
+
+            if ($aviso !== '' && !in_array($aviso, $this->avisos, true)) {
+                $this->avisos[] = $aviso;
+            }
 
             $this->registrar($ferramenta, $parametros, 'ok', $resultado, $inicio, $mensagemId);
             Metrics::log('ferramenta_executada', $this->agenteId ?? 0);
@@ -255,6 +273,12 @@ final class Executor
         $estaticas = json_para_array($p['enum_valores'] ?? null);
 
         return array_values(array_map('strval', $estaticas));
+    }
+
+    /** @return list<string> */
+    public function avisos(): array
+    {
+        return $this->avisos;
     }
 
     /** @return list<string> */

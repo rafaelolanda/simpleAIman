@@ -87,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $escolhida !== null) {
         try {
             $requisicao = (new HttpTool())->montar($escolhida, $validos);
 
-            $texto = $requisicao['metodo'] . ' ' . $requisicao['url'] . "\n"
+            $texto = $requisicao['metodo'] . ' ' . HttpTool::ocultarUrl($escolhida, $requisicao['url']) . "\n"
                 . implode("\n", HttpTool::ocultarSegredos($requisicao['cabecalhos']))
                 . ($requisicao['corpo'] !== null ? "\n\n" . $requisicao['corpo'] : '');
 
