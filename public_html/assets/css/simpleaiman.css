@@ -720,3 +720,39 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 }
 
 .linha-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+
+/* copiloto do atendente --------------------------------------- */
+
+/* Visualmente distante do balão enviado, e de propósito: é rascunho, não
+   mensagem. Confundir os dois faria o atendente achar que já respondeu. */
+.msg-copiloto { align-self: flex-start; max-width: 88%; }
+
+.msg-copiloto .msg-texto {
+    background: #eef6ff;
+    border: 1px solid #bcd8f5;
+    color: #123a5e;
+    font-size: 0.86rem;
+    box-shadow: none;
+}
+
+.msg-copiloto .msg-quem { color: #1d6fb8; }
+.msg-copiloto .msg-hora { color: #6b8fae; }
+
+.copiloto-fontes {
+    font-size: 0.72rem;
+    color: var(--zap-secundario);
+    margin: 0.2rem 0 0 0.2rem;
+}
+
+.btn-usar {
+    margin: 0.3rem 0 0 0.2rem;
+    border: 1px solid #bcd8f5;
+    background: #fff;
+    color: #1d6fb8;
+    border-radius: 14px;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.76rem;
+    cursor: pointer;
+}
+
+.btn-usar:hover { background: #1d6fb8; color: #fff; }

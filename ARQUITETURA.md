@@ -636,6 +636,39 @@ criaria a chance de transferir sem calar o bot, ou calar o bot sem avisar ningu�
 - **Login não atravessa.** Para o visitante vai o nome de exibição, ou "Atendente". O
   usuário de login é credencial.
 
+### Copiloto: o atendente pergunta ao assistente em privado
+
+`ChatService::consultar()` parece um turno de conversa e é outra coisa. As diferenças são
+todas deliberadas:
+
+- **Não grava como `usuario`/`bot`.** Fosse assim, pergunta e resposta apareceriam para o
+  visitante e entrariam no histórico do modelo, que passaria a achar que ele mesmo disse
+  aquilo.
+- **Sem ferramentas.** O copiloto não transfere conversa, não abre chamado e não captura
+  lead em nome do atendente. Consulta não pode ter efeito colateral: quem age é a pessoa,
+  depois de ler.
+- **A conversa vai como CONTEXTO nas instruções**, e a pergunta do atendente é o único turno.
+  Emendar a pergunta no fim do histórico parecia natural e quebrava — o histórico termina
+  numa fala do visitante (que o atendente assumiu sem responder), e duas mensagens de usuário
+  seguidas fazem o Gemini recusar com *invalid message sequence*.
+- **Tom próprio.** O `system_prompt` do agente é feito para o visitante, sotaque incluído.
+  Quem lê aqui é colega com um atendimento aberto na tela: quer o fato, não a conversa.
+
+Registrado com `autor_tipo = 'copiloto'`: invisível ao visitante por construção (o filtro é
+lista de permissão), fora do histórico do modelo (que só lê `usuario|bot|atendente`), e
+disponível para quem assumir a conversa depois. As **fontes ficam gravadas** e aparecem sob a
+resposta — sem isso o atendente mandaria um texto ao visitante sem saber de onde veio, que é
+exatamente o que o RAG existe para evitar.
+
+O botão **preenche o campo, nunca envia**: a resposta é rascunho, e quem fala com o visitante
+é a pessoa.
+
+> **Armadilha de configuração:** `provedores.base_url` significa coisas diferentes conforme o
+> `driver`. Com `driver = gemini` (nativo), a URL correta termina em `/v1beta/models`; deixar
+> ali o endpoint OpenAI-compatible (`/v1beta/openai/`) produz
+> `/v1beta/openai/modelo:generateContent` e **HTTP 404 em todo o agente**. Ao trocar o driver,
+> revisar o `base_url` — ou deixá-lo vazio, que usa o padrão certo de cada um.
+
 ### O que o visitante vê, e o que fica dentro
 
 `mensagens.autor_tipo` tem cinco valores, e a distinção entre eles é de

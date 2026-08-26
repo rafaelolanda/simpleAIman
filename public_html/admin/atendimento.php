@@ -114,6 +114,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         redirect('atendimento.php?c=' . $conversaId);
     }
 
+    if ($acao === 'copiloto') {
+        $pergunta = trim((string) ($_POST['texto'] ?? ''));
+        $conversa = Fila::conversa($conversaId);
+
+        // Só quem assumiu consulta: a pergunta custa token de verdade, e quem
+        // não está atendendo não tem o que fazer com a resposta.
+        if ($pergunta === '' || !$conversa || (int) $conversa['atendente_id'] !== $eu) {
+            redirect('atendimento.php?c=' . $conversaId);
+        }
+
+        try {
+            \SimpleAIman\Llm\ChatService::paraAgente((int) $conversa['agente_id'])
+                ->consultar($conversaId, mb_substr(texto_utf8($pergunta), 0, 1000), $eu);
+        } catch (Throwable $e) {
+            error_log('[simpleAIman] copiloto: ' . $e->getMessage());
+            flash_set('erro', 'Não consegui consultar o assistente agora.');
+        }
+
+        redirect('atendimento.php?c=' . $conversaId);
+    }
+
     if ($acao === 'nota') {
         $texto = trim((string) ($_POST['texto'] ?? ''));
         $conversa = Fila::conversa($conversaId);
@@ -219,6 +240,31 @@ if ($conversa) {
     $stmt->execute(['id' => $abrindo]);
     $mensagens = $stmt->fetchAll();
     $ultimoId = $mensagens === [] ? 0 : (int) end($mensagens)['id'];
+
+    // Rótulo das fontes que embasaram cada resposta do copiloto. Sem isto o
+    // atendente mandaria ao visitante um texto sem saber de onde veio — que é
+    // exatamente o que o RAG existe para evitar.
+    $fontes = [];
+    $stmt = $pdo->prepare(
+        "SELECT f.mensagem_id, COALESCE(a.titulo, q.pergunta) AS rotulo
+           FROM mensagem_fontes f
+           LEFT JOIN chunks c ON f.tipo = 'chunk' AND c.id = f.referencia_id
+           LEFT JOIN artefatos a ON a.id = c.artefato_id
+           LEFT JOIN faq q ON f.tipo = 'faq' AND q.id = f.referencia_id
+          WHERE f.mensagem_id IN (
+              SELECT id FROM mensagens WHERE conversa_id = :id AND autor_tipo = 'copiloto'
+          )
+          ORDER BY f.score DESC"
+    );
+    $stmt->execute(['id' => $abrindo]);
+
+    foreach ($stmt->fetchAll() as $f) {
+        $rotulo = trim((string) ($f['rotulo'] ?? ''));
+
+        if ($rotulo !== '' && !in_array($rotulo, $fontes[(int) $f['mensagem_id']] ?? [], true)) {
+            $fontes[(int) $f['mensagem_id']][] = mb_substr($rotulo, 0, 60);
+        }
+    }
 }
 
 $disponiveis = Fila::disponiveis();
@@ -350,6 +396,7 @@ include __DIR__ . '/partials/head.php';
                     $classe = match ($m['autor_tipo']) {
                         'usuario' => 'msg-usuario',
                         'atendente' => 'msg-atendente',
+                        'copiloto' => 'msg-copiloto',
                         'nota' => 'msg-nota',
                         'sistema', 'aviso' => 'msg-sistema',
                         default => 'msg-bot',
@@ -357,6 +404,7 @@ include __DIR__ . '/partials/head.php';
                     $quem = match ($m['autor_tipo']) {
                         'usuario' => 'Visitante',
                         'atendente' => trim((string) ($m['autor_nome'] ?? '')) ?: 'Atendente',
+                        'copiloto' => 'Assistente · só o staff vê',
                         'nota' => 'Nota interna · ' . (trim((string) ($m['autor_nome'] ?? '')) ?: 'staff'),
                         'aviso' => 'Aviso',
                         'sistema' => 'Sistema',
@@ -369,6 +417,18 @@ include __DIR__ . '/partials/head.php';
                             <?= formatar_whatsapp((string) $m['conteudo']) ?>
                             <span class="msg-hora"><?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
                         </div>
+                        <?php if ($m['autor_tipo'] === 'copiloto' && !str_starts_with((string) $m['conteudo'], '❓')): ?>
+                            <?php if (!empty($fontes[(int) $m['id']])): ?>
+                                <div class="copiloto-fontes">
+                                    Fontes: <?= e(implode(' · ', array_slice($fontes[(int) $m['id']], 0, 3))) ?>
+                                </div>
+                            <?php endif; ?>
+                            <?php /* Preenche o campo, nunca envia: a resposta é um rascunho
+                                     do assistente, e quem responde ao visitante é a pessoa. */ ?>
+                            <button type="button" class="btn-usar" data-texto="<?= e((string) $m['conteudo']) ?>">
+                                usar esta resposta
+                            </button>
+                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
                 </div><!-- .zap-corpo -->
@@ -424,6 +484,18 @@ include __DIR__ . '/partials/head.php';
                         <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
                         <button type="submit" class="btn btn-secondary btn-sm">Encerrar</button>
                     </form>
+                    <details class="acao-inline">
+                        <summary class="btn btn-secondary btn-sm">Perguntar ao assistente</summary>
+                        <form method="post" class="acao-inline-form">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="copiloto">
+                            <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
+                            <input type="text" name="texto" maxlength="1000" required
+                                   placeholder="ex.: o que dizem os documentos sobre trancamento?">
+                            <button type="submit" class="btn btn-sm">Consultar</button>
+                        </form>
+                    </details>
+
                     <details class="acao-inline">
                         <summary class="btn btn-secondary btn-sm">Repassar</summary>
                         <form method="post" class="acao-inline-form">
@@ -630,6 +702,17 @@ include __DIR__ . '/partials/head.php';
 
         document.querySelectorAll('.btn-emoji').forEach(function (b) {
             b.addEventListener('click', function () { inserir(b.dataset.emoji); });
+        });
+
+        // Preenche, nunca envia. A resposta do assistente é rascunho: quem fala
+        // com o visitante é a pessoa, e ela precisa poder ajustar antes.
+        document.querySelectorAll('.btn-usar').forEach(function (b) {
+            b.addEventListener('click', function () {
+                campo.value = b.dataset.texto;
+                campo.dispatchEvent(new Event('input'));
+                campo.focus();
+                campo.setSelectionRange(campo.value.length, campo.value.length);
+            });
         });
     }
 })();

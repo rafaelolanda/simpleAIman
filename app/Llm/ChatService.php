@@ -273,7 +273,7 @@ final class ChatService
     }
 
     /** @param list<array<string, mixed>> $trechos */
-    private function montarAgente(array $trechos, int $conversaId): Agent
+    private function montarAgente(array $trechos, int $conversaId, bool $comFerramentas = true): Agent
     {
         $provider = $this->fabrica()->chat([
             'modelo' => (string) ($this->agente['modelo'] ?? ''),
@@ -294,10 +294,16 @@ final class ChatService
             ->setAiProvider($provider)
             ->setInstructions((new PromptBuilder())->montar($config, $trechos));
 
-        $ferramentas = (new ToolRegistry($agenteId, $conversaId))->paraAgente();
+        // Sem ferramentas é o modo do copiloto: ele responde ao ATENDENTE, e
+        // não pode transferir conversa, abrir chamado nem capturar lead em
+        // nome dele. Uma pergunta de consulta não deve ter efeito colateral —
+        // quem age é a pessoa, depois de ler.
+        if ($comFerramentas) {
+            $ferramentas = (new ToolRegistry($agenteId, $conversaId))->paraAgente();
 
-        if ($ferramentas !== []) {
-            $agent->addTool($ferramentas);
+            if ($ferramentas !== []) {
+                $agent->addTool($ferramentas);
+            }
         }
 
         return $agent;
@@ -563,6 +569,138 @@ final class ChatService
         $this->ultimasFontes = (new PromptBuilder())->fontesCitadas($texto, $trechos);
 
         return $texto;
+    }
+
+    /**
+     * Consulta do ATENDENTE ao assistente, em privado.
+     *
+     * Parece um turno de conversa, mas é outra coisa, e as diferenças são
+     * todas deliberadas:
+     *
+     * - **Não grava a pergunta como `usuario`, nem a resposta como `bot`.**
+     *   Fosse assim, os dois apareceriam para o visitante e entrariam no
+     *   histórico do modelo, que passaria a achar que ele mesmo disse aquilo.
+     * - **Sem ferramentas.** O copiloto não transfere conversa, não abre
+     *   chamado e não captura lead em nome do atendente. Consulta não pode ter
+     *   efeito colateral: quem age é a pessoa, depois de ler.
+     * - **Usa o histórico da conversa** como contexto, que é justamente o que
+     *   torna a resposta útil — o atendente pergunta "e sobre isso?" sem
+     *   precisar recontar o caso.
+     *
+     * O par pergunta/resposta fica registrado com `autor_tipo = 'copiloto'`:
+     * invisível ao visitante por construção (o filtro dele é lista de
+     * permissão), fora do histórico do modelo (que só lê usuario/bot/atendente)
+     * e disponível para quem assumir a conversa depois.
+     *
+     * @return array{texto: string, fontes: list<array<string, mixed>>}
+     * @throws ErroAgente
+     */
+    public function consultar(int $conversaId, string $pergunta, int $atendenteId): array
+    {
+        $inicio = microtime(true);
+        $trechos = $this->recuperar($pergunta);
+
+        // O tom do agente é feito para o visitante — inclusive o sotaque, se
+        // alguém configurou um. Quem lê aqui é colega de trabalho com um
+        // atendimento aberto na tela: quer o fato, não a conversa.
+        $config = $this->agente;
+        $config['system_prompt'] = trim(
+            "Você está ajudando um ATENDENTE HUMANO que está no meio de um atendimento. "
+            . "Responda de forma direta e factual, em poucas linhas, sem saudação e sem "
+            . "floreio. Se os documentos não trouxerem a resposta, diga isso claramente em "
+            . "vez de preencher a lacuna. Nunca invente valor, prazo, telefone ou e-mail.
+
+"
+            . (string) ($this->agente['system_prompt'] ?? '')
+        );
+
+        try {
+            // A conversa vai como CONTEXTO nas instruções, e a pergunta do
+            // atendente é o único turno.
+            //
+            // Emendar a pergunta no fim do histórico parecia natural e quebrava:
+            // o histórico termina numa fala do visitante (que o atendente
+            // assumiu sem responder), e duas mensagens de usuário seguidas
+            // fazem o Gemini recusar com "invalid message sequence". Além de
+            // errado no sentido — quem pergunta aqui não é o visitante.
+            $config['system_prompt'] .= "\n\nCONVERSA EM ANDAMENTO com o visitante, para contexto:\n"
+                . $this->transcricao($conversaId);
+
+            $mensagens = [new UserMessage($pergunta)];
+
+            $provider = $this->fabrica()->chat([
+                'modelo' => (string) ($this->agente['modelo'] ?? ''),
+                'max_tokens' => (int) $this->agente['max_tokens'],
+                'temperatura' => (float) $this->agente['temperatura'],
+                'reasoning_effort' => (string) $this->agente['reasoning_effort'],
+            ]);
+
+            $agent = Agent::make()
+                ->setAiProvider($provider)
+                ->setInstructions((new PromptBuilder())->montar($config, $trechos));
+
+            $texto = trim((string) $agent->chat($mensagens)->getMessage()->getContent());
+
+            if ($texto === '') {
+                throw new ErroAgente('resposta_vazia', 'Provedor respondeu 200 com conteúdo vazio.');
+            }
+        } catch (ErroAgente $e) {
+            $this->registrarFalha($conversaId, $e);
+            throw $e;
+        } catch (Throwable $e) {
+            $erro = ErroAgente::deProvedor($e, 'copiloto');
+            $this->registrarFalha($conversaId, $erro);
+            throw $erro;
+        }
+
+        $this->gravarMensagem($conversaId, 'copiloto', '❓ ' . $pergunta, $atendenteId);
+        $id = $this->gravarMensagem(
+            $conversaId,
+            'copiloto',
+            $texto,
+            $atendenteId,
+            (int) ((microtime(true) - $inicio) * 1000)
+        );
+
+        $this->gravarFontes($id, $trechos);
+
+        return [
+            'texto' => $texto,
+            'fontes' => (new PromptBuilder())->fontesCitadas($texto, $trechos),
+        ];
+    }
+
+    /**
+     * Conversa recente em texto corrido, para servir de contexto.
+     *
+     * Só o que foi dito de fato — avisos, notas e consultas anteriores ficam de
+     * fora: são ruído para quem precisa entender o caso, e nota interna de um
+     * colega não é o assunto do visitante.
+     */
+    private function transcricao(int $conversaId, int $limite = 12): string
+    {
+        $stmt = Database::connection()->prepare(
+            "SELECT autor_tipo, conteudo FROM mensagens
+              WHERE conversa_id = :c AND autor_tipo IN ('usuario', 'bot', 'atendente')
+              ORDER BY id DESC LIMIT :l"
+        );
+        $stmt->bindValue('c', $conversaId, PDO::PARAM_INT);
+        $stmt->bindValue('l', $limite, PDO::PARAM_INT);
+        $stmt->execute();
+
+        $linhas = [];
+
+        foreach (array_reverse($stmt->fetchAll(PDO::FETCH_ASSOC)) as $m) {
+            $quem = match ($m['autor_tipo']) {
+                'usuario' => 'Visitante',
+                'atendente' => 'Atendente',
+                default => 'Assistente',
+            };
+
+            $linhas[] = $quem . ': ' . $m['conteudo'];
+        }
+
+        return $linhas === [] ? '(a conversa ainda não começou)' : implode("\n", $linhas);
     }
 
     /**
