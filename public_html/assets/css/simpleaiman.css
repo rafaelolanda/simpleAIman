@@ -368,138 +368,6 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     word-break: break-all;
 }
 
-/* atendimento humano (handoff Nível 2) ------------------------ */
-
-.atendimento-topo {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.atendimento-nota {
-    margin: 0;
-    font-size: 0.85rem;
-    opacity: 0.75;
-    flex: 1 1 320px;
-}
-
-.atendimento-grade {
-    display: grid;
-    grid-template-columns: minmax(240px, 320px) 1fr;
-    gap: 1rem;
-    align-items: start;
-}
-
-@media (max-width: 860px) {
-    .atendimento-grade { grid-template-columns: 1fr; }
-}
-
-.fila-lista {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 0.6rem;
-}
-
-.fila-lista li {
-    padding: 0.7rem;
-    border: 1px solid var(--borda, #e3e6ec);
-    border-radius: 10px;
-}
-
-.fila-cabeca {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.5rem;
-    margin-bottom: 0.3rem;
-}
-
-.fila-previa {
-    margin: 0 0 0.5rem;
-    font-size: 0.85rem;
-    opacity: 0.75;
-    line-height: 1.4;
-}
-
-.fila-lista a { text-decoration: none; color: inherit; }
-.fila-lista a.ativo { font-weight: 700; color: var(--accent); }
-
-/* Espera longa precisa saltar aos olhos: o custo de não notar é uma pessoa
-   desistindo do outro lado. */
-.tag-alerta {
-    background: rgba(220, 38, 38, 0.12);
-    color: #b91c1c;
-}
-
-.chat-historico {
-    max-height: 52vh;
-    overflow-y: auto;
-    display: grid;
-    gap: 0.6rem;
-    padding: 0.25rem;
-    margin-bottom: 0.9rem;
-}
-
-.msg { max-width: 82%; }
-.msg-quem { display: block; font-size: 0.72rem; opacity: 0.6; margin-bottom: 0.15rem; }
-
-.msg-texto {
-    padding: 0.6rem 0.8rem;
-    border-radius: 12px;
-    line-height: 1.5;
-    font-size: 0.9rem;
-}
-
-.msg-usuario { justify-self: start; }
-.msg-usuario .msg-texto { background: rgba(0, 0, 0, 0.05); }
-
-.msg-bot { justify-self: start; }
-.msg-bot .msg-texto { background: rgba(var(--accent-rgb, 37, 99, 235), 0.08); }
-
-.msg-atendente { justify-self: end; text-align: right; }
-.msg-atendente .msg-texto { background: var(--accent); color: var(--on-accent); text-align: left; }
-
-/* Aviso do sistema não é fala de ninguém: fica centralizado e discreto, para
-   não ser confundido com a voz do atendente nem com a do bot. */
-.msg-sistema {
-    max-width: 100%;
-    justify-self: center;
-    text-align: center;
-}
-
-.msg-sistema .msg-texto {
-    background: none;
-    font-size: 0.78rem;
-    font-style: italic;
-    opacity: 0.6;
-    padding: 0.2rem;
-}
-
-.chat-envio textarea { width: 100%; }
-.chat-acoes { display: flex; justify-content: flex-end; margin-top: 0.5rem; }
-
-.chat-encerramento {
-    margin-top: 0.9rem;
-    padding-top: 0.9rem;
-    border-top: 1px solid var(--borda, #e3e6ec);
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.chat-encerramento small { flex: 1 1 240px; opacity: 0.65; font-size: 0.78rem; line-height: 1.4; }
-
-.linha-check {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.85rem;
-}
-
 /* catálogo de ferramentas embutidas ---------------------------- */
 
 .catalogo {
@@ -514,53 +382,229 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     gap: 0.35rem;
     align-items: flex-start;
     padding: 0.8rem;
-    border: 1px solid var(--borda, #e3e6ec);
+    border: 1px solid var(--border, #2a2f3a);
     border-radius: 10px;
 }
 
 .catalogo-item small { opacity: 0.7; line-height: 1.4; flex: 1; }
 
-/* editor do atendente ------------------------------------------ */
 
-.editor-barra {
+/* ==============================================================
+   Atendimento humano (handoff Nível 2)
+   ============================================================== */
+
+.atendimento-topo {
     display: flex;
     align-items: center;
-    gap: 0.2rem;
+    gap: 1rem;
     flex-wrap: wrap;
-    padding: 0.3rem 0;
 }
 
-.btn-marca,
-.btn-emoji {
-    border: 1px solid var(--borda, #e3e6ec);
-    background: transparent;
-    border-radius: 7px;
-    padding: 0.25rem 0.5rem;
-    cursor: pointer;
+.atendimento-nota {
+    margin: 0;
     font-size: 0.85rem;
-    line-height: 1.2;
+    color: var(--text-muted);
+    flex: 1 1 320px;
 }
 
-.btn-marca:hover,
-.btn-emoji:hover { border-color: var(--accent); }
-.btn-marca code { font-size: 0.75rem; }
-.editor-sep { width: 1px; align-self: stretch; background: var(--borda, #e3e6ec); margin: 0 0.35rem; }
+.atendimento-grade {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) 1fr;
+    gap: 1rem;
+    align-items: start;
+}
 
-.chat-acoes { align-items: center; gap: 0.8rem; }
-.chat-acoes .linha-check { margin-right: auto; opacity: 0.8; }
+@media (max-width: 900px) {
+    .atendimento-grade { grid-template-columns: 1fr; }
+}
 
-/* Nota interna: cor e etiqueta bem diferentes da resposta, porque confundir
-   as duas significa mandar recado interno para o visitante. */
-.msg-nota { justify-self: stretch; max-width: 100%; }
+/* fila -------------------------------------------------------- */
+
+.fila-lista {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.6rem;
+}
+
+.fila-lista li {
+    padding: 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+}
+
+.fila-cabeca {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.fila-previa {
+    margin: 0 0 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.fila-lista a { text-decoration: none; color: inherit; }
+.fila-lista a.ativo { font-weight: 700; color: var(--accent); }
+
+/* Espera longa precisa saltar aos olhos: o custo de nao notar e uma pessoa
+   desistindo do outro lado. */
+.tag-alerta { background: rgba(255, 84, 112, 0.16); color: var(--danger); }
+
+/* ==============================================================
+   A janela de conversa
+
+   Ilha CLARA dentro do painel escuro, e de proposito: o atendente passa a
+   sessao inteira lendo e escrevendo aqui, e texto claro sobre fundo escuro
+   cansa numa tarefa dessas. Alem disso, a familiaridade com o WhatsApp faz
+   quem nunca viu o sistema saber operar sem treinamento.
+
+   As cores abaixo NAO herdam nada do painel: sao redeclaradas aqui, senao um
+   ajuste no tema escuro quebraria o contraste dentro da janela.
+   ============================================================== */
+
+.zap {
+    --zap-cabecalho: #008069;
+    --zap-fundo: #efeae2;
+    --zap-recebida: #ffffff;
+    --zap-enviada: #d9fdd3;
+    --zap-nota: #fff3cd;
+    --zap-texto: #111b21;
+    /* Escurecido do #667781 do WhatsApp: sobre a barra clara (#f0f2f5) aquele
+       tom dava 4.14 de contraste, abaixo do minimo AA de 4.5. A diferenca nao
+       se ve, mas a legibilidade de quem passa o dia aqui, sim. */
+    --zap-secundario: #4d5b63;
+    --zap-borda: rgba(0, 0, 0, 0.10);
+    --zap-barra: #f0f2f5;
+
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 1px solid var(--border);
+    background: var(--zap-fundo);
+    color: var(--zap-texto);
+    display: flex;
+    flex-direction: column;
+    min-height: 420px;
+}
+
+.zap-cabecalho {
+    background: var(--zap-cabecalho);
+    color: #fff;
+    padding: 0.7rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.zap-avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.22);
+    display: grid;
+    place-items: center;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+}
+
+.zap-quem { font-weight: 600; line-height: 1.2; }
+.zap-estado { font-size: 0.76rem; opacity: 0.85; }
+.zap-cabecalho .tag { margin-left: auto; background: rgba(255, 255, 255, 0.2); color: #fff; }
+
+/* Trama discreta no fundo, como o papel de parede do WhatsApp. Feita com
+   gradientes para nao custar nenhum arquivo de imagem. */
+.zap-corpo {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    max-height: 52vh;
+    background-image:
+        radial-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px),
+        radial-gradient(rgba(0, 0, 0, 0.035) 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-position: 0 0, 11px 11px;
+}
+
+.msg { max-width: 78%; }
+
+.msg-texto {
+    position: relative;
+    padding: 0.42rem 0.65rem 1.1rem;
+    border-radius: 8px;
+    line-height: 1.45;
+    font-size: 0.9rem;
+    box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
+    word-wrap: break-word;
+}
+
+/* Hora dentro do balao, embaixo a direita: e o detalhe que faz a coisa
+   "parecer WhatsApp" mais do que qualquer cor. */
+.msg-hora {
+    position: absolute;
+    right: 0.6rem;
+    bottom: 0.3rem;
+    font-size: 0.68rem;
+    color: var(--zap-secundario);
+}
+
+.msg-quem {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+    color: var(--zap-cabecalho);
+}
+
+.msg-usuario { align-self: flex-start; }
+.msg-usuario .msg-texto { background: var(--zap-recebida); border-top-left-radius: 2px; }
+
+.msg-bot { align-self: flex-start; }
+.msg-bot .msg-texto { background: var(--zap-recebida); border-top-left-radius: 2px; }
+.msg-bot .msg-quem { color: var(--zap-secundario); font-style: italic; }
+
+.msg-atendente { align-self: flex-end; }
+.msg-atendente .msg-texto { background: var(--zap-enviada); border-top-right-radius: 2px; }
+.msg-atendente .msg-quem { display: none; }
+
+/* Aviso nao e fala de ninguem: pilula centralizada, como no WhatsApp. */
+.msg-sistema { align-self: center; max-width: 90%; }
+
+.msg-sistema .msg-texto {
+    background: #ffeecd;
+    color: #54656f;
+    font-size: 0.76rem;
+    text-align: center;
+    padding: 0.3rem 0.7rem;
+    box-shadow: none;
+    border-radius: 7px;
+}
+
+.msg-sistema .msg-quem,
+.msg-sistema .msg-hora { display: none; }
+
+/* Nota interna: NAO pode parecer mensagem enviada. Confundir as duas
+   significa mandar recado do staff para o visitante. */
+.msg-nota { align-self: center; max-width: 92%; }
 
 .msg-nota .msg-texto {
-    background: rgba(217, 119, 6, 0.10);
-    border-left: 3px solid #d97706;
-    border-radius: 6px;
-    font-size: 0.86rem;
+    background: var(--zap-nota);
+    border: 1px dashed #d0a63c;
+    color: #6b4e00;
+    font-size: 0.84rem;
+    box-shadow: none;
 }
 
-.msg-nota .msg-quem { color: #b45309; font-weight: 600; }
+.msg-nota .msg-quem { color: #8a6400; }
+.msg-nota .msg-hora { color: #a08040; }
 
 .msg-texto code {
     background: rgba(0, 0, 0, 0.07);
@@ -568,3 +612,104 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     border-radius: 4px;
     font-size: 0.9em;
 }
+
+/* barra de escrita -------------------------------------------- */
+
+.zap-escrita { background: var(--zap-barra); padding: 0.55rem 0.7rem; }
+
+.editor-barra {
+    display: flex;
+    align-items: center;
+    gap: 0.15rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.4rem;
+}
+
+.btn-marca,
+.btn-emoji {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--zap-secundario);
+    border-radius: 6px;
+    padding: 0.2rem 0.45rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.btn-marca:hover,
+.btn-emoji:hover { background: rgba(0, 0, 0, 0.06); color: var(--zap-texto); }
+.btn-marca code { background: none; color: inherit; font-size: 0.78rem; }
+.editor-sep { width: 1px; height: 18px; background: var(--zap-borda); margin: 0 0.35rem; }
+
+.zap-escrita textarea {
+    width: 100%;
+    border: 1px solid var(--zap-borda);
+    border-radius: 18px;
+    padding: 0.6rem 0.9rem;
+    background: #fff;
+    color: var(--zap-texto);
+    font: inherit;
+    font-size: 0.9rem;
+    resize: vertical;
+}
+
+.zap-escrita textarea::placeholder { color: var(--zap-secundario); opacity: 0.85; }
+.zap-escrita textarea:focus { outline: 2px solid var(--zap-cabecalho); outline-offset: -1px; }
+
+.chat-acoes {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    margin-top: 0.45rem;
+}
+
+.chat-acoes .linha-check { margin-right: auto; color: var(--zap-secundario); font-size: 0.83rem; }
+
+.zap-enviar {
+    border: 0;
+    border-radius: 20px;
+    padding: 0.45rem 1.1rem;
+    background: var(--zap-cabecalho);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.zap-enviar:hover { filter: brightness(1.08); }
+.zap-enviar.nota { background: #b8860b; }
+
+/* rodape de acoes --------------------------------------------- */
+
+.chat-encerramento {
+    background: var(--zap-barra);
+    border-top: 1px solid var(--zap-borda);
+    padding: 0.6rem 0.7rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.chat-encerramento small { flex: 1 1 240px; color: var(--zap-secundario); font-size: 0.76rem; line-height: 1.4; }
+
+.chat-encerramento .btn,
+.chat-encerramento summary {
+    background: #fff;
+    color: var(--zap-texto);
+    border: 1px solid var(--zap-borda);
+}
+
+.chat-encerramento .acao-inline-form {
+    background: #fff;
+    border-color: var(--zap-borda);
+}
+
+.chat-encerramento input,
+.chat-encerramento select {
+    background: #fff;
+    color: var(--zap-texto);
+    border: 1px solid var(--zap-borda);
+}
+
+.linha-check { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }

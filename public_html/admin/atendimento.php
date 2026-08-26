@@ -300,12 +300,24 @@ include __DIR__ . '/partials/head.php';
             <h2 class="card-title">Conversa</h2>
             <p class="vazio">Escolha uma conversa na fila para atender.</p>
         <?php else: ?>
-            <h2 class="card-title">
-                Conversa #<?= (int) $conversa['id'] ?>
-                <span class="tag"><?= e((string) $conversa['modo']) ?></span>
-            </h2>
+            <div class="zap">
+                <div class="zap-cabecalho">
+                    <span class="zap-avatar">👤</span>
+                    <div>
+                        <div class="zap-quem">Visitante · conversa #<?= (int) $conversa['id'] ?></div>
+                        <div class="zap-estado">
+                            <?php if ($conversa['modo'] === 'humano'): ?>
+                                em atendimento com <?= e((string) ($conversa['atendente'] ?? 'você')) ?>
+                            <?php elseif ($conversa['modo'] === 'aguardando'): ?>
+                                aguardando alguém assumir
+                            <?php else: ?>
+                                <?= e((string) $conversa['modo']) ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
 
-            <div class="chat-historico" id="historico">
+                <div class="zap-corpo" id="historico">
                 <?php foreach ($mensagens as $m): ?>
                     <?php
                     $classe = match ($m['autor_tipo']) {
@@ -325,14 +337,17 @@ include __DIR__ . '/partials/head.php';
                     };
                     ?>
                     <div class="msg <?= $classe ?>" data-id="<?= (int) $m['id'] ?>">
-                        <span class="msg-quem"><?= e($quem) ?> · <?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
-                        <div class="msg-texto"><?= formatar_whatsapp((string) $m['conteudo']) ?></div>
+                        <div class="msg-texto">
+                            <span class="msg-quem"><?= e($quem) ?></span>
+                            <?= formatar_whatsapp((string) $m['conteudo']) ?>
+                            <span class="msg-hora"><?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
+                        </div>
                     </div>
                 <?php endforeach; ?>
-            </div>
+                </div><!-- .zap-corpo -->
 
             <?php if ($conversa['modo'] === 'humano' && (int) $conversa['atendente_id'] === $eu): ?>
-                <form method="post" class="chat-envio" id="form-envio">
+                <form method="post" class="zap-escrita" id="form-envio">
                     <?= csrf_field() ?>
                     <input type="hidden" name="acao" value="responder" id="campo-acao">
                     <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
@@ -365,7 +380,7 @@ include __DIR__ . '/partials/head.php';
                         <label class="linha-check" title="Só o staff vê. O visitante não recebe.">
                             <input type="checkbox" id="campo-nota"> nota interna
                         </label>
-                        <button type="submit" class="btn btn-primary" id="btn-enviar">Enviar</button>
+                        <button type="submit" class="zap-enviar" id="btn-enviar">Enviar</button>
                     </div>
                 </form>
 
@@ -407,15 +422,20 @@ include __DIR__ . '/partials/head.php';
                     </small>
                 </div>
             <?php elseif ($conversa['modo'] === 'aguardando'): ?>
-                <form method="post">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="acao" value="assumir">
-                    <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
-                    <button type="submit" class="btn btn-primary">Assumir esta conversa</button>
-                </form>
+                <div class="zap-escrita">
+                    <form method="post" style="margin:0">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="acao" value="assumir">
+                        <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
+                        <button type="submit" class="zap-enviar">Assumir esta conversa</button>
+                    </form>
+                </div>
             <?php else: ?>
-                <p class="vazio">Esta conversa não está com você.</p>
+                <div class="zap-escrita">
+                    <p class="vazio" style="margin:0">Esta conversa não está com você.</p>
+                </div>
             <?php endif; ?>
+            </div><!-- .zap -->
         <?php endif; ?>
     </section>
 </div>
@@ -463,20 +483,40 @@ include __DIR__ . '/partials/head.php';
                     if (!historico || m.id <= ultimo) { return; }
                     ultimo = m.id;
 
+                    var classes = {
+                        usuario: 'usuario', atendente: 'atendente', nota: 'nota',
+                        sistema: 'sistema', aviso: 'sistema'
+                    };
+                    var rotulos = {
+                        usuario: 'Visitante', atendente: 'Atendente', nota: 'Nota interna',
+                        sistema: 'Sistema', aviso: 'Aviso'
+                    };
+
                     var div = document.createElement('div');
-                    div.className = 'msg msg-' + (m.quem === 'usuario' ? 'usuario' : (m.quem === 'atendente' ? 'atendente' : (m.quem === 'nota' ? 'nota' : m.quem === 'sistema' || m.quem === 'aviso' ? 'sistema' : 'bot')));
+                    div.className = 'msg msg-' + (classes[m.quem] || 'bot');
+
+                    // Mesma estrutura do render em PHP: quem e hora ficam DENTRO
+                    // do balão. Duas montagens diferentes fariam a mensagem que
+                    // chega pelo polling parecer de outro sistema.
+                    var txt = document.createElement('div');
+                    txt.className = 'msg-texto';
 
                     var cab = document.createElement('span');
                     cab.className = 'msg-quem';
-                    cab.textContent = (m.quem === 'usuario' ? 'Visitante' : m.quem === 'atendente' ? 'Atendente' : m.quem === 'nota' ? 'Nota interna' : m.quem === 'aviso' ? 'Aviso' : m.quem === 'sistema' ? 'Sistema' : 'Assistente') + ' · ' + m.hora;
+                    cab.textContent = rotulos[m.quem] || 'Assistente';
 
-                    var txt = document.createElement('div');
-                    txt.className = 'msg-texto';
+                    var corpo = document.createElement('span');
                     // HTML produzido por formatar_whatsapp(), que escapa antes
                     // de formatar. Ver o comentário no endpoint.
-                    txt.innerHTML = m.html;
+                    corpo.innerHTML = m.html;
 
-                    div.appendChild(cab);
+                    var hora = document.createElement('span');
+                    hora.className = 'msg-hora';
+                    hora.textContent = m.hora;
+
+                    txt.appendChild(cab);
+                    txt.appendChild(corpo);
+                    txt.appendChild(hora);
                     div.appendChild(txt);
                     historico.appendChild(div);
                     historico.scrollTop = historico.scrollHeight;
@@ -532,8 +572,7 @@ include __DIR__ . '/partials/head.php';
             check.addEventListener('change', function () {
                 acao.value = check.checked ? 'nota' : 'responder';
                 botao.textContent = check.checked ? 'Salvar nota' : 'Enviar';
-                botao.classList.toggle('btn-secondary', check.checked);
-                botao.classList.toggle('btn-primary', !check.checked);
+                botao.classList.toggle('nota', check.checked);
                 campo.focus();
             });
         }
