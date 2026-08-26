@@ -45,6 +45,23 @@ final class PromptBuilder
 
         if ($trechos !== []) {
             $partes[] = $this->contexto($trechos);
+
+            // Busca fraca: o modelo precisa saber que o material chegou por
+            // pouco, senão trata trecho tangencial como resposta.
+            //
+            // A nota sozinha não separa "vago" de "informal mas real" — as
+            // faixas se tocam (medido: a pergunta legítima "quais cursos vcs
+            // tem" fez 0.683, e a palavra solta "ajuda" fez 0.651). Por isso o
+            // aviso INFORMA em vez de bloquear: descartar acertaria o vago e
+            // erraria a pergunta mal escrita, que é justamente a de quem mais
+            // precisa de ajuda.
+            if (!empty($agente['busca_fraca'])) {
+                $partes[] = '## Atenção sobre o material acima' . "\n\n"
+                    . 'A busca NÃO encontrou nada claramente relacionado à pergunta — os trechos '
+                    . 'acima são apenas os menos distantes, e provavelmente não respondem o que foi '
+                    . 'perguntado. Não os apresente como resposta. Se a pergunta estiver vaga ou for '
+                    . 'só uma palavra solta, pergunte o que a pessoa precisa em vez de adivinhar.';
+            }
         }
 
         $partes[] = $this->guardrails($agente, $trechos !== []);

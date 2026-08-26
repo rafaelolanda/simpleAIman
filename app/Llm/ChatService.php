@@ -33,6 +33,18 @@ final class ChatService
 {
     private const PAPEIS_HISTORICO = 8;
 
+    /**
+     * Acima do piso, quanto a melhor nota precisa subir para a busca contar
+     * como confiante.
+     *
+     * Conservador de propósito. A nota NÃO separa "vago" de "informal mas
+     * real" — as faixas se tocam: "quais cursos vcs tem" (pergunta legítima)
+     * fez 0.683 e "ajuda" (palavra solta) fez 0.651. Um valor alto marcaria
+     * como fraca a pergunta mal escrita, que é a de quem mais precisa de
+     * ajuda. Este aqui pega só o claramente fraco.
+     */
+    private const MARGEM_CONFIANCA = 0.10;
+
     /** @param array<string, mixed> $agente linha de `agentes` */
     private function __construct(
         private readonly array $agente,
@@ -289,6 +301,7 @@ final class ChatService
         // existir de fato, o prompt proibe menciona-la.
         $config = $this->agente;
         $config['handoff_disponivel'] = ToolRegistry::temHandoff($agenteId);
+        $config['busca_fraca'] = $this->buscaFraca;
 
         $agent = Agent::make()
             ->setAiProvider($provider)
@@ -395,6 +408,14 @@ final class ChatService
     private ?array $vetorPergunta = null;
 
     /**
+     * A última busca trouxe material fraco?
+     *
+     * Fraco = a melhor nota ficou rente ao piso. Não descarta nada: vira um
+     * aviso no prompt, porque a nota não separa "vago" de "informal mas real".
+     */
+    private bool $buscaFraca = false;
+
+    /**
      * @return list<float>|null null quando o embedding falha — o turno segue
      *                          sem busca, e os guardrails cuidam do resto.
      */
@@ -458,6 +479,15 @@ final class ChatService
             );
 
             $this->tempoBusca = $retriever->tempos;
+
+            // A melhor nota rente ao piso significa que nada casou de fato: a
+            // busca devolveu os trechos menos distantes, não os relacionados.
+            // Medido nesta base: consulta vaga fica 0.04–0.10 acima do piso, e
+            // pergunta real fica 0.19–0.23.
+            $notas = array_filter(array_column($trechos, 'score_vetorial'), static fn ($v): bool => $v !== null);
+            $piso = (float) $this->agente['limiar_similaridade'];
+
+            $this->buscaFraca = $notas !== [] && (max($notas) - $piso) < self::MARGEM_CONFIANCA;
 
             return $trechos;
         } catch (Throwable $e) {
@@ -532,6 +562,21 @@ final class ChatService
     {
         $inicio = microtime(true);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
+
+
+        // Palavra de navegação: atalho determinístico, antes de qualquer busca.
+        //
+        // `menu` era reservada só no modo roteador e não significava nada aqui
+        // — quem digitava esperando o menu de setores recebia o RAG tentando
+        // adivinhar, e adivinhando mal: palavra solta gera vetor difuso, todo
+        // trecho pontua parecido, e o agente responde com confiança sobre
+        // material sem relação. Agora as duas modalidades entendem o mesmo.
+        if (Roteador::temMenu() && ($comando = Roteador::comandoDeNavegacao($pergunta)) !== null) {
+            $texto = Roteador::responder($conversaId, $comando);
+            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+            return $texto;
+        }
 
         // FAQ com casamento de alta confiança encerra o turno aqui: o texto
         // curado sai palavra por palavra, sem geração nenhuma.
@@ -724,6 +769,23 @@ final class ChatService
         if (($this->agente['modo'] ?? 'ia') === 'roteador') {
             $texto = Roteador::responder($conversaId, $pergunta);
             $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+            yield $texto;
+
+            return;
+        }
+
+
+        // Palavra de navegação: atalho determinístico, antes de qualquer busca.
+        //
+        // `menu` era reservada só no modo roteador e não significava nada aqui
+        // — quem digitava esperando o menu de setores recebia o RAG tentando
+        // adivinhar, e adivinhando mal: palavra solta gera vetor difuso, todo
+        // trecho pontua parecido, e o agente responde com confiança sobre
+        // material sem relação. Agora as duas modalidades entendem o mesmo.
+        if (Roteador::temMenu() && ($comando = Roteador::comandoDeNavegacao($pergunta)) !== null) {
+            $texto = Roteador::responder($conversaId, $comando);
+            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
             yield $texto;
 
             return;

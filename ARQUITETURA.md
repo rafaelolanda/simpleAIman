@@ -636,6 +636,35 @@ criaria a chance de transferir sem calar o bot, ou calar o bot sem avisar ningu�
 - **Login não atravessa.** Para o visitante vai o nome de exibição, ou "Atendente". O
   usuário de login é credencial.
 
+### Consulta vaga: navegação e confiança
+
+Uma palavra solta como `menu` gera um vetor de busca **difuso**: nenhum trecho casa de fato,
+todos ficam com nota parecida e apenas os menos distantes sobrevivem ao piso. O agente então
+responde com a confiança de sempre sobre material sem relação — e cita as fontes
+corretamente, o que torna o erro ainda mais convincente.
+
+**Subir o limiar não resolve**, e isso está medido: a pergunta legítima *"quais cursos vcs
+tem"* pontuou **0.683**, e a palavra solta *"ajuda"* pontuou **0.651**. As faixas se tocam.
+Um corte no meio acertaria o vago e derrubaria a pergunta mal escrita — que é justamente a de
+quem mais precisa de ajuda.
+
+Duas camadas, tratando problemas diferentes:
+
+**Palavras de navegação** (`menu`, `opções`, `ajuda`, `atendente`, `humano`…) acionam o
+roteamento por setor **antes de qualquer busca**, no modo IA também. Determinístico, sem
+gastar token. Existe porque essas palavras já eram reservadas no modo roteador e não
+significavam nada no modo IA — quem digitasse `menu` esperando o menu recebia o RAG
+adivinhando. A comparação é **exata contra a lista**: sem isso, "não quero atendente" viraria
+comando de transferência e "qual o menu do RU" viraria menu de setores.
+
+**Aviso de confiança** para o resto. Quando a melhor nota fica a menos de `MARGEM_CONFIANCA`
+(0.10) acima do piso, o prompt ganha um bloco dizendo que a busca não achou nada claramente
+relacionado e que a pessoa deve ser questionada em vez de adivinhada. **Informa, não
+bloqueia** — descartar acertaria o vago e erraria o informal. A margem é conservadora de
+propósito: pega só o claramente fraco.
+
+Medido nesta base: consulta vaga fica **0.04–0.10** acima do piso; pergunta real, **0.19–0.23**.
+
 ### Copiloto: o atendente pergunta ao assistente em privado
 
 `ChatService::consultar()` parece um turno de conversa e é outra coisa. As diferenças são

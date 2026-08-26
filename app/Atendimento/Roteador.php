@@ -37,6 +37,38 @@ final class Roteador
     private const PALAVRAS_MENU = ['menu', 'voltar', 'opcoes', 'inicio', 'ajuda'];
 
     /**
+     * A mensagem é uma palavra de navegação, e nada além disso?
+     *
+     * Existe porque `menu` era palavra reservada só no modo roteador e não
+     * significava nada no modo IA — quem digitasse esperando o menu de setores
+     * recebia o RAG tentando adivinhar. E adivinha mal: uma palavra solta gera
+     * um vetor difuso, todo trecho pontua parecido e o agente responde com
+     * confiança sobre material que não tem relação nenhuma.
+     *
+     * Só casa a mensagem INTEIRA. "quero ver o menu de hoje no RU" é pergunta
+     * de conteúdo e segue o caminho normal; "menu" é navegação.
+     *
+     * @return 'menu'|'atendente'|null
+     */
+    public static function comandoDeNavegacao(string $entrada): ?string
+    {
+        // Só pontuação e caixa são descartadas. A comparação é EXATA contra a
+        // lista: sem isso, "não quero atendente" viraria comando de
+        // transferência, e "qual o menu do RU" viraria menu de setores.
+        $chave = trim(preg_replace('/\s+/u', ' ', preg_replace('/[^\p{L}\s]+/u', '', self::normalizar($entrada)) ?? '') ?? '');
+
+        if ($chave === '') {
+            return null;
+        }
+
+        if (in_array($chave, self::PALAVRAS_MENU, true)) {
+            return 'menu';
+        }
+
+        return in_array($chave, self::PALAVRAS_ATENDENTE, true) ? 'atendente' : null;
+    }
+
+    /**
      * Há material para montar um menu?
      *
      * Sem setor ativo não há para onde rotear, e um menu vazio é pior que a
