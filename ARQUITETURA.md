@@ -794,6 +794,24 @@ No widget (`public_html/embed.js`):
   visitantes nunca abre; uma requisição por pageview seria banda do cliente
   gasta à toa.
 
+
+### Ditado: a entrada continua sendo texto
+
+O botão de microfone usa a `SpeechRecognition` do próprio navegador. O áudio **não passa
+pelo servidor**: o navegador transcreve, o texto cai no campo, e a pessoa revisa antes de
+enviar. Sem upload, sem armazenamento, sem transcrição para pagar — e nada disso encosta na
+máquina de mídia que o WhatsApp vai exigir, que é outro problema.
+
+- **Não envia sozinho ao terminar de falar.** Reconhecimento erra nome próprio o tempo todo,
+  e mandar "matrícula" como "matriculado" sem a pessoa ver é o que faz desistir do recurso.
+- **O botão só aparece onde a API existe** — Chrome e Edge, Safari com prefixo; Firefox não
+  tem. Microfone que não funciona é pior que microfone nenhum.
+- **O idioma vem do agente** (`?acao=config` devolve `agentes.idioma`): `lang` errado
+  transcreve mal, e o widget não tem como adivinhar qual agente responde por aquele canal.
+- **O que já estava digitado é preservado** — dá para escrever metade e ditar o resto.
+- No Chrome o áudio é transcrito nos servidores do Google. É o navegador da pessoa e a
+  escolha é dela ao apertar o botão, mas convém saber, porque a pergunta aparece.
+
 ## 11. Armadilhas conhecidas
 
 **PDO liga inteiro como TEXTO, e no SQLite todo TEXT é maior que todo número.**

@@ -121,6 +121,13 @@
     'cursor:pointer;display:flex;align-items:center;justify-content:center}',
     '.enviar:disabled{opacity:.5;cursor:default}',
     '.enviar svg{width:18px;height:18px}',
+    '.microfone{border:1px solid #d1d5db;background:#fff;color:#6b7280;border-radius:9px;',
+    'width:42px;cursor:pointer;display:none;align-items:center;justify-content:center}',
+    '.microfone.disponivel{display:flex}',
+    '.microfone svg{width:18px;height:18px}',
+    '.microfone.ouvindo{background:#dc2626;border-color:#dc2626;color:#fff;',
+    'animation:pulso 1.2s ease-in-out infinite}',
+    '@keyframes pulso{0%,100%{opacity:1}50%{opacity:.6}}',
     '.marca{text-align:center;font-size:11px;color:#9ca3af;padding:0 0 8px}',
 
     '@media (max-width:480px){',
@@ -136,6 +143,10 @@
     'stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/>' +
     '<path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
 
+  var ICONE_MIC = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/>' +
+    '<path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v4"/></svg>';
+
   raiz.innerHTML =
     '<style>' + CSS + '</style>' +
     '<div class="wrap" style="--cor:#2563eb">' +
@@ -145,6 +156,7 @@
         '<div class="corpo" aria-live="polite"></div>' +
         '<div class="rodape">' +
           '<textarea rows="1" placeholder="Escreva sua mensagem..." aria-label="Mensagem"></textarea>' +
+          '<button class="microfone" aria-label="Falar em vez de escrever" title="Falar">' + ICONE_MIC + '</button>' +
           '<button class="enviar" aria-label="Enviar">' + ICONE_ENVIAR + '</button>' +
         '</div>' +
         '<div class="marca"></div>' +
@@ -425,6 +437,91 @@
   // A configuração só é buscada quando alguém abre o chat. A maioria dos
   // visitantes nunca abre, e uma requisição por pageview seria custo de banda
   // do cliente para nada.
+  // ------------------------------------------------------------------
+  // Ditado
+  //
+  // A entrada continua sendo TEXTO: o navegador transcreve e preenche o campo,
+  // e a pessoa revisa antes de enviar. Nada de áudio chega ao servidor, então
+  // não há upload, armazenamento nem transcrição para pagar.
+  //
+  // Enviar sozinho ao terminar de falar seria pior: reconhecimento erra nome
+  // próprio o tempo todo, e mandar "matrícula" como "matriculado" sem a pessoa
+  // ver é o tipo de coisa que faz desistir do recurso.
+  //
+  // O botão só aparece onde a API existe — Chrome e Edge, Safari com prefixo.
+  // Firefox não tem. Mostrar um microfone que não funciona é pior que não ter.
+  // ------------------------------------------------------------------
+  var idioma = 'pt-BR';
+  var btnMic = raiz.querySelector('.microfone');
+  var Reconhecimento = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  if (Reconhecimento && btnMic) {
+    btnMic.classList.add('disponivel');
+
+    var ouvinte = null;
+    var textoAntes = '';
+
+    btnMic.addEventListener('click', function () {
+      if (ouvinte) {
+        ouvinte.stop();
+        return;
+      }
+
+      ouvinte = new Reconhecimento();
+      ouvinte.lang = idioma;
+      ouvinte.interimResults = true;
+      ouvinte.continuous = false;
+
+      // O que já estava escrito é preservado: a pessoa pode digitar metade e
+      // ditar o resto, e um recomeço não apaga o que ela tinha.
+      textoAntes = campo.value ? campo.value.replace(/\s+$/, '') + ' ' : '';
+
+      ouvinte.onstart = function () {
+        btnMic.classList.add('ouvindo');
+        btnMic.setAttribute('aria-label', 'Parar de gravar');
+        campo.placeholder = 'Ouvindo... fale agora';
+      };
+
+      ouvinte.onresult = function (ev) {
+        var texto = '';
+
+        for (var i = 0; i < ev.results.length; i++) {
+          texto += ev.results[i][0].transcript;
+        }
+
+        campo.value = textoAntes + texto;
+        campo.dispatchEvent(new Event('input'));
+      };
+
+      ouvinte.onerror = function (ev) {
+        // 'no-speech' é a pessoa que abriu e não falou: silêncio é a resposta
+        // certa. Permissão negada merece uma palavra, porque ela pode achar
+        // que o botão está quebrado.
+        if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
+          campo.placeholder = 'Permita o microfone no navegador para ditar.';
+        }
+      };
+
+      ouvinte.onend = function () {
+        ouvinte = null;
+        btnMic.classList.remove('ouvindo');
+        btnMic.setAttribute('aria-label', 'Falar em vez de escrever');
+
+        if (campo.placeholder.indexOf('Ouvindo') === 0) {
+          campo.placeholder = 'Escreva sua mensagem...';
+        }
+
+        campo.focus();
+      };
+
+      try {
+        ouvinte.start();
+      } catch (e) {
+        ouvinte = null;
+      }
+    });
+  }
+
   function carregarConfig() {
     fetch(base + '/api/publico.php?acao=config&t=' + encodeURIComponent(token))
       .then(function (r) { return r.ok ? r.json() : null; })
@@ -435,6 +532,7 @@
 
         wrap.style.setProperty('--cor', cfg.cor);
         raiz.querySelector('.titulo').textContent = cfg.titulo;
+        idioma = cfg.idioma || idioma;
 
         if (!corpo.children.length) {
           balao('bot', cfg.saudacao);

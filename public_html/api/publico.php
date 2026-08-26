@@ -55,10 +55,19 @@ if ($acao === 'config') {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: public, max-age=300');
 
+    // O idioma sai daqui para o ditado do navegador reconhecer certo: a
+    // SpeechRecognition com `lang` errado transcreve mal, e o widget não tem
+    // como adivinhar sozinho qual agente responde por este canal.
+    $idioma = Database::connection()->prepare(
+        'SELECT a.idioma FROM canais c JOIN agentes a ON a.id = c.agente_id WHERE c.id = :id'
+    );
+    $idioma->execute(['id' => (int) $canal->canal['id']]);
+
     echo json_encode([
         'titulo' => $canal->titulo(),
         'saudacao' => $canal->saudacao(),
         'cor' => $canal->cor(),
+        'idioma' => $idioma->fetchColumn() ?: 'pt-BR',
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }
