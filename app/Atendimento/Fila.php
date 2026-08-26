@@ -149,17 +149,45 @@ final class Fila
      * ela, o bot ao retomar leria a fala do atendente como se fosse dele
      * mesmo e passaria a se contradizer.
      */
-    public static function devolverAoBot(int $conversaId, string $motivo = ''): void
+    /**
+     * Motivos pelos quais uma conversa volta ao assistente, e o que o VISITANTE
+     * lê em cada caso.
+     *
+     * O texto mora aqui, e quem chama escolhe um motivo — não escreve a frase.
+     * Isso não é preciosismo: a versão anterior aceitava texto livre, e o
+     * `expirarAbandonadas()` passava por ali uma INSTRUÇÃO destinada ao modelo
+     * ("Peça desculpas pela espera e ofereça registrar a dúvida"). Ela foi
+     * gravada como aviso e apareceu na tela do visitante.
+     *
+     * Falhou nas duas pontas, aliás: `ChatService::historico()` só alimenta o
+     * modelo com `usuario`, `bot` e `atendente`, então a instrução também nunca
+     * chegou a quem era destinada.
+     *
+     * Com o texto fechado num mapa, essa classe de erro deixa de existir: não
+     * há como um chamador injetar nada na conversa.
+     */
+    private const MOTIVOS_DEVOLUCAO = [
+        'encerrado' => 'Atendimento humano encerrado. O assistente voltou a responder.',
+        'expirado' => null, // sem aviso: quem fala é o próprio assistente, abaixo
+    ];
+
+    public static function devolverAoBot(int $conversaId, string $motivo = 'encerrado'): void
     {
         Database::connection()->prepare(
             "UPDATE conversas SET modo = 'bot', atendente_id = NULL, aguardando_desde = NULL, editado_em = :agora
              WHERE id = :id"
         )->execute(['id' => $conversaId, 'agora' => now()]);
 
-        self::registrarAviso(
-            $conversaId,
-            $motivo !== '' ? $motivo : 'Atendimento humano encerrado. O assistente voltou a responder.'
-        );
+        // array_key_exists, e não `??`: aqui `null` é um valor com significado
+        // ("não avise nada, quem fala é o assistente"), e o `??` o trataria
+        // como ausente, caindo no texto de 'encerrado'.
+        $aviso = array_key_exists($motivo, self::MOTIVOS_DEVOLUCAO)
+            ? self::MOTIVOS_DEVOLUCAO[$motivo]
+            : self::MOTIVOS_DEVOLUCAO['encerrado'];
+
+        if ($aviso !== null) {
+            self::registrarAviso($conversaId, $aviso);
+        }
     }
 
     /**
@@ -286,13 +314,22 @@ final class Fila
         $ids = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
         foreach ($ids as $id) {
-            // Volta para o bot com uma instrução, não com um pedido de
-            // desculpas genérico: o próximo turno precisa oferecer a saída do
-            // Nível 1, que é o que de fato resolve.
-            self::devolverAoBot(
+            self::devolverAoBot((int) $id, 'expirado');
+
+            // Frase FIXA, dita pelo próprio assistente — não uma instrução para
+            // ele improvisar. O que precisa ser dito aqui é curto e sempre o
+            // mesmo; pedir ao modelo que componha isso gastaria uma chamada e
+            // abriria espaço para ele dizer outra coisa. É o mesmo raciocínio
+            // da frase de encaminhamento, fixa desde o começo.
+            //
+            // Vai como `bot`, então entra no histórico do modelo: no próximo
+            // turno ele sabe o que já foi oferecido.
+            self::gravar(
                 (int) $id,
-                'Ninguém do atendimento estava disponível. Peça desculpas pela espera e ofereça '
-                    . 'registrar a dúvida para retorno posterior.'
+                'bot',
+                'Desculpe a espera! Não encontrei nenhum atendente disponível agora. '
+                    . 'Quer que eu registre sua dúvida para alguém retornar?',
+                null
             );
         }
 
