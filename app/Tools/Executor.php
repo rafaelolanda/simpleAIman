@@ -28,6 +28,17 @@ final class Executor
     /** @var array<int, true> ferramentas já executadas nesta conversa */
     private array $jaExecutadas = [];
 
+    /**
+     * Execuções neste TURNO, para o teto de iterações.
+     *
+     * Diferente de `$jaExecutadas`, que é histórico da conversa inteira: o
+     * teto protege contra o laço de um único turno, em que o modelo chama,
+     * recebe o resultado, chama de novo, e assim por diante. Cada volta dessas
+     * é uma chamada nova ao provedor, com o histórico inteiro — é onde o
+     * crédito some sem ninguém perceber.
+     */
+    private int $nesteTurno = 0;
+
     public function __construct(
         private readonly int $conversaId,
         private readonly ?int $agenteId = null,
@@ -65,6 +76,18 @@ final class Executor
         $inicio = microtime(true);
         $id = (int) $ferramenta['id'];
 
+        // Fora do try de propósito: o `catch` devolve uma frase neutra e
+        // genérica ao modelo, que engoliria justamente a instrução de parar —
+        // e ele tentaria de novo, que é o oposto do que o teto quer.
+        if (($estouro = $this->tetoEstourado()) !== null) {
+            $this->registrar($ferramenta, $argumentos, 'recusado', $estouro, $inicio, $mensagemId);
+
+            return json_encode([
+                'erro' => true,
+                'mensagem' => $estouro,
+            ], JSON_UNESCAPED_UNICODE);
+        }
+
         try {
             if (empty($ferramenta['ativo'])) {
                 throw new RuntimeException('Ferramenta desativada.');
@@ -76,6 +99,7 @@ final class Executor
             $resultado = $this->despachar($ferramenta, $parametros);
 
             $this->jaExecutadas[$id] = true;
+            $this->nesteTurno++;
 
             $this->registrar($ferramenta, $parametros, 'ok', $resultado, $inicio, $mensagemId);
             Metrics::log('ferramenta_executada', $this->agenteId ?? 0);
@@ -92,6 +116,38 @@ final class Executor
                 'mensagem' => 'Não foi possível consultar essa informação agora.',
             ], JSON_UNESCAPED_UNICODE);
         }
+    }
+
+    /**
+     * Teto de ferramentas por turno.
+     *
+     * O campo `agentes.max_iteracoes_tool` existia na tabela e no formulário,
+     * e ninguém o lia: quem fazia o laço era a biblioteca, com o limite dela.
+     * Era um botão que mentia, e justamente o botão que impede um agente mal
+     * configurado de chamar ferramenta em círculo queimando crédito.
+     *
+     * A recusa devolve texto ao modelo em vez de estourar: ele precisa poder
+     * concluir o turno com o que já tem, e não receber um erro que o faria
+     * tentar de novo.
+     */
+    private function tetoEstourado(): ?string
+    {
+        $teto = 5;
+
+        if ($this->agenteId !== null) {
+            $stmt = Database::connection()->prepare('SELECT max_iteracoes_tool FROM agentes WHERE id = :id');
+            $stmt->execute(['id' => $this->agenteId]);
+            $teto = max(1, (int) ($stmt->fetchColumn() ?: 5));
+        }
+
+        if ($this->nesteTurno < $teto) {
+            return null;
+        }
+
+        // Texto acionável, não erro: o modelo precisa concluir o turno com o
+        // que já tem. "Falhou" o faria tentar outra ferramenta.
+        return 'Limite de ' . $teto . ' ferramentas por resposta atingido. '
+            . 'Responda agora com o que já foi obtido, sem chamar mais ferramentas.';
     }
 
     /**
