@@ -110,9 +110,19 @@ final class ChatService
             'agora' => $agora,
         ]);
 
+        // O id é lido AQUI, colado no INSERT.
+        //
+        // `lastInsertId()` devolve a última linha inserida na CONEXÃO, não na
+        // tabela. Com o `Metrics::log()` no meio, na primeira conversa do dia
+        // — quando a métrica ainda não tem linha e precisa inserir — o retorno
+        // virava o id da `metricas`. Toda mensagem seguinte apontava para uma
+        // conversa que não existe, e o sintoma era "FOREIGN KEY constraint
+        // failed" uma vez por dia, sem padrão aparente.
+        $id = (int) $pdo->lastInsertId();
+
         Metrics::log('conversa_iniciada', (int) $this->agente['id']);
 
-        return (int) $pdo->lastInsertId();
+        return $id;
     }
 
     /**
@@ -151,6 +161,12 @@ final class ChatService
             'agora' => now(),
         ]);
 
+        // Mesma armadilha do `conversa()`: ler o id antes de qualquer outra
+        // escrita. Aqui o estrago seria diferente e mais silencioso — este id
+        // vai para `gravarFontes()`, então as citações grudariam na mensagem
+        // errada em vez de estourar.
+        $id = (int) $pdo->lastInsertId();
+
         $campos = ['editado_em' => now(), 'id' => $conversaId];
         $sql = 'UPDATE conversas SET editado_em = :editado_em';
 
@@ -165,7 +181,7 @@ final class ChatService
 
         Metrics::log('mensagem_enviada', (int) $this->agente['id']);
 
-        return (int) $pdo->lastInsertId();
+        return $id;
     }
 
     /**

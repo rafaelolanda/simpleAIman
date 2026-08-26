@@ -370,5 +370,9 @@ function formatar_whatsapp(?string $texto): string
         $saida .= $t;
     }
 
-    return nl2br($saida);
+    // Sem nl2br de propósito: quem renderiza usa `white-space: pre-wrap`, e os
+    // dois juntos DOBRAM a quebra de linha — a tag <br> mais a quebra original,
+    // que o pre-wrap preserva. Deixar a quebra por conta do CSS mantém o texto
+    // idêntico ao que foi digitado.
+    return $saida;
 }

@@ -107,6 +107,12 @@
     '.esperando{display:flex;align-items:center;gap:7px;font-size:12px;opacity:.7;padding:6px 4px}',
     '.esperando i{width:7px;height:7px;border-radius:50%;background:#0f766e;animation:pulsa 1.2s infinite}',
     '@keyframes pulsa{0%,100%{opacity:.3}50%{opacity:1}}',
+    '.balao strong{font-weight:700}',
+    '.balao em{font-style:italic}',
+    '.balao s{text-decoration:line-through;opacity:.8}',
+    '.balao code{background:rgba(0,0,0,.08);padding:1px 4px;border-radius:4px;',
+    'font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}',
+    '.de-usuario .balao code,.de-atendente .balao code{background:rgba(255,255,255,.22)}',
     '.fontes{margin-top:6px;font-size:12px;color:#6b7280}',
 
     '.pensando .balao{color:#6b7280;font-style:italic}',
@@ -371,6 +377,21 @@
       if (!alvo) {
         linha.remove();
       }
+
+      // Troca o texto cru pela versão formatada, que só chega agora: durante o
+      // streaming não dá para formatar, porque o marcador de abertura vem num
+      // pedaço e o de fechamento em outro.
+      //
+      // Vem do servidor por formatar_whatsapp(), que escapa antes de formatar
+      // — mesma garantia do polling, e a razão de não haver uma segunda
+      // implementação da regra aqui em JS.
+      try {
+        var dados = ev && ev.data ? JSON.parse(ev.data) : null;
+
+        if (dados && dados.html && alvo) {
+          alvo.innerHTML = dados.html;
+        }
+      } catch (e) { /* sem html: o texto cru que já está na tela serve */ }
 
       encerrar();
 

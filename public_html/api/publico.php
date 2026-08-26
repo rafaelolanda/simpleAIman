@@ -207,7 +207,10 @@ try {
         exit;
     }
 
+    $resposta = '';
+
     foreach ($svc->stream($conversa, $pergunta) as $pedaco) {
+        $resposta .= $pedaco;
         Sse::evento('pedaco', ['texto' => $pedaco]);
     }
 
@@ -221,7 +224,14 @@ try {
         ));
     }
 
-    Sse::evento('fim', ['latencia' => (int) ((microtime(true) - $inicio) * 1000)]);
+    // O texto vai cru durante o streaming (pedaço a pedaço não dá para
+    // formatar: o marcador de abertura chega num pedaço e o de fechamento em
+    // outro) e a versão formatada vai inteira no fim, para o widget trocar.
+    // Assim continua existindo UMA implementação de formatação, em PHP.
+    Sse::evento('fim', [
+        'latencia' => (int) ((microtime(true) - $inicio) * 1000),
+        'html' => formatar_whatsapp($resposta),
+    ]);
 } catch (ErroAgente $e) {
     error_log('[simpleAIman] publico: ' . $e->paraLog());
     Sse::evento('erro', ['mensagem' => $e->mensagemPublica()]);

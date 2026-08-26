@@ -124,6 +124,19 @@ include __DIR__ . '/partials/head.php';
                 resposta.textContent = 'Conversa em atendimento humano — o bot não responde.';
                 resposta.className = 'bolha sistema';
             } else {
+                // Troca o texto cru pela versao formatada, que so chega agora:
+                // durante o streaming o marcador de abertura vem num pedaco e
+                // o de fechamento em outro. O HTML vem de formatar_whatsapp(),
+                // que escapa antes de formatar.
+                //
+                // Os filhos ja anexados (o bloco de Fontes) sao preservados:
+                // innerHTML os apagaria, e 'fontes' chega ANTES de 'fim'.
+                if (dados.html) {
+                    const anexos = [...resposta.children];
+                    resposta.innerHTML = dados.html;
+                    anexos.forEach(el => resposta.appendChild(el));
+                }
+
                 const ms = Math.round(performance.now() - inicio);
                 const marca = document.createElement('span');
                 marca.className = 'bolha-meta';

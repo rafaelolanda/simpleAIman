@@ -544,7 +544,14 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     font-size: 0.9rem;
     box-shadow: 0 1px 0.5px rgba(0, 0, 0, 0.13);
     word-wrap: break-word;
+    /* A quebra de linha vem daqui, nao de <br>: formatar_whatsapp() nao aplica
+       nl2br justamente para os dois nao se somarem. */
+    white-space: pre-wrap;
 }
+
+.msg-texto strong { font-weight: 700; }
+.msg-texto em { font-style: italic; }
+.msg-texto s { text-decoration: line-through; opacity: 0.8; }
 
 /* Hora dentro do balao, embaixo a direita: e o detalhe que faz a coisa
    "parecer WhatsApp" mais do que qualquer cor. */

@@ -100,7 +100,10 @@ try {
         exit;
     }
 
+    $resposta = '';
+
     foreach ($svc->stream($conversa, $pergunta) as $pedaco) {
+        $resposta .= $pedaco;
         sse('pedaco', ['texto' => $pedaco]);
     }
 
@@ -114,7 +117,10 @@ try {
         ));
     }
 
-    sse('fim', ['latencia' => (int) ((microtime(true) - $inicio) * 1000)]);
+    sse('fim', [
+        'latencia' => (int) ((microtime(true) - $inicio) * 1000),
+        'html' => formatar_whatsapp($resposta),
+    ]);
 } catch (ErroAgente $e) {
     // Só a mensagem pública atravessa. O detalhe técnico fica no log —
     // nome de modelo, provedor e status HTTP não podem chegar ao visitante.
