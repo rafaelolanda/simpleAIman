@@ -125,14 +125,36 @@ final class CanalWhatsapp
     {
         $segredo = $this->segredo('APP_SECRET');
 
-        if ($segredo === '' || $cabecalho === null || !str_starts_with($cabecalho, 'sha256=')) {
+        // Sem o segredo, TUDO é recusado — e o sintoma seria a Meta mostrando
+        // falha de entrega sem explicação nenhuma. Distinguir no log o "não
+        // configurado" do "assinatura errada" economiza a hora que se perde
+        // procurando no lugar errado.
+        if ($segredo === '') {
+            error_log(
+                '[simpleAIman] whatsapp: ' . self::prefixo($this->canal) . '_APP_SECRET vazio no .env — '
+                . 'todo webhook será recusado. O valor fica em Configurações do app > Básico, '
+                . 'não na tela do WhatsApp.'
+            );
+
             return false;
         }
 
-        return hash_equals(
-            'sha256=' . hash_hmac('sha256', $corpo, $segredo),
-            $cabecalho
-        );
+        if ($cabecalho === null || !str_starts_with($cabecalho, 'sha256=')) {
+            error_log('[simpleAIman] whatsapp: requisição sem X-Hub-Signature-256; recusada.');
+
+            return false;
+        }
+
+        if (!hash_equals('sha256=' . hash_hmac('sha256', $corpo, $segredo), $cabecalho)) {
+            error_log(
+                '[simpleAIman] whatsapp: assinatura não confere. O APP_SECRET do .env '
+                . 'provavelmente não é o do app que está enviando.'
+            );
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
