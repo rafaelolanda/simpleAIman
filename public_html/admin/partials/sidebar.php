@@ -30,6 +30,7 @@ $grupos = [
         'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],
     ],
     'Sistema' => [
+        'configuracoes.php' => ['icone' => 'engrenagem', 'label' => 'Configurações'],
         'privacidade.php' => ['icone' => 'chave', 'label' => 'Privacidade'],
         'logs.php' => ['icone' => 'log', 'label' => 'Logs'],
     ],
