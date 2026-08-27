@@ -158,9 +158,18 @@ final class CanalWhatsapp
     }
 
     /**
-     * Envia uma mensagem de texto.
+     * Entrega uma mensagem de texto à Meta para envio.
      *
-     * @throws RuntimeException quando a Meta recusa
+     * **Voltar sem exceção NÃO significa que a mensagem chegou.** A Meta
+     * responde 200 assim que aceita a requisição e entrega depois; se a
+     * entrega falhar, isso aparece só no webhook de status
+     * (`entry[].changes[].value.statuses[]`), com o código do erro.
+     *
+     * Confundir as duas coisas fez o sistema afirmar ter respondido quatro
+     * vezes enquanto todos os envios morriam em 130497.
+     *
+     * @throws RuntimeException quando a Meta recusa a REQUISIÇÃO (token
+     *                          inválido, número errado, fora da janela)
      */
     public function enviar(string $para, string $texto): void
     {

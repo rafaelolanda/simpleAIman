@@ -72,8 +72,35 @@ if ($canal === null || !$canal->assinaturaConfere($corpo, $_SERVER['HTTP_X_HUB_S
     exit;
 }
 
-// Status de entrega (enviado, lido, falhou) chegam neste mesmo webhook e não
-// são conversa. Ignorar em silêncio com 200 evita que a Meta os reenvie.
+// ---------------------------------------------------------------------
+// Status de entrega
+//
+// A entrega no WhatsApp é ASSÍNCRONA: a API responde 200 com um id e só
+// depois a mensagem falha, e a falha chega aqui — em nenhum outro lugar.
+//
+// Ignorar estes eventos custou caro: durante todo o primeiro teste real o
+// worker registrou "respondido na conversa 131" enquanto os quatro envios
+// falhavam com 130497 e nada chegava ao telefone. O 200 da API foi tomado
+// por entrega, e o sistema passou a afirmar ter feito o que não fez.
+//
+// Entregue e lido não viram log: são o caso normal e só encheriam o arquivo.
+// Falha vira, com o código — é ele que se procura na documentação da Meta.
+// ---------------------------------------------------------------------
+foreach ($valor['statuses'] ?? [] as $status) {
+    if (($status['status'] ?? '') !== 'failed') {
+        continue;
+    }
+
+    foreach ($status['errors'] ?? [] as $erro) {
+        error_log(sprintf(
+            '[simpleAIman] whatsapp: ENVIO FALHOU para %s — código %s: %s',
+            (string) ($status['recipient_id'] ?? '?'),
+            (string) ($erro['code'] ?? '?'),
+            (string) ($erro['title'] ?? $erro['message'] ?? 'sem descrição')
+        ));
+    }
+}
+
 foreach ($valor['messages'] ?? [] as $mensagem) {
     $tipo = (string) ($mensagem['type'] ?? '');
     $de = (string) ($mensagem['from'] ?? '');

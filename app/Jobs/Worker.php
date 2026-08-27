@@ -396,7 +396,11 @@ final class Worker
 
         $canal->enviar($de, $resposta);
 
-        $log('whatsapp: respondido na conversa ' . $conversa . '.');
+        // "Aceito", não "entregue": a Meta responde 200 e só depois entrega —
+        // ou falha, e a falha chega no webhook de status, nunca aqui. Dizer
+        // "respondido" mandou quatro mensagens que nunca chegaram parecerem
+        // sucesso durante o primeiro teste real.
+        $log('whatsapp: resposta aceita pela Meta na conversa ' . $conversa . ' (entrega confirma no status).');
         Queue::concluir((int) $job['id']);
 
         return 'concluidos';
