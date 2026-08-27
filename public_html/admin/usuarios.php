@@ -113,6 +113,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             Auth::log('usuario_atendente', $alvo['usuario'] . ' → ' . ($atende ? 'atende' : 'não atende'));
             flash_set('sucesso', 'Atendimento de ' . $alvo['usuario'] . ' atualizado.');
+        } elseif ($acao === 'editar') {
+            // Edicao dos dados de outra pessoa. Fica aqui, e nao no perfil
+            // dela, porque quem administra precisa corrigir um nome errado ou
+            // um e-mail que nao recebe sem depender de a pessoa entrar.
+            $stmt = $pdo->prepare('SELECT usuario, admin_master FROM admin_users WHERE id = :id');
+            $stmt->execute(['id' => $id]);
+            $alvo = $stmt->fetch();
+
+            if (!$alvo) {
+                throw new RuntimeException('Usuário não encontrado.');
+            }
+
+            $novoUsuario = strtolower(trim((string) ($_POST['usuario'] ?? '')));
+            $novoNome = mb_substr(trim((string) ($_POST['nome'] ?? '')), 0, 80);
+            $novoEmail = trim((string) ($_POST['email'] ?? '')) ?: null;
+
+            if (!preg_match('/^[a-z0-9._-]{3,30}$/', $novoUsuario)) {
+                throw new RuntimeException('Usuário deve ter de 3 a 30 caracteres: letras, números, ponto, hífen ou underline.');
+            }
+
+            if ($novoEmail !== null && !filter_var($novoEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new RuntimeException('Informe um e-mail válido.');
+            }
+
+            // Login duplicado deixaria duas pessoas disputando a mesma entrada.
+            $stmt = $pdo->prepare('SELECT 1 FROM admin_users WHERE usuario = :usuario AND id != :id');
+            $stmt->execute(['usuario' => $novoUsuario, 'id' => $id]);
+
+            if ($stmt->fetchColumn()) {
+                throw new RuntimeException('Já existe outro usuário com esse login.');
+            }
+
+            $pdo->prepare(
+                'UPDATE admin_users SET usuario = :usuario, nome = :nome, email = :email, editado_em = :agora
+                  WHERE id = :id'
+            )->execute([
+                'usuario' => $novoUsuario,
+                'nome' => $novoNome,
+                'email' => $novoEmail,
+                'agora' => now(),
+                'id' => $id,
+            ]);
+
+            // A sessao guarda o login para exibir no canto da tela: trocando o
+            // proprio, sem isto o painel continuaria mostrando o antigo ate o
+            // proximo login.
+            if ($id === Auth::userId()) {
+                $_SESSION['admin_username'] = $novoUsuario;
+            }
+
+            Auth::log(
+                'editar_usuario',
+                $alvo['usuario'] . ($alvo['usuario'] !== $novoUsuario ? ' → ' . $novoUsuario : '')
+                    . ' (nome: ' . ($novoNome !== '' ? $novoNome : '—') . ')'
+            );
+            flash_set('sucesso', 'Dados de ' . $novoUsuario . ' atualizados.');
         } elseif ($acao === 'redefinir_senha') {
             $novaSenha = (string) ($_POST['nova_senha'] ?? '');
 
@@ -328,6 +384,34 @@ include __DIR__ . '/partials/head.php';
                 </td>
                 <td data-label="Criado em"><?= e(date('d/m/Y', strtotime($u['criado_em']))) ?></td>
                 <td data-label="">
+                    <details class="acao-inline">
+                        <summary class="btn btn-secondary btn-sm">Editar</summary>
+                        <form method="post" action="usuarios.php" class="acao-inline-form empilhado">
+                            <?= csrf_field() ?>
+                            <input type="hidden" name="acao" value="editar">
+                            <input type="hidden" name="id" value="<?= (int) $u['id'] ?>">
+                            <div class="field">
+                                <label>Login</label>
+                                <input type="text" name="usuario" required minlength="3" maxlength="30"
+                                       value="<?= e((string) $u['usuario']) ?>" autocomplete="off">
+                            </div>
+                            <div class="field">
+                                <label>Nome de exibição</label>
+                                <input type="text" name="nome" maxlength="80" placeholder="ex.: Maria Silva"
+                                       value="<?= e((string) ($u['nome'] ?? '')) ?>" autocomplete="off">
+                            </div>
+                            <div class="field">
+                                <label>E-mail</label>
+                                <input type="email" name="email" placeholder="para recuperar a senha"
+                                       value="<?= e((string) ($u['email'] ?? '')) ?>" autocomplete="off">
+                            </div>
+                            <p class="dica-campo">
+                                O <strong>login</strong> serve para entrar no painel e o visitante nunca vê.
+                                O <strong>nome de exibição</strong> é o que ele vê na conversa.
+                            </p>
+                            <button type="submit" class="btn btn-sm">Salvar</button>
+                        </form>
+                    </details>
                     <details class="acao-inline">
                         <summary class="btn btn-secondary btn-sm">Redefinir senha</summary>
                         <form method="post" action="usuarios.php" class="acao-inline-form">
