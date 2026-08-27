@@ -565,17 +565,6 @@ thead th a:hover {
 .acao-inline-form { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
 .acao-inline-form input { min-width: 160px; }
 
-/* Variante para o formulario que nao cabe numa linha so — mais de um campo
-   rotulado, como a edicao de usuario. Sem isto o flex horizontal espreme
-   tudo e os rotulos ficam ao lado dos campos em vez de acima. */
-.acao-inline-form.empilhado {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.6rem;
-    min-width: 260px;
-}
-.acao-inline-form.empilhado input { width: 100%; }
-.acao-inline-form.empilhado .btn { align-self: flex-start; }
 
 /* Textos de instrução: dica-campo abaixo de um campo, dica-painel no topo do bloco */
 .dica-campo {
