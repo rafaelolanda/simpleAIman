@@ -66,6 +66,25 @@ garantir_colunas($pdo, 'provedores', [
     'custo_entrada_milhao' => 'REAL NOT NULL DEFAULT 0',
     'custo_saida_milhao' => 'REAL NOT NULL DEFAULT 0',
 ]);
+garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
+
+// Índice ÚNICO PARCIAL sobre o id externo da mensagem.
+//
+// É ele — não o `if` do worker — que garante a resposta única: dois webhooks
+// idênticos chegando ao mesmo tempo passam os dois pela verificação, e quem
+// desempata é o banco, recusando o segundo INSERT antes de qualquer envio.
+//
+// Parcial (`WHERE externo_id IS NOT NULL`) porque o widget web não tem id
+// externo: sem a cláusula, a segunda mensagem NULL violaria o índice e
+// derrubaria o chat inteiro.
+//
+// Fica aqui e não no schema.sql: o schema roda antes do `garantir_colunas()`
+// acima, e num banco já existente o índice apontaria para coluna inexistente
+// — quebrando a aplicação do schema inteiro.
+$pdo->exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_mensagens_externo
+     ON mensagens (externo_id) WHERE externo_id IS NOT NULL'
+);
 
 // O limiar deixou de ser seletor e passou a ser piso: 0.70 derrubava resposta
 // correta de pergunta informal (medido). Ajusta quem ainda esta nos valores

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SimpleAIman\Jobs;
 
 use Database;
+use PDOException;
 use SimpleAIman\Atendimento\Fila;
 use SimpleAIman\Canais\CanalWhatsapp;
 use SimpleAIman\Llm\ChatService;
@@ -273,7 +274,6 @@ final class Worker
         }
     }
 
-    /** @param array<string, mixed> $job */
     /**
      * Um turno de conversa vindo do WhatsApp.
      *
@@ -281,7 +281,16 @@ final class Worker
      * reenvia se demorar — e reenvio vira resposta duplicada para a pessoa.
      * A LLM leva o tempo que leva; o webhook não pode esperar por ela.
      *
+     * **Todo caminho de saída precisa chamar `Queue::concluir()`.** Quem
+     * processa é dono de fechar o job: o laço do worker não fecha por ele.
+     * Sem isso o job fica `processando`, o `liberarPresos()` o devolve à fila
+     * quando o lock vence, e a pessoa recebe a MESMA resposta de novo — de
+     * cinco em cinco minutos, até estourarem as tentativas. Foi o que
+     * aconteceu no primeiro teste real.
+     *
      * @param array<string, mixed> $job
+     *
+     * @return 'concluidos'
      */
     private function responderWhatsapp(array $job, callable $log): string
     {
@@ -298,40 +307,110 @@ final class Worker
         $de = (string) ($dados['de'] ?? '');
 
         if ($canal === null || $de === '') {
-            return 'canal do WhatsApp não configurado; mensagem descartada.';
+            $log('whatsapp: canal ' . $canalId . ' não configurado; mensagem descartada.');
+            Queue::concluir((int) $job['id']);
+
+            return 'concluidos';
+        }
+
+        $wamid = (string) ($dados['wamid'] ?? '');
+
+        // Já tratamos esta mensagem? Então acabou.
+        //
+        // A Meta reenvia o webhook quando não recebe 200 depressa, e o reenvio
+        // traz o MESMO `wamid`. Sem esta verificação, cada repetição consome a
+        // LLM e manda outra resposta para a mesma pergunta.
+        //
+        // Isto é o caminho rápido, não a garantia: dois webhooks simultâneos
+        // passam os dois por aqui. Quem desempata é o índice único da coluna
+        // `mensagens.externo_id`, no `catch` lá embaixo.
+        if ($wamid !== '' && self::jaProcessada($wamid)) {
+            $log('whatsapp: ' . $wamid . ' já tratada; reenvio ignorado.');
+            Queue::concluir((int) $job['id']);
+
+            return 'concluidos';
         }
 
         $svc = ChatService::paraAgente($canal->agenteId());
         $conversa = $svc->conversa($canalId, $de, null);
 
-        // Mídia ainda não é tratada. Ficar em silêncio faria a pessoa achar
-        // que a mensagem sumiu — pior que dizer que não sabemos ler.
-        if (($dados['tipo'] ?? 'text') !== 'text' || trim((string) $dados['texto']) === '') {
-            $aviso = 'Por enquanto consigo ler apenas mensagens de texto. Pode escrever o que precisa?';
-            $svc->gravarMensagem($conversa, 'bot', $aviso);
-            $canal->enviar($de, $aviso);
+        try {
+            // Mídia ainda não é tratada. Ficar em silêncio faria a pessoa achar
+            // que a mensagem sumiu — pior que dizer que não sabemos ler.
+            if (($dados['tipo'] ?? 'text') !== 'text' || trim((string) $dados['texto']) === '') {
+                // A mensagem do visitante é gravada mesmo sem sabermos lê-la:
+                // sem ela, o painel mostra o bot avisando sozinho, sem nada
+                // antes — e o atendente não entende o que aconteceu. É também
+                // o que ancora o `wamid` deste turno.
+                $svc->gravarMensagem(
+                    $conversa,
+                    'usuario',
+                    '[' . ($dados['tipo'] ?: 'anexo') . ' recebido]',
+                    null,
+                    null,
+                    $wamid
+                );
 
-            return 'mídia recebida na conversa ' . $conversa . '; respondido com aviso.';
+                $aviso = 'Por enquanto consigo ler apenas mensagens de texto. Pode escrever o que precisa?';
+                $svc->gravarMensagem($conversa, 'bot', $aviso);
+                $canal->enviar($de, $aviso);
+
+                $log('whatsapp: mídia na conversa ' . $conversa . '; respondido com aviso.');
+                Queue::concluir((int) $job['id']);
+
+                return 'concluidos';
+            }
+
+            $texto = (string) $dados['texto'];
+
+            \SimpleAIman\Atendimento\Fila::reabrirSeEncerrada($conversa);
+
+            // Conversa em atendimento humano: grava e cala. Quem responde é a
+            // pessoa, pelo painel — e a resposta dela sai por `Saida::entregar()`.
+            if (!$svc->botDeveResponder($conversa)) {
+                $svc->gravarMensagem($conversa, 'usuario', $texto, null, null, $wamid);
+
+                $log('whatsapp: conversa ' . $conversa . ' com atendente; apenas registrada.');
+                Queue::concluir((int) $job['id']);
+
+                return 'concluidos';
+            }
+
+            $resposta = $svc->responder($conversa, $texto, $wamid);
+        } catch (PDOException $e) {
+            // Índice único de `mensagens.externo_id` recusando o reenvio que
+            // escapou da verificação acima — dois webhooks ao mesmo tempo.
+            //
+            // Não é falha: é exatamente o que o índice existe para fazer, e o
+            // INSERT vem ANTES do envio, então nada saiu duas vezes. Qualquer
+            // outro erro de banco continua subindo.
+            if (!str_contains($e->getMessage(), 'UNIQUE constraint failed')) {
+                throw $e;
+            }
+
+            $log('whatsapp: ' . $wamid . ' chegou duplicada; segunda descartada pelo índice.');
+            Queue::concluir((int) $job['id']);
+
+            return 'concluidos';
         }
 
-        $texto = (string) $dados['texto'];
-
-        \SimpleAIman\Atendimento\Fila::reabrirSeEncerrada($conversa);
-
-        // Conversa em atendimento humano: grava e cala. Quem responde é a
-        // pessoa, pelo painel — e a resposta dela sai por `Saida::entregar()`.
-        if (!$svc->botDeveResponder($conversa)) {
-            $svc->gravarMensagem($conversa, 'usuario', $texto);
-
-            return 'conversa ' . $conversa . ' está com atendente; mensagem apenas registrada.';
-        }
-
-        $resposta = $svc->responder($conversa, $texto);
         $canal->enviar($de, $resposta);
 
         $log('whatsapp: respondido na conversa ' . $conversa . '.');
+        Queue::concluir((int) $job['id']);
 
-        return 'respondido na conversa ' . $conversa . '.';
+        return 'concluidos';
+    }
+
+    /** Esta mensagem do canal já virou linha em `mensagens`? */
+    private static function jaProcessada(string $externoId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT 1 FROM mensagens WHERE externo_id = :e LIMIT 1'
+        );
+        $stmt->execute(['e' => $externoId]);
+
+        return $stmt->fetchColumn() !== false;
     }
 
     private function marcarArtefatoComErro(array $job, string $erro): void

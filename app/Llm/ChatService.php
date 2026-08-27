@@ -152,24 +152,34 @@ final class ChatService
         return in_array((string) $stmt->fetchColumn(), ['bot', ''], true);
     }
 
+    /**
+     * @param ?string $externoId Id da mensagem no canal de origem (`wamid`).
+     *                           Sob índice único: repetir o mesmo valor faz o
+     *                           INSERT falhar de propósito — é assim que o
+     *                           reenvio da Meta não vira resposta duplicada.
+     */
     public function gravarMensagem(
         int $conversaId,
         string $autorTipo,
         string $conteudo,
         ?int $autorId = null,
         ?int $latenciaMs = null,
+        ?string $externoId = null,
     ): int {
         $pdo = Database::connection();
 
         $pdo->prepare(
-            'INSERT INTO mensagens (conversa_id, autor_tipo, autor_id, conteudo, latencia_ms, criado_em)
-             VALUES (:conversa, :autor_tipo, :autor_id, :conteudo, :latencia, :agora)'
+            'INSERT INTO mensagens (conversa_id, autor_tipo, autor_id, conteudo, latencia_ms, externo_id, criado_em)
+             VALUES (:conversa, :autor_tipo, :autor_id, :conteudo, :latencia, :externo, :agora)'
         )->execute([
             'conversa' => $conversaId,
             'autor_tipo' => $autorTipo,
             'autor_id' => $autorId,
             'conteudo' => $conteudo,
             'latencia' => $latenciaMs,
+            // String vazia viraria valor repetido sob o índice único — só NULL
+            // fica de fora dele.
+            'externo' => ($externoId !== null && $externoId !== '') ? $externoId : null,
             'agora' => now(),
         ]);
 
@@ -559,13 +569,18 @@ final class ChatService
     /**
      * Turno completo (WhatsApp, API). Devolve o texto da resposta.
      *
-     * @throws ErroAgente sempre — nunca uma exceção crua do fornecedor, que
-     *                    traria nome de modelo e status HTTP para cima.
+     * O `$externoId` é gravado ANTES da chamada ao provedor, e não depois: sob
+     * índice único, ele é o que faz um reenvio da Meta morrer aqui em vez de
+     * consumir a LLM e mandar a mesma resposta de novo.
+     *
+     * @throws ErroAgente     sempre — nunca uma exceção crua do fornecedor, que
+     *                        traria nome de modelo e status HTTP para cima.
+     * @throws PDOException   quando o `$externoId` repete (mensagem já tratada)
      */
-    public function responder(int $conversaId, string $pergunta): string
+    public function responder(int $conversaId, string $pergunta, ?string $externoId = null): string
     {
         $inicio = microtime(true);
-        $this->gravarMensagem($conversaId, 'usuario', $pergunta);
+        $this->gravarMensagem($conversaId, 'usuario', $pergunta, null, null, $externoId);
 
 
         // Palavra de navegação: atalho determinístico, antes de qualquer busca.

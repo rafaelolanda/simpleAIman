@@ -648,6 +648,13 @@ CREATE TABLE IF NOT EXISTS mensagens (
     custo               REAL,
     latencia_ms         INTEGER,
     feedback            INTEGER,                         -- 1 positivo, -1 negativo
+    -- Id da mensagem no canal de origem (o `wamid`, no WhatsApp).
+    --
+    -- Existe para reconhecer reenvio: a Meta repete o webhook quando não
+    -- recebe 200 depressa, e cada repetição viraria outra resposta para a
+    -- mesma pergunta. Fica NULL no widget web, onde não há id externo — por
+    -- isso o índice único é parcial, e mora no migrate.php.
+    externo_id          TEXT,
     criado_em           TEXT NOT NULL
 );
 
