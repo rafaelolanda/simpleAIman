@@ -35,6 +35,32 @@ echo "Schema aplicado com sucesso.\n";
 // Índice sobre coluna criada por aqui NÃO pode ir no schema.sql: ele roda antes
 // desta seção e quebraria a aplicação inteira do schema num banco existente.
 // ---------------------------------------------------------------
+/**
+ * Remove colunas que deixaram de ter uso.
+ *
+ * Idempotente como a `garantir_colunas()`: confere antes de derrubar. E o
+ * `DROP COLUMN` do SQLite recusa coluna indexada, em CHECK, em trigger ou em
+ * view — por isso a falha e engolida com aviso em vez de abortar a migracao
+ * inteira. Banco com uma coluna a mais funciona; banco pela metade, nao.
+ */
+function remover_colunas(PDO $pdo, string $tabela, array $colunas): void
+{
+    $existentes = array_column($pdo->query("PRAGMA table_info({$tabela})")->fetchAll(PDO::FETCH_ASSOC), 'name');
+
+    foreach ($colunas as $coluna) {
+        if (!in_array($coluna, $existentes, true)) {
+            continue;
+        }
+
+        try {
+            $pdo->exec("ALTER TABLE {$tabela} DROP COLUMN {$coluna}");
+            echo "  - coluna {$tabela}.{$coluna} removida\n";
+        } catch (Throwable $e) {
+            echo "  ! nao foi possivel remover {$tabela}.{$coluna}: {$e->getMessage()}\n";
+        }
+    }
+}
+
 function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
 {
     $existentes = array_column($pdo->query("PRAGMA table_info({$tabela})")->fetchAll(PDO::FETCH_ASSOC), 'name');
@@ -67,6 +93,46 @@ garantir_colunas($pdo, 'provedores', [
     'custo_saida_milhao' => 'REAL NOT NULL DEFAULT 0',
 ]);
 garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
+
+// ---------------------------------------------------------------------
+// Remocoes
+//
+// Colunas e tabelas que existiam no schema e nunca foram lidas por linha
+// nenhuma de codigo. Campo de configuracao que ninguem le e pior que campo
+// ausente: quem administra supoe que ele faz alguma coisa.
+//
+//   agentes.publico            exposicao publica passou a ser decidida pelo
+//                              CANAL; a coluna ficou para tras
+//   faq.base_id                a FAQ e curada por setor, nunca por base
+//   ferramentas.resposta_template/dataset_id/formula + datasets/dataset_linhas
+//                              o tipo `tabela` (CSV + formula) foi desenhado e
+//                              nunca construido — nem chegou a lista de tipos
+//                              da tela. Decisao de 2026-08-27: remover em vez
+//                              de manter roadmap no schema.
+//
+// `token_publico` NAO sai: e usado e exibido na tela de agentes.
+// ---------------------------------------------------------------------
+remover_colunas($pdo, 'agentes', ['publico']);
+remover_colunas($pdo, 'faq', ['base_id']);
+remover_colunas($pdo, 'ferramentas', ['resposta_template', 'dataset_id', 'formula']);
+
+foreach (['dataset_linhas', 'datasets'] as $tabelaMorta) {
+    $existe = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :n");
+    $existe->execute(['n' => $tabelaMorta]);
+    $achou = (bool) $existe->fetchColumn();
+
+    // Fechar o cursor ANTES do DROP. Consulta ainda aberta na mesma conexão
+    // faz o SQLite recusar com "database table is locked" — e o erro aponta
+    // para o DROP, não para a leitura que o está segurando.
+    $existe->closeCursor();
+
+    if ($achou) {
+        // `dataset_linhas` antes de `datasets`: a ordem inversa esbarraria na
+        // chave estrangeira.
+        $pdo->exec("DROP TABLE {$tabelaMorta}");
+        echo "  - tabela {$tabelaMorta} removida\n";
+    }
+}
 
 // Índice ÚNICO PARCIAL sobre o id externo da mensagem.
 //

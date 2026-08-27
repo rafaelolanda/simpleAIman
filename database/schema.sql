@@ -289,7 +289,6 @@ CREATE TABLE IF NOT EXISTS agentes (
     usa_faq             INTEGER NOT NULL DEFAULT 1,
     captura_lead        INTEGER NOT NULL DEFAULT 0,
     lead_destino_id     INTEGER,                      -- ferramentas.id (0/NULL = só grava local)
-    publico             INTEGER NOT NULL DEFAULT 0,
     token_publico       TEXT UNIQUE,
     ativo               INTEGER NOT NULL DEFAULT 1,
     criado_em           TEXT NOT NULL,
@@ -429,7 +428,6 @@ CREATE TABLE IF NOT EXISTS faq (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     categoria_id        INTEGER REFERENCES faq_categorias (id) ON DELETE SET NULL,
     setor_id            INTEGER REFERENCES setores (id) ON DELETE SET NULL,
-    base_id             INTEGER REFERENCES bases (id) ON DELETE SET NULL,
     pergunta            TEXT NOT NULL,
     resposta            TEXT NOT NULL,
     tags                TEXT,
@@ -514,11 +512,6 @@ CREATE TABLE IF NOT EXISTS ferramentas (
     timeout_ms          INTEGER,
     retentativas        INTEGER NOT NULL DEFAULT 0,
     resposta_caminho    TEXT,                          -- ex.: "data.items"
-    resposta_template   TEXT,
-
-    -- tipo = tabela
-    dataset_id          INTEGER REFERENCES datasets (id) ON DELETE SET NULL,
-    formula             TEXT,
 
     ativo               INTEGER NOT NULL DEFAULT 1,
     criado_em           TEXT NOT NULL,
@@ -559,25 +552,6 @@ CREATE TABLE IF NOT EXISTS ferramenta_execucoes (
 
 CREATE INDEX IF NOT EXISTS idx_execucoes_conversa ON ferramenta_execucoes (conversa_id);
 
--- Dados tabulares carregados por CSV no admin. É o que permite responder
--- "quanto custa o curso X" sem depender de API externa.
-CREATE TABLE IF NOT EXISTS datasets (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug                TEXT NOT NULL UNIQUE,
-    nome                TEXT NOT NULL,
-    colunas             TEXT,                           -- JSON
-    linhas_total        INTEGER NOT NULL DEFAULT 0,
-    criado_em           TEXT NOT NULL,
-    editado_em          TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS dataset_linhas (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    dataset_id          INTEGER NOT NULL REFERENCES datasets (id) ON DELETE CASCADE,
-    dados               TEXT NOT NULL                   -- JSON
-);
-
-CREATE INDEX IF NOT EXISTS idx_dataset_linhas ON dataset_linhas (dataset_id);
 
 
 -- =====================================================================
