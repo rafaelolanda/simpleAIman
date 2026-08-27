@@ -377,6 +377,33 @@ final class Worker
             }
 
             $resposta = $svc->responder($conversa, $texto, $wamid);
+        } catch (ErroAgente $e) {
+            // O agente falhou — e no WhatsApp isso deixa a pessoa esperando.
+            //
+            // No widget a mensagem pública aparece na tela sozinha; aqui não
+            // existe tela, e o job morria calado. Uma oscilação de rede de dois
+            // segundos com o provedor bastava para alguém nunca mais receber
+            // resposta, sem nada indicando isso — nem para ela, nem para nós.
+            //
+            // Não há retentativa automática de propósito: o `wamid` do visitante
+            // já foi gravado antes da chamada ao provedor, então a segunda
+            // tentativa bateria no dedup e seria descartada em silêncio — pior
+            // que não tentar. A mensagem pública convida a repetir, e o reenvio
+            // gera `wamid` novo, que passa limpo.
+            try {
+                $svc->gravarMensagem($conversa, 'bot', $e->mensagemPublica());
+                $canal->enviar($de, $e->mensagemPublica());
+            } catch (Throwable $aviso) {
+                // Avisar falhou também. Não pode mascarar a causa original, que
+                // é o que o admin precisa ver.
+                error_log('[simpleAIman] whatsapp: nem o aviso de falha saiu: ' . $aviso->getMessage());
+            }
+
+            $log('whatsapp: agente falhou na conversa ' . $conversa . '; visitante avisado.');
+
+            // Sobe para virar `erro` no painel: a pessoa foi avisada, mas isso
+            // não torna a falha aceitável nem a esconde de quem administra.
+            throw $e;
         } catch (PDOException $e) {
             // Índice único de `mensagens.externo_id` recusando o reenvio que
             // escapou da verificação acima — dois webhooks ao mesmo tempo.
