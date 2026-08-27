@@ -302,18 +302,18 @@ include __DIR__ . '/partials/head.php';
         <div class="form-grid">
             <label>
                 Nome
-                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Simular mensalidade">
+                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Simular orçamento">
             </label>
 
             <label>
                 Identificador
-                <input type="text" name="slug" value="<?= e((string) $v('slug')) ?>" placeholder="simular_mensalidade">
+                <input type="text" name="slug" value="<?= e((string) $v('slug')) ?>" placeholder="simular_orcamento">
                 <small>Só letras minúsculas, números e underscore. É o nome que o modelo chama.</small>
             </label>
 
             <label class="col-2">
                 Quando o agente deve usar
-                <textarea name="descricao_llm" rows="3" required placeholder="ex.: Calcula o valor da mensalidade de um curso. Use sempre que perguntarem preço, valor ou quanto custa."><?= e((string) $v('descricao_llm')) ?></textarea>
+                <textarea name="descricao_llm" rows="3" required placeholder="ex.: Calcula o valor de um serviço a partir das opções escolhidas. Use sempre que perguntarem preço, valor ou quanto custa."><?= e((string) $v('descricao_llm')) ?></textarea>
                 <small>
                     <strong>É o campo mais importante.</strong> É este texto que o modelo lê para decidir
                     chamar — escreva para ele, com as palavras que as pessoas usam.
@@ -463,7 +463,7 @@ include __DIR__ . '/partials/head.php';
             <tbody>
             <?php foreach ($linhasParam as $i => $p): ?>
                 <tr>
-                    <td><input type="text" name="p_nome[]" value="<?= e((string) ($p['nome'] ?? '')) ?>" placeholder="curso"></td>
+                    <td><input type="text" name="p_nome[]" value="<?= e((string) ($p['nome'] ?? '')) ?>" placeholder="servico"></td>
                     <td>
                         <select name="p_tipo[]">
                             <?php foreach ($TIPOS_PARAM as $k => $rotulo): ?>
@@ -471,7 +471,7 @@ include __DIR__ . '/partials/head.php';
                             <?php endforeach; ?>
                         </select>
                     </td>
-                    <td><input type="text" name="p_descricao[]" value="<?= e((string) ($p['descricao_llm'] ?? '')) ?>" placeholder="Nome do curso"></td>
+                    <td><input type="text" name="p_descricao[]" value="<?= e((string) ($p['descricao_llm'] ?? '')) ?>" placeholder="Nome do serviço ou produto"></td>
                     <td>
                         <select name="p_fonte[]">
                             <?php foreach ($FONTES as $k => $rotulo): ?>

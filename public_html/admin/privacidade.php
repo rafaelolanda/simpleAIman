@@ -129,7 +129,7 @@ include __DIR__ . '/partials/head.php';
                        value="<?= (int) ($cfg['anonimizacao_conversas_dias'] ?? 0) ?>">
                 <small>
                     Mascara CPF, e-mail e telefone dentro do texto e remove o IP. O resto continua
-                    legível: "quais cursos vocês têm" não tem dado pessoal nenhum e é exatamente o
+                    legível: "quais serviços vocês oferecem" não tem dado pessoal nenhum e é exatamente o
                     que alimenta a curadoria da FAQ.
                 </small>
             </label>

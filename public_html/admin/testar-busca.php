@@ -68,7 +68,7 @@ include __DIR__ . '/partials/head.php';
         <div class="form-grid">
             <label class="col-2">
                 Pergunta
-                <input type="text" name="q" value="<?= e($pergunta) ?>" placeholder="ex.: posso trancar a faculdade por um semestre?" autofocus>
+                <input type="text" name="q" value="<?= e($pergunta) ?>" placeholder="ex.: qual o prazo de entrega?" autofocus>
             </label>
 
             <label>

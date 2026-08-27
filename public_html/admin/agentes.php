@@ -206,7 +206,7 @@ include __DIR__ . '/partials/head.php';
         <div class="form-grid">
             <label>
                 Nome
-                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Atendimento ao candidato">
+                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Atendimento ao cliente">
             </label>
 
             <label>

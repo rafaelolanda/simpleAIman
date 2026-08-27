@@ -156,7 +156,7 @@ include __DIR__ . '/partials/head.php';
         <div class="form-grid">
             <label>
                 Nome
-                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Central do Candidato">
+                <input type="text" name="nome" required value="<?= e((string) $v('nome')) ?>" placeholder="ex.: Financeiro">
             </label>
 
             <label>
@@ -166,7 +166,7 @@ include __DIR__ . '/partials/head.php';
 
             <label class="col-2">
                 O que este setor resolve
-                <textarea name="descricao_llm" rows="3" placeholder="ex.: inscrições, processo seletivo, documentos de matrícula e dúvidas de quem ainda não é aluno."><?= e((string) $v('descricao_llm')) ?></textarea>
+                <textarea name="descricao_llm" rows="3" placeholder="ex.: cobranças, segunda via de boleto, prazos de pagamento e negociação de valores em aberto."><?= e((string) $v('descricao_llm')) ?></textarea>
                 <small>
                     <strong>É o texto que o agente lê para escolher o setor</strong> — escreva para ele, não para
                     o organograma. Descreva os assuntos que chegam, com as palavras que as pessoas usam.

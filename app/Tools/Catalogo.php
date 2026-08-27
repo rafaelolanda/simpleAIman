@@ -111,7 +111,7 @@ final class Catalogo
                     'Procura páginas públicas do site da instituição. Use quando a pergunta for sobre '
                     . 'algo que muda com frequência — edital recém-publicado, notícia, data de evento — '
                     . 'e que provavelmente não está nos documentos já carregados. Para assunto estável '
-                    . '(regras, cursos, procedimentos), prefira os documentos: eles são mais confiáveis '
+                    . '(regras, serviços, procedimentos), prefira os documentos: eles são mais confiáveis '
                     . 'e você pode citar a fonte. Cite o link dos resultados que usar.',
                 'http' => [
                     'metodo' => 'GET',
@@ -151,7 +151,7 @@ final class Catalogo
                     ['nome' => 'email', 'tipo' => 'string', 'obrigatorio' => 0, 'descricao' => 'E-mail para retorno.'],
                     ['nome' => 'telefone', 'tipo' => 'string', 'obrigatorio' => 0, 'descricao' => 'Telefone ou WhatsApp.'],
                     ['nome' => 'interesse', 'tipo' => 'string', 'obrigatorio' => 0,
-                     'descricao' => 'O que a pessoa procura (curso, produto, serviço).'],
+                     'descricao' => 'O que a pessoa procura (produto, serviço, assunto).'],
                 ],
             ],
         ];

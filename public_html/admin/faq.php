@@ -201,7 +201,7 @@ include __DIR__ . '/partials/head.php';
 
             <label>
                 Outras formas de perguntar
-                <input type="text" name="tags" value="<?= e((string) $v('tags')) ?>" placeholder="trancamento, parar o curso, suspender">
+                <input type="text" name="tags" value="<?= e((string) $v('tags')) ?>" placeholder="boleto, segunda via, pagamento atrasado">
                 <small>Ajuda a busca por termo exato.</small>
             </label>
 
