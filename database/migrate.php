@@ -88,10 +88,6 @@ garantir_colunas($pdo, 'agentes', ['idioma' => "TEXT NOT NULL DEFAULT 'pt-BR'"])
 garantir_colunas($pdo, 'config', ['anonimizacao_conversas_dias' => 'INTEGER NOT NULL DEFAULT 0']);
 garantir_colunas($pdo, 'canais', ['retencao_dias' => 'INTEGER NOT NULL DEFAULT 0']);
 garantir_colunas($pdo, 'conversas', ['anonimizada_em' => 'TEXT', 'expurgada_em' => 'TEXT']);
-garantir_colunas($pdo, 'provedores', [
-    'custo_entrada_milhao' => 'REAL NOT NULL DEFAULT 0',
-    'custo_saida_milhao' => 'REAL NOT NULL DEFAULT 0',
-]);
 garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
 
 // ---------------------------------------------------------------------
@@ -109,12 +105,27 @@ garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
 //                              nunca construido — nem chegou a lista de tipos
 //                              da tela. Decisao de 2026-08-27: remover em vez
 //                              de manter roadmap no schema.
+//   ferramentas.requer_confirmacao
+//                              confirmar antes de ferramenta de escrita. Boa
+//                              ideia, nunca construida — e enquanto nao for,
+//                              o campo promete uma protecao que nao existe.
+//   provedores.custo_*_milhao + mensagens.custo
+//                              custo por conversa. Os tokens SAO gravados, mas
+//                              o preco nunca foi preenchido nem multiplicado.
 //
-// `token_publico` NAO sai: e usado e exibido na tela de agentes.
+// As duas ultimas chegaram a ser aprovadas para construcao e voltaram atras na
+// mesma sessao. Ficam registradas aqui em vez de no schema: schema nao e lugar
+// de guardar intencao — quem le supoe que funciona.
+//
+// `token_publico` NAO sai: e usado e exibido na tela de agentes. Nem
+// `mensagens.tokens_in/tokens_out`, que sao gravados de fato e servem para
+// medir consumo mesmo sem preco.
 // ---------------------------------------------------------------------
 remover_colunas($pdo, 'agentes', ['publico']);
 remover_colunas($pdo, 'faq', ['base_id']);
-remover_colunas($pdo, 'ferramentas', ['resposta_template', 'dataset_id', 'formula']);
+remover_colunas($pdo, 'ferramentas', ['resposta_template', 'dataset_id', 'formula', 'requer_confirmacao']);
+remover_colunas($pdo, 'provedores', ['custo_entrada_milhao', 'custo_saida_milhao']);
+remover_colunas($pdo, 'mensagens', ['custo']);
 
 foreach (['dataset_linhas', 'datasets'] as $tabelaMorta) {
     $existe = $pdo->prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = :n");

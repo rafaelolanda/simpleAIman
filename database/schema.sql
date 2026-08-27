@@ -194,14 +194,6 @@ CREATE TABLE IF NOT EXISTS provedores (
     modelo_embedding    TEXT,
     dimensoes           INTEGER,
 
-    -- Preco por MILHAO de tokens, na moeda do painel. Fica no provedor
-    -- porque muda por modelo e por fornecedor, e precisa ser editavel sem
-    -- deploy: tabela de preco de LLM muda sozinha, sem avisar ninguem.
-    -- Zero significa "nao calcular custo" — melhor campo vazio que numero
-    -- inventado numa tela que alguem vai usar para decidir orcamento.
-    custo_entrada_milhao REAL NOT NULL DEFAULT 0,
-    custo_saida_milhao   REAL NOT NULL DEFAULT 0,
-
     suporta_tools       INTEGER NOT NULL DEFAULT 1,
     suporta_stream      INTEGER NOT NULL DEFAULT 1,
     ativo               INTEGER NOT NULL DEFAULT 1,
@@ -487,9 +479,8 @@ CREATE TABLE IF NOT EXISTS ferramentas (
     -- Campo mais importante da tabela: é o texto que o modelo lê para decidir
     -- QUANDO chamar. É prompt, não documentação.
     descricao_llm       TEXT NOT NULL,
-    tipo                TEXT NOT NULL DEFAULT 'http',  -- http|tabela|lead|handoff|contato_setor
+    tipo                TEXT NOT NULL DEFAULT 'http',  -- http|lead|handoff|contato_setor|transferir_atendimento
     efeito              TEXT NOT NULL DEFAULT 'leitura',  -- leitura|escrita
-    requer_confirmacao  INTEGER NOT NULL DEFAULT 0,
     -- Trava real de ordem: o orquestrador RECUSA a chamada se a ferramenta
     -- pré-requisito não rodou nesta conversa. Não é sugestão ao modelo.
     depende_de          INTEGER REFERENCES ferramentas (id) ON DELETE SET NULL,
@@ -619,7 +610,6 @@ CREATE TABLE IF NOT EXISTS mensagens (
     conteudo            TEXT NOT NULL,
     tokens_in           INTEGER,
     tokens_out          INTEGER,
-    custo               REAL,
     latencia_ms         INTEGER,
     feedback            INTEGER,                         -- 1 positivo, -1 negativo
     -- Id da mensagem no canal de origem (o `wamid`, no WhatsApp).
