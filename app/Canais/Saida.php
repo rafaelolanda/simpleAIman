@@ -28,7 +28,7 @@ final class Saida
     /**
      * @return bool true se algo foi enviado de fato (false = canal que só puxa)
      */
-    public static function entregar(int $conversaId, string $texto): bool
+    public static function entregar(int $conversaId, string $texto, ?string $autor = null): bool
     {
         $stmt = Database::connection()->prepare(
             'SELECT c.externo_id, ca.tipo FROM conversas c
@@ -58,7 +58,7 @@ final class Saida
         }
 
         try {
-            $canal->enviar((string) $conversa['externo_id'], $texto);
+            $canal->enviar((string) $conversa['externo_id'], self::comAutor($texto, $autor));
 
             return true;
         } catch (Throwable $e) {
@@ -101,8 +101,12 @@ final class Saida
      *
      * @param array<string, mixed> $anexo linha de `mensagem_anexos`
      */
-    public static function entregarAnexo(int $conversaId, array $anexo, string $legenda = ''): bool
-    {
+    public static function entregarAnexo(
+        int $conversaId,
+        array $anexo,
+        string $legenda = '',
+        ?string $autor = null,
+    ): bool {
         $stmt = Database::connection()->prepare(
             'SELECT c.externo_id, ca.tipo FROM conversas c
              LEFT JOIN canais ca ON ca.id = c.canal_id
@@ -127,13 +131,28 @@ final class Saida
             return false;
         }
 
+        $para = (string) $conversa['externo_id'];
+        $tipo = (string) $anexo['tipo'];
+
         try {
+            // Audio nao aceita legenda na API da Meta. Sem esta linha, tanto o
+            // nome de quem mandou quanto a legenda digitada pelo atendente
+            // sumiriam sem aviso — a pessoa receberia um audio solto, de
+            // origem desconhecida.
+            if ($tipo === 'audio') {
+                $aviso = trim(self::comAutor($legenda, $autor));
+
+                if ($aviso !== '') {
+                    $canal->enviar($para, $aviso);
+                }
+            }
+
             $canal->enviarMidia(
-                (string) $conversa['externo_id'],
+                $para,
                 Anexos::caminhoAbsoluto($anexo),
                 (string) $anexo['mime'],
-                (string) $anexo['tipo'],
-                $legenda,
+                $tipo,
+                $tipo === 'audio' ? '' : self::comAutor($legenda, $autor),
                 $anexo['nome_original'] !== null ? (string) $anexo['nome_original'] : null
             );
 
@@ -143,6 +162,36 @@ final class Saida
 
             return false;
         }
+    }
+
+    /**
+     * Prefixa o nome de quem esta falando.
+     *
+     * So o WhatsApp precisa disto, e por falta de estrutura: la toda mensagem
+     * chega igual, do mesmo numero, sem nenhum campo dizendo quem escreveu. O
+     * widget e o painel exibem o autor ao lado do balao, entao repetir no
+     * texto duplicaria.
+     *
+     * Importa mais do que parece: atendente muda no meio da conversa —
+     * transferencia, resgate de conversa orfa —, e sem o nome a pessoa nao tem
+     * como saber que agora fala com outra gente.
+     *
+     * `*Nome:*` com um asterisco porque e a marcacao do WhatsApp, e a quebra
+     * de linha separa o rotulo da fala.
+     */
+    private static function comAutor(string $texto, ?string $autor): string
+    {
+        $autor = trim((string) $autor);
+
+        if ($autor === '') {
+            return $texto;
+        }
+
+        // Asterisco dentro do nome quebraria o negrito e deixaria a marcacao
+        // vazando na tela de quem recebe.
+        $autor = str_replace(['*', '_', '~'], '', $autor);
+
+        return '*' . $autor . ':*' . ($texto === '' ? '' : "\n" . $texto);
     }
 
     private static function canalDaConversa(int $conversaId): ?CanalWhatsapp

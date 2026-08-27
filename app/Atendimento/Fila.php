@@ -221,7 +221,8 @@ final class Fila
             return false;
         }
 
-        $nome = self::nomeDoAtendente($atendenteId);
+        // Nome PUBLICO: este texto vai para o visitante.
+        $nome = self::nomeDoAtendente($atendenteId, publico: true);
         self::registrarAviso($conversaId, $nome . ' entrou na conversa.');
 
         return true;
@@ -673,7 +674,15 @@ final class Fila
     {
         $id = self::gravar($conversaId, 'atendente', $texto, $atendenteId);
 
-        \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
+        // O nome vai para a ENTREGA, nunca para o conteudo gravado: no painel
+        // o autor ja aparece ao lado do balao, e gravar "Fulano:" no texto
+        // duplicaria ali e sujaria o historico. Quem precisa do prefixo e o
+        // WhatsApp, que nao tem onde exibir autor.
+        \SimpleAIman\Canais\Saida::entregar(
+            $conversaId,
+            $texto,
+            self::nomeDoAtendente($atendenteId, publico: true)
+        );
 
         return $id;
     }
@@ -748,7 +757,12 @@ final class Fila
         // acusaria falha sobre um arquivo que o visitante está vendo.
         $entregue = $anexo !== [] && (
             !\SimpleAIman\Canais\Saida::precisaEnviar($conversaId)
-            || \SimpleAIman\Canais\Saida::entregarAnexo($conversaId, $anexo, $legenda)
+            || \SimpleAIman\Canais\Saida::entregarAnexo(
+                $conversaId,
+                $anexo,
+                $legenda,
+                self::nomeDoAtendente($atendenteId, publico: true)
+            )
         );
 
         return ['id' => $id, 'anexo' => $anexoId, 'entregue' => $entregue];
@@ -774,12 +788,25 @@ final class Fila
         return (int) $pdo->lastInsertId();
     }
 
-    private static function nomeDoAtendente(int $id): string
+    /**
+     * @param bool $publico o texto vai para o VISITANTE, não para o painel
+     *
+     * A diferença não é estética. Sem nome cadastrado, a versão interna cai no
+     * usuário de LOGIN — útil numa nota para o staff, e credencial vazando se
+     * chegar ao visitante. O `api/publico.php` já tomava esse cuidado ao montar
+     * o JSON do widget; `assumir()` não tomava, e mandava "joao.silva entrou na
+     * conversa" para quem estivesse do outro lado.
+     */
+    private static function nomeDoAtendente(int $id, bool $publico = false): string
     {
-        $stmt = Database::connection()->prepare('SELECT COALESCE(NULLIF(nome, \'\'), usuario) FROM admin_users WHERE id = :id');
+        $stmt = Database::connection()->prepare(
+            $publico
+                ? 'SELECT nome FROM admin_users WHERE id = :id'
+                : 'SELECT COALESCE(NULLIF(nome, \'\'), usuario) FROM admin_users WHERE id = :id'
+        );
         $stmt->execute(['id' => $id]);
 
-        return (string) ($stmt->fetchColumn() ?: 'Atendente');
+        return trim((string) ($stmt->fetchColumn() ?: '')) ?: 'Atendente';
     }
 
     /**
