@@ -338,38 +338,69 @@ final class Worker
         try {
             $tipo = (string) ($dados['tipo'] ?? 'text');
 
-            // Mídia: o arquivo é guardado e a conversa segue. O agente ainda
-            // não interpreta imagem nem áudio, então o que ele responde é
-            // honesto quanto a isso — mas o arquivo fica registrado, visível
-            // para quem for atender.
+            // -------------------------------------------------------------
+            // Mídia: só com atendente humano na conversa
+            //
+            // Arquivo só é baixado quando alguém do outro lado assumiu o
+            // atendimento. Com o agente respondendo, o arquivo é recusado sem
+            // sequer ser buscado na Meta.
+            //
+            // A razão é abuso: quem quiser encher o disco do cliente manda
+            // arquivo atrás de arquivo, de graça, e cada um vira espaço nosso.
+            // O agente não sabe ler imagem nem áudio, então o custo seria pago
+            // sem nenhum ganho.
+            //
+            // A trava é `modo === 'humano'` e não "pediu atendimento": pedir
+            // atendente é digitar uma frase, coisa que o atacante faz sozinho.
+            // Um humano ter ASSUMIDO a conversa é o que ele não consegue
+            // acionar — por isso é aqui que a linha fica.
+            // -------------------------------------------------------------
             if ($tipo !== 'text') {
                 $legenda = trim((string) ($dados['texto'] ?? ''));
 
-                // A mensagem do visitante é gravada mesmo sem sabermos lê-la:
-                // sem ela, o painel mostra o bot falando sozinho, sem nada
-                // antes — e o atendente não entende o que aconteceu. É também
-                // o que ancora o `wamid` deste turno.
+                // A mensagem do visitante é gravada mesmo quando o arquivo é
+                // recusado: sem ela, o painel mostra o bot falando sozinho, e
+                // o atendente não entende o que aconteceu. É também o que
+                // ancora o `wamid` deste turno.
                 $mensagemId = $svc->gravarMensagem(
                     $conversa,
                     'usuario',
-                    $legenda !== '' ? $legenda : '[' . $tipo . ']',
+                    $legenda !== '' ? $legenda : '[' . $tipo . ' recusado]',
                     null,
                     null,
                     $wamid
                 );
 
+                if (!Fila::comAtendenteHumano($conversa)) {
+                    // Recusa e ORIENTA. O agente não pede documento e não
+                    // recebe documento; o caminho para quem precisa mesmo
+                    // enviar algo é a pessoa. É oferta, não promessa: se a
+                    // fila estiver vazia, ninguém assume — e prometer olho
+                    // humano que não existe é o que este projeto passa o tempo
+                    // todo tentando não fazer.
+                    $aviso = 'Não consigo receber arquivos por aqui. Se precisar enviar um documento '
+                        . 'ou uma foto, posso te encaminhar para um atendente — quer que eu faça isso?';
+
+                    $svc->gravarMensagem($conversa, 'bot', $aviso);
+                    $canal->enviar($de, $aviso);
+
+                    $log('whatsapp: ' . $tipo . ' recusado na conversa ' . $conversa . ' (sem atendente).');
+                    Queue::concluir((int) $job['id']);
+
+                    return 'concluidos';
+                }
+
                 $guardado = $this->guardarMidia($canal, $dados, $tipo, $mensagemId, $log);
 
-                // O aviso diz o que É verdade. Não promete atendente: se a fila
-                // estiver vazia, ninguém vai olhar — e prometer olho humano que
-                // não existe é a promessa que este projeto passa o tempo todo
-                // tentando não fazer.
-                $aviso = $guardado
-                    ? 'Recebi seu arquivo, mas ainda não consigo interpretá-lo. Pode me contar por escrito o que precisa?'
-                    : 'Não consegui receber esse arquivo. Pode me contar por escrito o que precisa?';
-
-                $svc->gravarMensagem($conversa, 'bot', $aviso);
-                $canal->enviar($de, $aviso);
+                // Com atendente na conversa, quem fala é ele — o bot cala,
+                // como já faz no caminho de texto. A exceção é a falha: sem
+                // aviso, a pessoa acha que o arquivo chegou e o atendente fica
+                // esperando um documento que nunca vai aparecer na tela.
+                if (!$guardado) {
+                    $aviso = 'Não consegui receber esse arquivo. Pode tentar enviar de novo?';
+                    $svc->gravarMensagem($conversa, 'bot', $aviso);
+                    $canal->enviar($de, $aviso);
+                }
 
                 $log('whatsapp: ' . $tipo . ' na conversa ' . $conversa . ($guardado ? '; guardado.' : '; NÃO guardado.'));
                 Queue::concluir((int) $job['id']);

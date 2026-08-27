@@ -399,8 +399,13 @@ include __DIR__ . '/partials/head.php';
                 <?php foreach ($fila as $c): ?>
                     <?php $espera = max(0, time() - strtotime((string) $c['aguardando_desde'])); ?>
                     <li>
+                        <?php $zap = ($c['canal_tipo'] ?? '') === 'whatsapp'; ?>
                         <div class="fila-cabeca">
                             <strong>#<?= (int) $c['id'] ?></strong>
+                            <span class="canal-tag <?= $zap ? 'canal-zap' : 'canal-web' ?>"
+                                  title="<?= $zap ? e(telefone_legivel((string) ($c['externo_id'] ?? ''))) : 'Chat do site' ?>">
+                                <?= $zap ? '📱 WhatsApp' : '💬 Site' ?>
+                            </span>
                             <span class="tag <?= $espera > 120 ? 'tag-alerta' : '' ?>">
                                 esperando <?= $espera < 60 ? $espera . 's' : intdiv($espera, 60) . 'min' ?>
                             </span>
@@ -446,11 +451,24 @@ include __DIR__ . '/partials/head.php';
             <p class="vazio">Escolha uma conversa na fila para atender.</p>
         <?php else: ?>
             <div class="zap">
+                <?php
+                // Por onde a pessoa está falando muda o que o atendente pode
+                // fazer: no WhatsApp há um telefone e a janela de 24h; no
+                // widget não há nem um nem outra, e quem fecha a aba some.
+                $ehZap = ($conversa['canal_tipo'] ?? '') === 'whatsapp';
+                $telefone = $ehZap ? telefone_legivel((string) ($conversa['externo_id'] ?? '')) : '';
+                ?>
                 <div class="zap-cabecalho">
-                    <span class="zap-avatar">👤</span>
+                    <span class="zap-avatar"><?= $ehZap ? '📱' : '💬' ?></span>
                     <div>
-                        <div class="zap-quem">Visitante · conversa #<?= (int) $conversa['id'] ?></div>
+                        <div class="zap-quem">
+                            <?= $ehZap && $telefone !== '' ? e($telefone) : 'Visitante' ?>
+                            · conversa #<?= (int) $conversa['id'] ?>
+                        </div>
                         <div class="zap-estado">
+                            <span class="canal-tag <?= $ehZap ? 'canal-zap' : 'canal-web' ?>">
+                                <?= $ehZap ? 'WhatsApp' : 'Chat do site' ?>
+                            </span>
                             <?php if ($conversa['modo'] === 'humano'): ?>
                                 em atendimento com <?= e((string) ($conversa['atendente'] ?? 'você')) ?>
                             <?php elseif ($conversa['modo'] === 'aguardando'): ?>
@@ -537,7 +555,7 @@ include __DIR__ . '/partials/head.php';
                         // decisão de desenho. Por isso o botão vive aqui, na
                         // barra de quem está atendendo.
                         ?>
-                        <button type="button" class="btn-marca" id="btn-anexo"
+                        <button type="button" class="btn-marca btn-anexar" id="btn-anexo"
                                 title="Anexar arquivo (até <?= MIDIA_MAX_MB ?> MB)">📎</button>
                         <input type="file" name="arquivo" id="campo-arquivo" hidden
                                accept="<?= e(implode(',', Anexos::mimesAceitos())) ?>">
@@ -843,7 +861,11 @@ include __DIR__ . '/partials/head.php';
             campo.focus();
         }
 
-        document.querySelectorAll('.btn-marca').forEach(function (b) {
+        // `[data-marca]` no seletor, e nao so a classe: o botao de anexo
+        // compartilha a aparencia dos marcadores mas nao envolve nada. Sem
+        // isto ele chamava envolver(undefined) e escrevia "undefined" no
+        // campo — que foi exatamente o que aconteceu no primeiro uso.
+        document.querySelectorAll('.btn-marca[data-marca]').forEach(function (b) {
             b.addEventListener('click', function () { envolver(b.dataset.marca); });
         });
 

@@ -589,6 +589,24 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 .anexo-arquivo:hover { background: rgba(0, 0, 0, 0.1); }
 .anexo-tamanho { opacity: 0.65; }
 
+/* Etiqueta do canal.
+   Por onde a pessoa fala muda o que o atendente pode fazer: no WhatsApp ha um
+   telefone e a janela de 24h; no widget nao ha nem um nem outra, e quem fecha
+   a aba some. Atender os dois como iguais leva a prometer retorno "mais tarde"
+   para quem nao vai estar la. */
+.canal-tag {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    vertical-align: middle;
+}
+
+.canal-zap { background: #dcf8c6; color: #0b6b3a; }
+.canal-web { background: #e2e8f0; color: #334155; }
+
 /* Arquivo escolhido, antes de enviar. Fica visível de propósito: sem
    confirmação na tela, o atendente anexa, esquece e manda só o texto. */
 .anexo-escolhido {

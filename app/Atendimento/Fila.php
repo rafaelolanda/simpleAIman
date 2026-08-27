@@ -542,13 +542,15 @@ final class Fila
     public static function aguardando(): array
     {
         return Database::connection()->query(
-            "SELECT c.id, c.aguardando_desde, c.criado_em, a.nome AS agente,
+            "SELECT c.id, c.aguardando_desde, c.criado_em, c.externo_id, a.nome AS agente,
+                    ca.tipo AS canal_tipo,
                     (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs,
                     (SELECT m.conteudo FROM mensagens m
                       WHERE m.conversa_id = c.id AND m.autor_tipo = 'usuario'
                       ORDER BY m.id DESC LIMIT 1) AS ultima
              FROM conversas c
              LEFT JOIN agentes a ON a.id = c.agente_id
+             LEFT JOIN canais ca ON ca.id = c.canal_id
              WHERE c.modo = 'aguardando'
              ORDER BY c.aguardando_desde ASC"
         )->fetchAll(PDO::FETCH_ASSOC);
@@ -559,11 +561,13 @@ final class Fila
     {
         $pdo = Database::connection();
 
-        $sql = "SELECT c.id, c.atendente_id, c.editado_em, a.nome AS agente, u.usuario AS atendente,
+        $sql = "SELECT c.id, c.atendente_id, c.editado_em, c.externo_id, a.nome AS agente,
+                       u.usuario AS atendente, ca.tipo AS canal_tipo,
                        (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs
                 FROM conversas c
                 LEFT JOIN agentes a ON a.id = c.agente_id
                 LEFT JOIN admin_users u ON u.id = c.atendente_id
+                LEFT JOIN canais ca ON ca.id = c.canal_id
                 WHERE c.modo = 'humano'";
 
         if ($atendenteId !== null) {
@@ -580,10 +584,17 @@ final class Fila
     public static function conversa(int $conversaId): ?array
     {
         $stmt = Database::connection()->prepare(
-            'SELECT c.*, a.nome AS agente, u.usuario AS atendente
+            // O canal vem junto porque quem atende precisa saber por onde a
+            // pessoa está falando: no WhatsApp existe um telefone e a janela
+            // de 24h; no widget não existe nem um nem outra. Atender os dois
+            // como se fossem o mesmo leva a prometer retorno "mais tarde" para
+            // quem vai fechar a aba e sumir.
+            'SELECT c.*, a.nome AS agente, u.usuario AS atendente,
+                    ca.tipo AS canal_tipo, ca.nome AS canal_nome
              FROM conversas c
              LEFT JOIN agentes a ON a.id = c.agente_id
              LEFT JOIN admin_users u ON u.id = c.atendente_id
+             LEFT JOIN canais ca ON ca.id = c.canal_id
              WHERE c.id = :id'
         );
         $stmt->execute(['id' => $conversaId]);
@@ -665,6 +676,30 @@ final class Fila
         \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
 
         return $id;
+    }
+
+    /**
+     * Alguém de carne e osso assumiu esta conversa?
+     *
+     * Diferente de "pediu atendimento": `aguardando` é só uma frase digitada
+     * pelo visitante, e por isso não serve como permissão para nada — quem
+     * quiser abusar digita a frase. `humano` exige que um atendente tenha
+     * clicado em assumir, e é o que o visitante não consegue acionar sozinho.
+     *
+     * É a trava que libera o recebimento de arquivos no WhatsApp.
+     */
+    public static function comAtendenteHumano(int $conversaId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT modo, atendente_id FROM conversas WHERE id = :id'
+        );
+        $stmt->execute(['id' => $conversaId]);
+
+        $conversa = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        return $conversa !== false
+            && (string) $conversa['modo'] === 'humano'
+            && (int) $conversa['atendente_id'] > 0;
     }
 
     /**

@@ -288,6 +288,34 @@ function anexos_html_publico(array $anexos, string $token, string $sessao): stri
     return $saida;
 }
 
+/**
+ * Telefone em E.164 escrito como gente lê.
+ *
+ * O WhatsApp entrega `555599544904`; o atendente precisa reconhecer aquilo
+ * como um número, e ler quatorze dígitos grudados atrasa cada atendimento um
+ * pouco. Formata o padrão brasileiro e devolve o resto com um `+` na frente —
+ * chutar máscara de país que não conhecemos deixaria pior que o cru.
+ */
+function telefone_legivel(?string $numero): string
+{
+    $d = preg_replace('/\D+/', '', (string) $numero) ?? '';
+
+    if ($d === '') {
+        return '';
+    }
+
+    if (str_starts_with($d, '55') && (strlen($d) === 12 || strlen($d) === 13)) {
+        $ddd = substr($d, 2, 2);
+        $resto = substr($d, 4);
+        $meio = strlen($resto) === 9 ? substr($resto, 0, 5) : substr($resto, 0, 4);
+        $fim = strlen($resto) === 9 ? substr($resto, 5) : substr($resto, 4);
+
+        return "+55 ({$ddd}) {$meio}-{$fim}";
+    }
+
+    return '+' . $d;
+}
+
 function tamanho_legivel(int $bytes): string
 {
     if ($bytes < 1024) {
