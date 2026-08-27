@@ -84,6 +84,11 @@ define('MAIL_SMTP_SEGURANCA', $env['MAIL_SMTP_SEGURANCA'] ?? 'tls');
 // Upload e ingestão
 // ---------------------------------------------------------------------
 define('UPLOAD_MAX_MB', (int) ($env['UPLOAD_MAX_MB'] ?? 20));
+
+// Teto da midia recebida pelo WhatsApp. Separado do UPLOAD_MAX_MB porque quem
+// envia e diferente: o admin sobe um documento uma vez, uma pessoa qualquer
+// manda video de graca, quantas vezes quiser, na cota de disco do cliente.
+define('MIDIA_MAX_MB', (int) ($env['MIDIA_MAX_MB'] ?? 16));
 define('WORKER_LOTE', (int) ($env['WORKER_LOTE'] ?? 25));
 define('WORKER_TEMPO_MAX_S', (int) ($env['WORKER_TEMPO_MAX_S'] ?? 20));
 define('WORKER_TOKEN', $env['WORKER_TOKEN'] ?? '');

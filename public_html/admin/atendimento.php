@@ -201,15 +201,25 @@ if (($_GET['acao'] ?? '') === 'json') {
         $conversa = Fila::conversa($abrindo);
         $resposta['modo'] = $conversa['modo'] ?? null;
 
+        $novas = Fila::mensagensDesde($abrindo, $desde);
+        $anexos = \SimpleAIman\Canais\Anexos::porMensagens(array_map(
+            static fn (array $m): int => (int) $m['id'],
+            $novas
+        ));
+
         $resposta['mensagens'] = array_map(
             static fn (array $m): array => [
                 'id' => (int) $m['id'],
                 'quem' => $m['autor_tipo'],
                 'texto' => $m['conteudo'],
-                'html' => formatar_whatsapp((string) $m['conteudo']),
+                // O anexo vai junto do html da mensagem: a tela insere isso de
+                // uma vez, e separar faria a foto aparecer um passo depois do
+                // texto a que ela pertence.
+                'html' => formatar_whatsapp((string) $m['conteudo'])
+                    . anexos_html($anexos[(int) $m['id']] ?? []),
                 'hora' => date('H:i', strtotime((string) $m['criado_em'])),
             ],
-            Fila::mensagensDesde($abrindo, $desde)
+            $novas
         );
     }
 
@@ -230,6 +240,7 @@ $outras = array_values(array_filter(
 $conversa = $abrindo > 0 ? Fila::conversa($abrindo) : null;
 $mensagens = [];
 $ultimoId = 0;
+$anexosPorMensagem = [];
 
 if ($conversa) {
     $stmt = $pdo->prepare(
@@ -240,6 +251,13 @@ if ($conversa) {
     $stmt->execute(['id' => $abrindo]);
     $mensagens = $stmt->fetchAll();
     $ultimoId = $mensagens === [] ? 0 : (int) end($mensagens)['id'];
+
+    // Numa consulta só. Uma por mensagem apareceria como lentidão sem causa
+    // visível numa conversa longa.
+    $anexosPorMensagem = \SimpleAIman\Canais\Anexos::porMensagens(array_map(
+        static fn (array $m): int => (int) $m['id'],
+        $mensagens
+    ));
 
     // Rótulo das fontes que embasaram cada resposta do copiloto. Sem isto o
     // atendente mandaria ao visitante um texto sem saber de onde veio — que é
@@ -415,6 +433,7 @@ include __DIR__ . '/partials/head.php';
                         <div class="msg-texto">
                             <span class="msg-quem"><?= e($quem) ?></span>
                             <?= formatar_whatsapp((string) $m['conteudo']) ?>
+                            <?= anexos_html($anexosPorMensagem[(int) $m['id']] ?? []) ?>
                             <span class="msg-hora"><?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
                         </div>
                         <?php if ($m['autor_tipo'] === 'copiloto' && !str_starts_with((string) $m['conteudo'], '❓')): ?>

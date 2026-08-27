@@ -10,7 +10,11 @@ database/*.sqlite-wal
 public_html/assets/uploads/*
 !public_html/assets/uploads/.gitkeep
 
-# Locks e temporários do worker
+# Locks do worker E os arquivos recebidos nas conversas.
+#
+# Fica fora do versionamento por duas razões, e a segunda é a séria: é por
+# instância, e é DADO PESSOAL — a foto que alguém mandou, o áudio que gravou.
+# Um `git push` distraído publicaria isso num repositório.
 storage/
 *.lock
 *.log

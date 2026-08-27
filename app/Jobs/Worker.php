@@ -7,6 +7,7 @@ namespace SimpleAIman\Jobs;
 use Database;
 use PDOException;
 use SimpleAIman\Atendimento\Fila;
+use SimpleAIman\Canais\Anexos;
 use SimpleAIman\Canais\CanalWhatsapp;
 use SimpleAIman\Llm\ChatService;
 use SimpleAIman\Llm\ErroAgente;
@@ -335,27 +336,49 @@ final class Worker
         $conversa = $svc->conversa($canalId, $de, null);
 
         try {
-            // Mídia ainda não é tratada. Ficar em silêncio faria a pessoa achar
-            // que a mensagem sumiu — pior que dizer que não sabemos ler.
-            if (($dados['tipo'] ?? 'text') !== 'text' || trim((string) $dados['texto']) === '') {
+            $tipo = (string) ($dados['tipo'] ?? 'text');
+
+            // Mídia: o arquivo é guardado e a conversa segue. O agente ainda
+            // não interpreta imagem nem áudio, então o que ele responde é
+            // honesto quanto a isso — mas o arquivo fica registrado, visível
+            // para quem for atender.
+            if ($tipo !== 'text') {
+                $legenda = trim((string) ($dados['texto'] ?? ''));
+
                 // A mensagem do visitante é gravada mesmo sem sabermos lê-la:
-                // sem ela, o painel mostra o bot avisando sozinho, sem nada
+                // sem ela, o painel mostra o bot falando sozinho, sem nada
                 // antes — e o atendente não entende o que aconteceu. É também
                 // o que ancora o `wamid` deste turno.
-                $svc->gravarMensagem(
+                $mensagemId = $svc->gravarMensagem(
                     $conversa,
                     'usuario',
-                    '[' . ($dados['tipo'] ?: 'anexo') . ' recebido]',
+                    $legenda !== '' ? $legenda : '[' . $tipo . ']',
                     null,
                     null,
                     $wamid
                 );
 
-                $aviso = 'Por enquanto consigo ler apenas mensagens de texto. Pode escrever o que precisa?';
+                $guardado = $this->guardarMidia($canal, $dados, $tipo, $mensagemId, $log);
+
+                // O aviso diz o que É verdade. Não promete atendente: se a fila
+                // estiver vazia, ninguém vai olhar — e prometer olho humano que
+                // não existe é a promessa que este projeto passa o tempo todo
+                // tentando não fazer.
+                $aviso = $guardado
+                    ? 'Recebi seu arquivo, mas ainda não consigo interpretá-lo. Pode me contar por escrito o que precisa?'
+                    : 'Não consegui receber esse arquivo. Pode me contar por escrito o que precisa?';
+
                 $svc->gravarMensagem($conversa, 'bot', $aviso);
                 $canal->enviar($de, $aviso);
 
-                $log('whatsapp: mídia na conversa ' . $conversa . '; respondido com aviso.');
+                $log('whatsapp: ' . $tipo . ' na conversa ' . $conversa . ($guardado ? '; guardado.' : '; NÃO guardado.'));
+                Queue::concluir((int) $job['id']);
+
+                return 'concluidos';
+            }
+
+            if (trim((string) $dados['texto']) === '') {
+                $log('whatsapp: mensagem de texto vazia na conversa ' . $conversa . '; ignorada.');
                 Queue::concluir((int) $job['id']);
 
                 return 'concluidos';
@@ -431,6 +454,54 @@ final class Worker
         Queue::concluir((int) $job['id']);
 
         return 'concluidos';
+    }
+
+    /**
+     * Baixa a mídia na Meta e guarda em disco.
+     *
+     * Nunca deixa a exceção subir: o turno já gravou a mensagem do visitante e
+     * precisa terminar respondendo. Arquivo grande demais, tipo recusado ou
+     * rede caída não podem virar job em `erro` — do lado de quem enviou, o que
+     * aconteceria é silêncio.
+     *
+     * @param array<string, mixed> $dados
+     */
+    private function guardarMidia(
+        CanalWhatsapp $canal,
+        array $dados,
+        string $tipo,
+        int $mensagemId,
+        callable $log,
+    ): bool {
+        $midiaId = (string) ($dados['midia_id'] ?? '');
+
+        if ($midiaId === '') {
+            $log('whatsapp: ' . $tipo . ' sem id de mídia no evento; nada a baixar.');
+
+            return false;
+        }
+
+        try {
+            $midia = $canal->baixarMidia($midiaId, Anexos::tetoBytes(), Anexos::mimesAceitos());
+
+            Anexos::guardar(
+                $mensagemId,
+                $tipo,
+                $midia['mime'],
+                $midia['bytes'],
+                (string) ($dados['nome_arquivo'] ?? '') ?: null,
+                $midiaId
+            );
+
+            return true;
+        } catch (Throwable $e) {
+            // Detalhe no log, nunca na conversa: a mensagem da Meta cita id
+            // interno, e o nosso teto de tamanho é decisão de infraestrutura.
+            error_log('[simpleAIman] whatsapp: anexo ' . $midiaId . ' não guardado: ' . $e->getMessage());
+            $log('whatsapp: anexo recusado — ' . $e->getMessage());
+
+            return false;
+        }
     }
 
     /** Esta mensagem do canal já virou linha em `mensagens`? */

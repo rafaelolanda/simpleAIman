@@ -43,6 +43,10 @@ final class Painel
         // Atendimento humano
         'atendimento.php' => ['admin', 'editor', 'atendente'],
         'chamados.php' => ['admin', 'editor', 'atendente'],
+        // Arquivo que a pessoa mandou na conversa. Acompanha a tela de
+        // atendimento: de nada adianta o atendente ver "[image]" e não poder
+        // abrir a foto que a pessoa mandou para explicar o problema.
+        'anexo.php' => ['admin', 'editor', 'atendente'],
 
         // Conteúdo — o que o agente sabe
         'index.php' => ['admin', 'editor'],

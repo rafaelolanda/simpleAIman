@@ -224,6 +224,120 @@ final class CanalWhatsapp
     }
 
     /**
+     * Baixa uma mídia recebida.
+     *
+     * São dois passos, e não um: a Meta não entrega o arquivo pelo id. Primeiro
+     * se pergunta o que é (`GET /{media-id}` devolve url, mime e tamanho), e só
+     * então se baixa a url — **com o mesmo Bearer**, porque ela é autenticada
+     * apesar de parecer pública.
+     *
+     * A url expira em minutos. Por isso o arquivo é guardado agora: guardar só
+     * o id para buscar depois daria um link morto e uma conversa com um buraco
+     * onde havia uma foto.
+     *
+     * @return array{bytes: string, mime: string, tamanho: int, sha256: ?string}
+     *
+     * @throws RuntimeException quando a Meta recusa, o tipo não é aceito ou o
+     *                          arquivo passa do teto
+     */
+    public function baixarMidia(string $mediaId, int $tetoBytes, array $mimesAceitos): array
+    {
+        $token = $this->segredo('TOKEN');
+
+        if ($token === '' || trim($mediaId) === '') {
+            throw new RuntimeException('Credenciais ausentes ou id de mídia vazio.');
+        }
+
+        $meta = $this->pegarJson(self::API . rawurlencode($mediaId), $token);
+
+        $url = (string) ($meta['url'] ?? '');
+        $mime = strtolower(trim(explode(';', (string) ($meta['mime_type'] ?? ''))[0]));
+        $tamanho = (int) ($meta['file_size'] ?? 0);
+
+        if ($url === '') {
+            throw new RuntimeException('A Meta não devolveu url para a mídia ' . $mediaId . '.');
+        }
+
+        // Os dois limites são checados ANTES de baixar, com o que a Meta
+        // informou. Baixar para só então descobrir que não serve gastaria a
+        // banda e o disco que o limite existe para proteger.
+        if ($mimesAceitos !== [] && !in_array($mime, $mimesAceitos, true)) {
+            throw new RuntimeException('Tipo não aceito: ' . ($mime ?: 'desconhecido'));
+        }
+
+        if ($tamanho > 0 && $tamanho > $tetoBytes) {
+            throw new RuntimeException('Arquivo de ' . round($tamanho / 1048576, 1) . ' MB passa do teto.');
+        }
+
+        $bytes = $this->pegarBytes($url, $token, $tetoBytes);
+
+        return [
+            'bytes' => $bytes,
+            'mime' => $mime ?: 'application/octet-stream',
+            'tamanho' => strlen($bytes),
+            'sha256' => isset($meta['sha256']) ? (string) $meta['sha256'] : null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function pegarJson(string $url, string $token): array
+    {
+        $ch = curl_init($url);
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+        ]);
+
+        $resposta = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $erroCurl = curl_error($ch);
+        curl_close($ch);
+
+        if ($resposta === false || $status >= 300) {
+            throw new RuntimeException('Consulta de mídia recusada (HTTP ' . $status . '): '
+                . ($erroCurl ?: mb_substr((string) $resposta, 0, 200)));
+        }
+
+        $dados = json_decode((string) $resposta, true);
+
+        return is_array($dados) ? $dados : [];
+    }
+
+    private function pegarBytes(string $url, string $token, int $tetoBytes): string
+    {
+        $ch = curl_init($url);
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 60,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+            // Rede é rede: a Meta pode informar um tamanho e entregar outro.
+            // Sem este corte, um arquivo maior que o anunciado passaria pelo
+            // limite checado acima e cairia inteiro na memória.
+            CURLOPT_NOPROGRESS => false,
+            CURLOPT_PROGRESSFUNCTION => static fn ($r, $baixado): int => $baixado > $tetoBytes ? 1 : 0,
+        ]);
+
+        $bytes = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $erroCurl = curl_error($ch);
+        curl_close($ch);
+
+        if ($bytes === false || $status >= 300) {
+            throw new RuntimeException('Download da mídia recusado (HTTP ' . $status . '): '
+                . ($erroCurl ?: 'sem corpo'));
+        }
+
+        if (strlen((string) $bytes) > $tetoBytes) {
+            throw new RuntimeException('Arquivo passa do teto durante o download.');
+        }
+
+        return (string) $bytes;
+    }
+
+    /**
      * A conversa está dentro da janela de 24 horas?
      *
      * Fora dela, a Meta só aceita template pré-aprovado — texto livre é

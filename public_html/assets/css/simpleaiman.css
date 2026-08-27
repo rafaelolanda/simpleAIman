@@ -553,6 +553,50 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 .msg-texto em { font-style: italic; }
 .msg-texto s { text-decoration: line-through; opacity: 0.8; }
 
+/* Anexos recebidos na conversa.
+   `white-space: normal` porque o balao usa pre-wrap, e sem isto a quebra de
+   linha entre o texto e o anexo viraria um vao enorme. */
+.anexo {
+    display: block;
+    margin-top: 0.4rem;
+    max-width: 100%;
+    white-space: normal;
+}
+
+.anexo-imagem img {
+    display: block;
+    /* Teto de altura, nao so de largura: foto em pe tomaria a tela inteira e
+       empurraria o resto da conversa para fora. Clicar abre em tamanho real. */
+    max-width: 100%;
+    max-height: 260px;
+    width: auto;
+    border-radius: 6px;
+    cursor: zoom-in;
+}
+
+.anexo-audio { width: min(100%, 260px); }
+.anexo-video { max-width: 100%; max-height: 260px; border-radius: 6px; }
+
+.anexo-arquivo {
+    padding: 0.4rem 0.55rem;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.06);
+    text-decoration: none;
+    color: inherit;
+    font-size: 0.85rem;
+}
+
+.anexo-arquivo:hover { background: rgba(0, 0, 0, 0.1); }
+.anexo-tamanho { opacity: 0.65; }
+
+.anexo-removido {
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    border: 1px dashed rgba(0, 0, 0, 0.2);
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
 /* Hora dentro do balao, embaixo a direita: e o detalhe que faz a coisa
    "parecer WhatsApp" mais do que qualquer cor. */
 .msg-hora {

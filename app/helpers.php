@@ -140,6 +140,114 @@ function caminho_uploads(string $subpasta = ''): string
 }
 
 /**
+ * Pasta de arquivos privados — FORA da raiz web, ao contrário de
+ * `caminho_uploads()`.
+ *
+ * A diferença é o tipo de arquivo, não o gosto: o que passa por aqui é
+ * conteúdo de conversa — a foto que alguém mandou, o áudio que gravou, o
+ * documento que anexou. Servido por URL direta, bastaria um id vazar num
+ * print para o arquivo ficar aberto a qualquer um, sem login, para sempre.
+ *
+ * Cria a pasta na primeira chamada e planta um `.htaccess` de recusa. Estando
+ * fora da raiz, o `.htaccess` é redundante — e é essa a intenção: se um dia
+ * alguém apontar um vhost para o diretório errado, o segundo cadeado segura.
+ */
+function caminho_storage(string $subpasta = ''): string
+{
+    $base = __DIR__ . '/../storage';
+
+    if (!is_dir($base)) {
+        @mkdir($base, 0770, true);
+
+        $htaccess = $base . '/.htaccess';
+
+        if (!is_file($htaccess)) {
+            @file_put_contents($htaccess, "Require all denied\n<IfModule !mod_authz_core.c>\n    Deny from all\n</IfModule>\n");
+        }
+    }
+
+    if ($subpasta === '') {
+        return $base;
+    }
+
+    $caminho = $base . '/' . trim($subpasta, '/');
+
+    if (!is_dir($caminho)) {
+        @mkdir($caminho, 0770, true);
+    }
+
+    return $caminho;
+}
+
+/**
+ * Anexos de uma mensagem, em HTML, para o painel.
+ *
+ * Imagem, áudio e vídeo aparecem na própria tela; o resto vira link. O
+ * atendente precisa VER a foto do comprovante sem sair da conversa — mandar
+ * baixar cada arquivo transformaria um atendimento de dois minutos em cinco.
+ *
+ * Todo endereço aponta para `anexo.php`, que exige sessão. Nenhum arquivo é
+ * servido por caminho direto — é o que impede a foto de vazar por URL.
+ *
+ * @param list<array<string, mixed>> $anexos
+ */
+function anexos_html(array $anexos): string
+{
+    if ($anexos === []) {
+        return '';
+    }
+
+    $saida = '';
+
+    foreach ($anexos as $anexo) {
+        $url = 'anexo.php?id=' . (int) $anexo['id'];
+        $mime = (string) $anexo['mime'];
+
+        // Apagado pela retenção: a linha fica para dizer que existiu. Sumir em
+        // silêncio faria parecer que a pessoa nunca mandou nada.
+        if (($anexo['removido_em'] ?? null) !== null) {
+            $saida .= '<div class="anexo anexo-removido">Anexo apagado pela política de retenção</div>';
+            continue;
+        }
+
+        if (str_starts_with($mime, 'image/')) {
+            $saida .= '<a class="anexo anexo-imagem" href="' . e($url) . '" target="_blank" rel="noopener">'
+                . '<img src="' . e($url) . '" alt="Imagem enviada na conversa" loading="lazy"></a>';
+            continue;
+        }
+
+        if (str_starts_with($mime, 'audio/')) {
+            $saida .= '<audio class="anexo anexo-audio" controls preload="none" src="' . e($url) . '"></audio>';
+            continue;
+        }
+
+        if (str_starts_with($mime, 'video/')) {
+            $saida .= '<video class="anexo anexo-video" controls preload="none" src="' . e($url) . '"></video>';
+            continue;
+        }
+
+        $nome = trim((string) ($anexo['nome_original'] ?? '')) ?: 'arquivo';
+        $saida .= '<a class="anexo anexo-arquivo" href="' . e($url) . '">📎 ' . e($nome)
+            . ' <span class="anexo-tamanho">(' . e(tamanho_legivel((int) $anexo['tamanho'])) . ')</span></a>';
+    }
+
+    return $saida;
+}
+
+function tamanho_legivel(int $bytes): string
+{
+    if ($bytes < 1024) {
+        return $bytes . ' B';
+    }
+
+    if ($bytes < 1048576) {
+        return round($bytes / 1024) . ' KB';
+    }
+
+    return round($bytes / 1048576, 1) . ' MB';
+}
+
+/**
  * Link de WhatsApp com mensagem já preenchida. Centralizado porque o número
  * aparece em vários pontos (setor, rodapé, widget) e todos precisam levar a
  * mesma marcação de origem.

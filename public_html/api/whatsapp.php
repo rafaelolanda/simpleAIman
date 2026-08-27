@@ -114,12 +114,17 @@ foreach ($valor['messages'] ?? [] as $mensagem) {
         continue;
     }
 
-    // Só texto por enquanto. Áudio, imagem e documento pedem a máquina de
-    // mídia, que ainda não existe — e ficar em silêncio faria a pessoa achar
-    // que a mensagem sumiu.
+    // A mídia vem num objeto com o nome do tipo — `image`, `audio`,
+    // `document`, `video`, `sticker` — e traz só um id. O arquivo é buscado
+    // pelo worker, porque baixar aqui estouraria o prazo da Meta.
+    $conteudo = is_array($mensagem[$tipo] ?? null) ? $mensagem[$tipo] : [];
+
     $texto = $tipo === 'text'
         ? trim((string) ($mensagem['text']['body'] ?? ''))
-        : '';
+        // Legenda de foto é a pergunta da pessoa com muita frequência
+        // ("esse é o comprovante certo?") — descartá-la jogaria fora o que ela
+        // quis dizer e sobraria só o arquivo.
+        : trim((string) ($conteudo['caption'] ?? ''));
 
     Queue::enfileirar('entrada_whatsapp', [
         'canal_id' => (int) $canal->canal['id'],
@@ -127,6 +132,8 @@ foreach ($valor['messages'] ?? [] as $mensagem) {
         'de' => $de,
         'tipo' => $tipo,
         'texto' => $texto,
+        'midia_id' => (string) ($conteudo['id'] ?? ''),
+        'nome_arquivo' => (string) ($conteudo['filename'] ?? ''),
         'nome' => (string) ($valor['contacts'][0]['profile']['name'] ?? ''),
     ]);
 

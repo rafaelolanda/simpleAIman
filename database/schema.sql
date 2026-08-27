@@ -671,6 +671,44 @@ CREATE TABLE IF NOT EXISTS mensagem_fontes (
 CREATE INDEX IF NOT EXISTS idx_fontes_mensagem ON mensagem_fontes (mensagem_id);
 
 
+-- ---------------------------------------------------------------------
+-- Arquivos recebidos pela conversa (hoje, só WhatsApp)
+--
+-- O arquivo mora FORA da raiz web, em `storage/`, e é servido por endpoint
+-- autenticado. Mídia de conversa em pasta pública é vazamento com data
+-- marcada: basta um id vazar num print para o arquivo ficar acessível a
+-- qualquer um, para sempre, sem login.
+--
+-- `caminho` é relativo à pasta de storage — assim mover a instalação de
+-- diretório não invalida o banco inteiro.
+--
+-- A linha morre junto com a mensagem (ON DELETE CASCADE), mas o ARQUIVO não:
+-- quem apaga arquivo é a retenção, explicitamente. Banco limpo com arquivo
+-- vivo no disco é pior do que não ter apagado — a resposta ao titular seria
+-- falsa.
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS mensagem_anexos (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    mensagem_id         INTEGER NOT NULL REFERENCES mensagens (id) ON DELETE CASCADE,
+    tipo                TEXT NOT NULL,                   -- image|audio|video|document|sticker
+    mime                TEXT NOT NULL,
+    tamanho             INTEGER NOT NULL DEFAULT 0,
+    -- Nome que a pessoa deu ao arquivo. Só existe em documento; é dela, então
+    -- entra no expurgo como qualquer outro conteúdo.
+    nome_original       TEXT,
+    caminho             TEXT NOT NULL,
+    -- Id da mídia na Meta. Não serve para rebaixar depois — a URL da Meta
+    -- expira em minutos e o arquivo sai do ar. Serve para rastrear a origem.
+    externo_id          TEXT,
+    -- Some quando o arquivo é apagado pela retenção, e é isso que distingue
+    -- "não tinha arquivo" de "tinha e foi apagado".
+    removido_em         TEXT,
+    criado_em           TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_anexos_mensagem ON mensagem_anexos (mensagem_id);
+
+
 -- =====================================================================
 -- 9. Leads e chamados
 --

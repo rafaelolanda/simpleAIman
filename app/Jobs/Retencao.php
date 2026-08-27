@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SimpleAIman\Jobs;
 
 use Database;
+use SimpleAIman\Canais\Anexos;
 use PDO;
 
 /**
@@ -84,6 +85,7 @@ final class Retencao
 
         $seleciona = $pdo->prepare('SELECT id, conteudo FROM mensagens WHERE conversa_id = :c');
         $atualiza = $pdo->prepare('UPDATE mensagens SET conteudo = :t WHERE id = :id');
+        $arquivos = 0;
 
         foreach ($ids as $conversaId) {
             $seleciona->execute(['c' => $conversaId]);
@@ -96,12 +98,21 @@ final class Retencao
                 }
             }
 
+            // Anexo não se mascara.
+            //
+            // O resto desta função troca CPF por asteriscos e segue com o texto
+            // servindo para análise. Uma foto de documento não tem esse meio
+            // termo: ela É o identificador. Anonimizar a conversa e deixar a
+            // imagem no disco seria dizer que anonimizou sem ter anonimizado.
+            $arquivos += Anexos::apagarDaConversa($conversaId);
+
             // O IP também identifica. Some junto.
             $pdo->prepare('UPDATE conversas SET ip = NULL, anonimizada_em = :agora WHERE id = :id')
                 ->execute(['agora' => now(), 'id' => $conversaId]);
         }
 
-        $log(count($ids) . ' conversa(s) anonimizada(s).');
+        $log(count($ids) . ' conversa(s) anonimizada(s)'
+            . ($arquivos > 0 ? ", {$arquivos} anexo(s) apagado(s)." : '.'));
 
         return count($ids);
     }
@@ -129,6 +140,8 @@ final class Retencao
             return 0;
         }
 
+        $arquivos = 0;
+
         foreach ($ids as $conversaId) {
             // Conteúdo apagado, LINHA preservada: as fontes citadas
             // (mensagem_fontes) referenciam a mensagem, e são elas que dizem
@@ -137,6 +150,11 @@ final class Retencao
             $pdo->prepare(
                 "UPDATE mensagens SET conteudo = '[conteúdo expurgado]' WHERE conversa_id = :c"
             )->execute(['c' => $conversaId]);
+
+            // O arquivo em disco nao e alcancado por UPDATE nenhum. Sem esta
+            // linha o banco diria "expurgada" com a foto inteira no disco — e a
+            // resposta a um titular seria falsa.
+            $arquivos += Anexos::apagarDaConversa($conversaId);
 
             $pdo->prepare('UPDATE conversas SET ip = NULL, expurgada_em = :agora WHERE id = :id')
                 ->execute(['agora' => now(), 'id' => $conversaId]);
@@ -147,7 +165,8 @@ final class Retencao
             )->execute(['c' => $conversaId]);
         }
 
-        $log(count($ids) . ' conversa(s) expurgada(s).');
+        $log(count($ids) . ' conversa(s) expurgada(s)'
+            . ($arquivos > 0 ? ", {$arquivos} anexo(s) apagado(s)." : '.'));
 
         return count($ids);
     }
@@ -220,7 +239,7 @@ final class Retencao
         $cpf = cpf_normalizar($identificador);
         $digitos = preg_replace('/\D+/', '', $identificador) ?? '';
 
-        $resultado = ['leads' => 0, 'conversas' => 0, 'mensagens' => 0, 'chamados' => 0];
+        $resultado = ['leads' => 0, 'conversas' => 0, 'mensagens' => 0, 'chamados' => 0, 'anexos' => 0];
 
         // 1. Leads que casam por e-mail, telefone ou CPF. O telefone tambem
         //    e normalizado dos dois lados: o que a pessoa digitou no chat
@@ -307,6 +326,18 @@ final class Retencao
             $c->execute(['c' => $conversaId]);
             $resultado['chamados'] += (int) $c->fetchColumn();
 
+            // Contado na simulação e somado de novo na execução: aqui é o
+            // alcance previsto, lá é o que sumiu de fato do disco. Numa
+            // simulação o laço para antes de apagar, então não dobra.
+            if ($simular) {
+                $a = $pdo->prepare(
+                    'SELECT COUNT(*) FROM mensagem_anexos a JOIN mensagens m ON m.id = a.mensagem_id
+                     WHERE m.conversa_id = :c AND a.removido_em IS NULL'
+                );
+                $a->execute(['c' => $conversaId]);
+                $resultado['anexos'] += (int) $a->fetchColumn();
+            }
+
             $resultado['conversas']++;
 
             if ($simular) {
@@ -327,6 +358,10 @@ final class Retencao
 
             $pdo->prepare("UPDATE chamados SET contato = '[apagado]', descricao = NULL WHERE conversa_id = :c")
                 ->execute(['c' => $conversaId]);
+
+            // Pedido do titular e o caso em que errar custa mais caro: ele
+            // perguntou, foi respondido que apagamos, e o arquivo continuaria la.
+            $resultado['anexos'] += Anexos::apagarDaConversa($conversaId);
         }
 
         return $resultado;
