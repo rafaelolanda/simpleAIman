@@ -189,7 +189,11 @@ final class CanalWhatsapp
             // `preview_url` desligado: link em resposta automática virando card
             // com imagem de terceiro é ruído, e a prévia é buscada pela Meta a
             // partir do link — o que vaza para fora o que estamos respondendo.
-            'text' => ['preview_url' => false, 'body' => mb_substr($texto, 0, 4000)],
+            // Traduzido aqui, e não antes de gravar: o banco guarda o texto do
+            // modelo como veio. Este é o único ponto por onde texto sai para o
+            // WhatsApp, então é onde a tradução alcança tudo — resposta do
+            // agente, aviso de falha e mensagem digitada pelo atendente.
+            'text' => ['preview_url' => false, 'body' => mb_substr(markdown_para_whatsapp($texto), 0, 4000)],
         ], JSON_UNESCAPED_UNICODE);
 
         $ch = curl_init(self::API . rawurlencode($numero) . '/messages');

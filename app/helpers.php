@@ -326,15 +326,62 @@ function svg_icon(string $nome, int $tamanho = 20): string
 }
 
 /**
- * Texto com marcadores do WhatsApp convertido em HTML seguro.
+ * Markdown do modelo traduzido para os marcadores do WhatsApp.
  *
- *   *negrito*  _itálico_  ~riscado~  `mono`
+ * O modelo escreve Markdown — ninguém pediu, é como ele foi treinado — e o
+ * WhatsApp não entende Markdown. `**negrito**` chega ao telefone com os
+ * asteriscos à mostra, `### Título` vira uma linha começando com cerquilhas,
+ * e uma resposta do RAG com lista e destaques fica ilegível.
  *
- * Por que o formato guardado é o do WhatsApp, e não HTML: o WhatsApp é o
- * destino que não dá para mudar — ele interpreta esses marcadores literalmente.
- * Guardar HTML e converter na saída perderia informação e exigiria um conversor
- * que não faz ida e volta. Assim o mesmo texto serve os dois canais, e o widget
- * é que renderiza.
+ * A tradução acontece na SAÍDA, não na gravação: o banco guarda o texto do
+ * modelo como veio. Converter antes de gravar perderia o original e faria o
+ * painel mostrar uma coisa e o log outra.
+ *
+ * O que não tem equivalente vira texto simples em vez de sumir — link em
+ * Markdown vira `texto (endereço)`, porque no telefone o endereço é o que a
+ * pessoa consegue usar.
+ */
+function markdown_para_whatsapp(?string $texto): string
+{
+    $texto = (string) $texto;
+
+    // Negrito do Markdown é `**x**`; no WhatsApp é `*x*`. Feito antes de
+    // qualquer regra de itálico: `**x**` contém `*x*` e seria capturado pela
+    // metade se a ordem invertesse.
+    $texto = preg_replace('/\*\*([^*\n]+)\*\*/u', '*$1*', $texto) ?? $texto;
+    $texto = preg_replace('/__([^_\n]+)__/u', '*$1*', $texto) ?? $texto;
+
+    // Títulos não existem no WhatsApp — viram negrito, que é o mais próximo
+    // do papel que cumprem.
+    $texto = preg_replace('/^\s{0,3}#{1,6}\s+(.+?)\s*$/mu', '*$1*', $texto) ?? $texto;
+
+    // Marcador de lista: o asterisco de bullet seria lido como negrito aberto.
+    $texto = preg_replace('/^(\s*)[-*+]\s+/mu', '$1• ', $texto) ?? $texto;
+
+    // `[texto](url)` — no telefone o que serve é o endereço.
+    $texto = preg_replace_callback(
+        '/\[([^\]\n]*)\]\((\S+?)\)/u',
+        static fn (array $m): string => trim($m[1]) === '' || trim($m[1]) === $m[2]
+            ? $m[2]
+            : $m[1] . ' (' . $m[2] . ')',
+        $texto
+    ) ?? $texto;
+
+    return $texto;
+}
+
+/**
+ * Texto convertido em HTML seguro, para o widget e o painel.
+ *
+ * Entende as duas marcações que chegam aqui:
+ *
+ *   do atendente digitando   *negrito*  _itálico_  ~riscado~  `mono`
+ *   do modelo, em Markdown   **negrito**  ### título  - item  [t](url)
+ *
+ * `*x*` é negrito e não itálico: é o que o atendente digita e o que o WhatsApp
+ * faz. O itálico do Markdown vira negrito nesse caso — perda pequena e
+ * previsível, melhor que exibir o asterisco cru, que foi o que acontecia com
+ * toda resposta vinda do RAG.
  *
  * A ordem aqui é a segurança: **escapa primeiro**, formata depois. Assim o que
  * vira tag é só o que esta função criou, e nada que tenha vindo do visitante,
@@ -360,6 +407,12 @@ function formatar_whatsapp(?string $texto): string
         }
 
         $t = e($parte);
+
+        // Markdown primeiro, reduzido aos marcadores do WhatsApp. `e()` não
+        // toca em asterisco, cerquilha nem colchete, então a normalização
+        // funciona igual sobre o texto já escapado — e escapado é onde ela
+        // precisa acontecer, para não criar tag a partir do conteúdo.
+        $t = markdown_para_whatsapp($t);
 
         // As bordas (?<![\w…]) e (?![\w…]) evitam que um sublinhado no meio de
         // nome_de_variavel vire itálico — que é a queixa clássica.
