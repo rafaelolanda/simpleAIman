@@ -112,6 +112,14 @@ if ($acao === 'mensagens') {
         exit;
     }
 
+    $novas = Fila::mensagensDesde((int) $conversa['id'], $desde, apenasParaVisitante: true);
+
+    // Numa consulta so, para a tela nao fazer uma por mensagem.
+    $anexosNovos = \SimpleAIman\Canais\Anexos::porMensagens(array_map(
+        static fn (array $m): int => (int) $m['id'],
+        $novas
+    ));
+
     $mensagens = array_map(
         static fn (array $m): array => [
             'id' => (int) $m['id'],
@@ -131,10 +139,11 @@ if ($acao === 'mensagens') {
             // ESCAPA antes de formatar: as únicas tags no resultado são as que
             // ela mesma criou. Se um dia alguém trocar a ordem lá, isto vira
             // XSS no site do cliente.
-            'html' => formatar_whatsapp((string) $m['conteudo']),
+            'html' => formatar_whatsapp((string) $m['conteudo'])
+                . anexos_html_publico($anexosNovos[(int) $m['id']] ?? [], (string) ($_GET['t'] ?? ''), $sessao),
             'hora' => date('H:i', strtotime((string) $m['criado_em'])),
         ],
-        Fila::mensagensDesde((int) $conversa['id'], $desde, apenasParaVisitante: true)
+        $novas
     );
 
     echo json_encode([

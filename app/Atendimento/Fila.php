@@ -667,6 +667,58 @@ final class Fila
         return $id;
     }
 
+    /**
+     * Mensagem do atendente com um arquivo junto.
+     *
+     * **Só existe para o operador humano.** O agente não tem caminho até aqui
+     * — não há ferramenta que exponha envio de arquivo — e é decisão de
+     * desenho: ele não pede documento e não devolve documento.
+     *
+     * Uma mensagem só, não duas: no WhatsApp o arquivo vai com legenda, então
+     * gravar texto e anexo separados faria a tela do painel mostrar dois
+     * balões onde a pessoa recebeu um.
+     *
+     * @param string $arquivoTmp caminho do arquivo já validado
+     * @return array{id: int, anexo: int, entregue: bool}
+     */
+    public static function registrarAtendenteComArquivo(
+        int $conversaId,
+        int $atendenteId,
+        string $legenda,
+        string $arquivoTmp,
+        string $mime,
+        ?string $nomeOriginal,
+    ): array {
+        $tipo = \SimpleAIman\Canais\Anexos::tipoDoMime($mime);
+
+        // O texto da mensagem é a legenda; sem ela, um rótulo, para o balão não
+        // ficar vazio no painel e na busca do histórico.
+        $id = self::gravar(
+            $conversaId,
+            'atendente',
+            $legenda !== '' ? $legenda : '[' . $tipo . ' enviado]',
+            $atendenteId
+        );
+
+        $bytes = (string) file_get_contents($arquivoTmp);
+        $anexoId = \SimpleAIman\Canais\Anexos::guardar($id, $tipo, $mime, $bytes, $nomeOriginal);
+
+        $anexo = \SimpleAIman\Canais\Anexos::porId($anexoId) ?? [];
+
+        // Entrega falhando não desfaz a gravação: o atendente precisa ver o que
+        // tentou mandar, e a tela avisa que não saiu.
+        //
+        // No widget web não há o que empurrar — gravar já é entregar —, então
+        // `entregue` é verdade sem nenhum envio. Sem essa distinção a tela
+        // acusaria falha sobre um arquivo que o visitante está vendo.
+        $entregue = $anexo !== [] && (
+            !\SimpleAIman\Canais\Saida::precisaEnviar($conversaId)
+            || \SimpleAIman\Canais\Saida::entregarAnexo($conversaId, $anexo, $legenda)
+        );
+
+        return ['id' => $id, 'anexo' => $anexoId, 'entregue' => $entregue];
+    }
+
     // -----------------------------------------------------------------
 
     private static function gravar(int $conversaId, string $autorTipo, string $texto, ?int $autorId): int

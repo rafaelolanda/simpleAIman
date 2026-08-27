@@ -224,6 +224,128 @@ final class CanalWhatsapp
     }
 
     /**
+     * Envia um arquivo.
+     *
+     * **Só o atendente humano chega aqui.** Não existe ferramenta que exponha
+     * isto ao agente, e é decisão de desenho, não esquecimento: um modelo
+     * escolhendo qual arquivo mandar para quem é risco sem ganho nenhum — o
+     * agente não pede documento e não devolve documento.
+     *
+     * São dois passos, como no recebimento e pelo mesmo motivo (a Meta separa
+     * o arquivo da mensagem): sobe o arquivo, recebe um id, manda a mensagem
+     * referenciando esse id.
+     *
+     * @throws RuntimeException quando a Meta recusa o upload ou o envio
+     */
+    public function enviarMidia(
+        string $para,
+        string $caminho,
+        string $mime,
+        string $tipo,
+        string $legenda = '',
+        ?string $nomeArquivo = null,
+    ): void {
+        $token = $this->segredo('TOKEN');
+        $numero = $this->segredo('PHONE_NUMBER_ID');
+
+        if ($token === '' || $numero === '') {
+            throw new RuntimeException(
+                'Credenciais do WhatsApp ausentes no .env (' . self::prefixo($this->canal) . '_TOKEN / _PHONE_NUMBER_ID).'
+            );
+        }
+
+        if (!is_file($caminho)) {
+            throw new RuntimeException('Arquivo não encontrado para envio.');
+        }
+
+        $midiaId = $this->subirArquivo($numero, $token, $caminho, $mime);
+
+        $conteudo = ['id' => $midiaId];
+
+        // Áudio não aceita legenda na API; documento aceita e ainda leva o nome
+        // que aparece para quem recebe. Mandar `caption` onde não cabe faz a
+        // Meta recusar a mensagem inteira.
+        if ($legenda !== '' && $tipo !== 'audio') {
+            $conteudo['caption'] = mb_substr(markdown_para_whatsapp($legenda), 0, 1000);
+        }
+
+        if ($tipo === 'document' && $nomeArquivo !== null && $nomeArquivo !== '') {
+            $conteudo['filename'] = mb_substr($nomeArquivo, 0, 200);
+        }
+
+        $corpo = json_encode([
+            'messaging_product' => 'whatsapp',
+            'to' => $para,
+            'type' => $tipo,
+            $tipo => $conteudo,
+        ], JSON_UNESCAPED_UNICODE);
+
+        $ch = curl_init(self::API . rawurlencode($numero) . '/messages');
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => $corpo,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 30,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+            ],
+        ]);
+
+        $resposta = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $erroCurl = curl_error($ch);
+        curl_close($ch);
+
+        if ($resposta === false || $status >= 300) {
+            throw new RuntimeException(
+                'Envio de mídia recusado (HTTP ' . $status . '): '
+                . ($erroCurl ?: mb_substr((string) $resposta, 0, 300))
+            );
+        }
+    }
+
+    /** Sobe o arquivo e devolve o id da mídia na Meta. */
+    private function subirArquivo(string $numero, string $token, string $caminho, string $mime): string
+    {
+        $ch = curl_init(self::API . rawurlencode($numero) . '/media');
+
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 120,
+            CURLOPT_HTTPHEADER => ['Authorization: Bearer ' . $token],
+            CURLOPT_POSTFIELDS => [
+                'messaging_product' => 'whatsapp',
+                'type' => $mime,
+                'file' => new \CURLFile($caminho, $mime, basename($caminho)),
+            ],
+        ]);
+
+        $resposta = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $erroCurl = curl_error($ch);
+        curl_close($ch);
+
+        if ($resposta === false || $status >= 300) {
+            throw new RuntimeException(
+                'Upload recusado (HTTP ' . $status . '): '
+                . ($erroCurl ?: mb_substr((string) $resposta, 0, 300))
+            );
+        }
+
+        $dados = json_decode((string) $resposta, true);
+        $id = is_array($dados) ? (string) ($dados['id'] ?? '') : '';
+
+        if ($id === '') {
+            throw new RuntimeException('A Meta aceitou o upload mas não devolveu id de mídia.');
+        }
+
+        return $id;
+    }
+
+    /**
      * Baixa uma mídia recebida.
      *
      * São dois passos, e não um: a Meta não entrega o arquivo pelo id. Primeiro

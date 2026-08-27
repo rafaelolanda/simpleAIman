@@ -68,6 +68,83 @@ final class Saida
         }
     }
 
+    /**
+     * Este canal precisa que alguém empurre a mensagem?
+     *
+     * Existe para separar duas coisas que `entregar()` devolve iguais: o
+     * widget web responde `false` porque não há nada a enviar — gravar já é
+     * entregar —, e o WhatsApp responde `false` quando o envio FALHOU. Tratar
+     * as duas como a mesma coisa faria a tela avisar "não foi entregue" sobre
+     * um arquivo que o visitante está vendo.
+     */
+    public static function precisaEnviar(int $conversaId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT ca.tipo FROM conversas c
+             LEFT JOIN canais ca ON ca.id = c.canal_id
+             WHERE c.id = :id'
+        );
+        $stmt->execute(['id' => $conversaId]);
+
+        return (string) $stmt->fetchColumn() === 'whatsapp';
+    }
+
+    /**
+     * Entrega um ARQUIVO ao visitante.
+     *
+     * Chamado só a partir do painel do atendente. O agente não tem caminho até
+     * aqui, e é de propósito: modelo escolhendo arquivo para mandar é risco
+     * sem ganho.
+     *
+     * No widget web devolve false como o texto — lá o arquivo já está gravado,
+     * e quem exibe é a tela que consulta.
+     *
+     * @param array<string, mixed> $anexo linha de `mensagem_anexos`
+     */
+    public static function entregarAnexo(int $conversaId, array $anexo, string $legenda = ''): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT c.externo_id, ca.tipo FROM conversas c
+             LEFT JOIN canais ca ON ca.id = c.canal_id
+             WHERE c.id = :id'
+        );
+        $stmt->execute(['id' => $conversaId]);
+        $conversa = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$conversa || ($conversa['tipo'] ?? '') !== 'whatsapp') {
+            return false;
+        }
+
+        $canal = self::canalDaConversa($conversaId);
+
+        if ($canal === null) {
+            return false;
+        }
+
+        if (!CanalWhatsapp::dentroDaJanela($conversaId)) {
+            error_log('[simpleAIman] whatsapp: fora da janela de 24h, anexo não enviado na conversa ' . $conversaId);
+
+            return false;
+        }
+
+        try {
+            $canal->enviarMidia(
+                (string) $conversa['externo_id'],
+                Anexos::caminhoAbsoluto($anexo),
+                (string) $anexo['mime'],
+                (string) $anexo['tipo'],
+                $legenda,
+                $anexo['nome_original'] !== null ? (string) $anexo['nome_original'] : null
+            );
+
+            return true;
+        } catch (Throwable $e) {
+            error_log('[simpleAIman] whatsapp: anexo não saiu na conversa ' . $conversaId . ': ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
     private static function canalDaConversa(int $conversaId): ?CanalWhatsapp
     {
         $stmt = Database::connection()->prepare(

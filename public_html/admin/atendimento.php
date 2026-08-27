@@ -22,6 +22,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/_init.php';
 
 use SimpleAIman\Atendimento\Fila;
+use SimpleAIman\Canais\Anexos;
 
 $paginaAtual = 'atendimento.php';
 $tituloPagina = 'Atendimento';
@@ -98,8 +99,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($acao === 'responder') {
         $texto = trim((string) ($_POST['texto'] ?? ''));
         $conversa = Fila::conversa($conversaId);
+        $arquivo = $_FILES['arquivo'] ?? null;
+        $temArquivo = is_array($arquivo) && (int) ($arquivo['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE;
 
-        if ($texto === '') {
+        // Sem texto E sem arquivo não há o que enviar. Com arquivo, o texto
+        // vira legenda e pode ser vazio.
+        if ($texto === '' && !$temArquivo) {
             redirect('atendimento.php?c=' . $conversaId);
         }
 
@@ -108,6 +113,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$conversa || (int) $conversa['atendente_id'] !== $eu || $conversa['modo'] !== 'humano') {
             flash_set('erro', 'Esta conversa não está com você.');
             redirect('atendimento.php');
+        }
+
+        if ($temArquivo) {
+            $erro = (int) $arquivo['error'];
+            $tmp = (string) $arquivo['tmp_name'];
+
+            if ($erro !== UPLOAD_ERR_OK || !is_uploaded_file($tmp)) {
+                // INI_SIZE e FORM_SIZE são o caso comum e têm explicação útil;
+                // o resto é falha de servidor e não ajuda ninguém detalhar.
+                flash_set('erro', in_array($erro, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                    ? 'Arquivo grande demais para o servidor.'
+                    : 'Não foi possível receber o arquivo.');
+                redirect('atendimento.php?c=' . $conversaId);
+            }
+
+            if (filesize($tmp) > Anexos::tetoBytes()) {
+                flash_set('erro', 'O arquivo passa do limite de ' . MIDIA_MAX_MB . ' MB.');
+                redirect('atendimento.php?c=' . $conversaId);
+            }
+
+            // O tipo sai do CONTEÚDO, não do que o navegador declarou: o
+            // cabeçalho vem do cliente e um `.php` renomeado chegaria como
+            // "image/png" se acreditássemos nele.
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = strtolower((string) $finfo->file($tmp));
+
+            if (!in_array($mime, Anexos::mimesAceitos(), true)) {
+                flash_set('erro', 'Tipo de arquivo não aceito: ' . e($mime ?: 'desconhecido'));
+                redirect('atendimento.php?c=' . $conversaId);
+            }
+
+            $resultado = Fila::registrarAtendenteComArquivo(
+                $conversaId,
+                $eu,
+                mb_substr(texto_utf8($texto), 0, 1000),
+                $tmp,
+                $mime,
+                trim((string) ($arquivo['name'] ?? '')) ?: null
+            );
+
+            // Gravado sempre, entregue nem sempre. Calar sobre a diferença
+            // faria o atendente ver a própria mensagem na tela e acreditar
+            // que a pessoa recebeu.
+            if (!$resultado['entregue']) {
+                flash_set('erro', 'O arquivo foi registrado na conversa, mas NÃO foi entregue pelo WhatsApp. '
+                    . 'Verifique se a conversa está dentro da janela de 24 horas.');
+            }
+
+            redirect('atendimento.php?c=' . $conversaId);
         }
 
         Fila::registrarAtendente($conversaId, $eu, mb_substr(texto_utf8($texto), 0, 4000));
@@ -202,7 +256,7 @@ if (($_GET['acao'] ?? '') === 'json') {
         $resposta['modo'] = $conversa['modo'] ?? null;
 
         $novas = Fila::mensagensDesde($abrindo, $desde);
-        $anexos = \SimpleAIman\Canais\Anexos::porMensagens(array_map(
+        $anexos = Anexos::porMensagens(array_map(
             static fn (array $m): int => (int) $m['id'],
             $novas
         ));
@@ -254,7 +308,7 @@ if ($conversa) {
 
     // Numa consulta só. Uma por mensagem apareceria como lentidão sem causa
     // visível numa conversa longa.
-    $anexosPorMensagem = \SimpleAIman\Canais\Anexos::porMensagens(array_map(
+    $anexosPorMensagem = Anexos::porMensagens(array_map(
         static fn (array $m): int => (int) $m['id'],
         $mensagens
     ));
@@ -453,7 +507,7 @@ include __DIR__ . '/partials/head.php';
                 </div><!-- .zap-corpo -->
 
             <?php if ($conversa['modo'] === 'humano' && (int) $conversa['atendente_id'] === $eu): ?>
-                <form method="post" class="zap-escrita" id="form-envio">
+                <form method="post" class="zap-escrita" id="form-envio" enctype="multipart/form-data">
                     <?= csrf_field() ?>
                     <input type="hidden" name="acao" value="responder" id="campo-acao">
                     <input type="hidden" name="conversa" value="<?= (int) $conversa['id'] ?>">
@@ -473,14 +527,30 @@ include __DIR__ . '/partials/head.php';
                             <button type="button" class="btn-marca" data-marca="<?= e($marca) ?>" title="<?= e($titulo) ?>"><?= $rotulo ?></button>
                         <?php endforeach; ?>
                         <span class="editor-sep"></span>
-                        <?php foreach (['🙂', '👍', '🙏', '✅', '⚠️', '📎', '📞', '🎓'] as $emoji): ?>
+                        <?php foreach (['🙂', '👍', '🙏', '✅', '⚠️', '📞', '🎓'] as $emoji): ?>
                             <button type="button" class="btn-emoji" data-emoji="<?= $emoji ?>"><?= $emoji ?></button>
                         <?php endforeach; ?>
+                        <span class="editor-sep"></span>
+                        <?php
+                        // Anexar é do OPERADOR HUMANO e de mais ninguém: o
+                        // agente não tem ferramenta de enviar arquivo, por
+                        // decisão de desenho. Por isso o botão vive aqui, na
+                        // barra de quem está atendendo.
+                        ?>
+                        <button type="button" class="btn-marca" id="btn-anexo"
+                                title="Anexar arquivo (até <?= MIDIA_MAX_MB ?> MB)">📎</button>
+                        <input type="file" name="arquivo" id="campo-arquivo" hidden
+                               accept="<?= e(implode(',', Anexos::mimesAceitos())) ?>">
+                    </div>
+
+                    <div class="anexo-escolhido" id="anexo-escolhido" hidden>
+                        <span id="anexo-nome"></span>
+                        <button type="button" id="btn-anexo-remover" title="Remover">✕</button>
                     </div>
 
                     <textarea name="texto" id="campo-texto" rows="3"
                               placeholder="Enter envia · Shift+Enter quebra linha · *negrito* _itálico_ ~riscado~ `mono`"
-                              required autofocus></textarea>
+                              autofocus></textarea>
 
                     <div class="chat-acoes">
                         <label class="linha-check" title="Só o staff vê. O visitante não recebe.">
@@ -673,7 +743,9 @@ include __DIR__ . '/partials/head.php';
             if (ev.key === 'Enter' && !ev.shiftKey && !ev.isComposing) {
                 ev.preventDefault();
 
-                if (campo.value.trim()) {
+                var temArquivo = inputArquivo && inputArquivo.files && inputArquivo.files.length > 0;
+
+                if (campo.value.trim() || temArquivo) {
                     form.requestSubmit ? form.requestSubmit() : form.submit();
                 }
             }
@@ -691,8 +763,64 @@ include __DIR__ . '/partials/head.php';
                 acao.value = check.checked ? 'nota' : 'responder';
                 botao.textContent = check.checked ? 'Salvar nota' : 'Enviar';
                 botao.classList.toggle('nota', check.checked);
+
+                // Nota interna nao sai da casa, entao nao carrega arquivo.
+                // Deixar o anexo pendurado faria o atendente achar que mandou.
+                if (check.checked) { limparAnexo(); }
+
                 campo.focus();
             });
+        }
+
+        // ---------------------------------------------------------------
+        // Anexo — do operador humano, e de mais ninguem
+        // ---------------------------------------------------------------
+        var inputArquivo = document.getElementById('campo-arquivo');
+        var btnAnexo = document.getElementById('btn-anexo');
+        var caixaAnexo = document.getElementById('anexo-escolhido');
+        var nomeAnexo = document.getElementById('anexo-nome');
+        var btnRemover = document.getElementById('btn-anexo-remover');
+
+        function limparAnexo() {
+            if (!inputArquivo) { return; }
+            inputArquivo.value = '';
+            if (caixaAnexo) { caixaAnexo.hidden = true; }
+        }
+
+        if (inputArquivo && btnAnexo && caixaAnexo && nomeAnexo) {
+            btnAnexo.addEventListener('click', function () {
+                if (check && check.checked) {
+                    check.checked = false;
+                    check.dispatchEvent(new Event('change'));
+                }
+                inputArquivo.click();
+            });
+
+            inputArquivo.addEventListener('change', function () {
+                var f = inputArquivo.files && inputArquivo.files[0];
+
+                if (!f) { limparAnexo(); return; }
+
+                // Confere aqui tambem para a pessoa nao esperar o upload de um
+                // arquivo que o servidor vai recusar. O servidor confere de
+                // novo, e e ele quem manda: isto e conveniencia, nao seguranca.
+                var teto = <?= (int) MIDIA_MAX_MB ?> * 1048576;
+
+                if (f.size > teto) {
+                    alert('O arquivo tem ' + (f.size / 1048576).toFixed(1)
+                        + ' MB e o limite e <?= (int) MIDIA_MAX_MB ?> MB.');
+                    limparAnexo();
+                    return;
+                }
+
+                nomeAnexo.textContent = f.name;
+                caixaAnexo.hidden = false;
+                campo.focus();
+            });
+
+            if (btnRemover) {
+                btnRemover.addEventListener('click', limparAnexo);
+            }
         }
 
         function envolver(marca) {

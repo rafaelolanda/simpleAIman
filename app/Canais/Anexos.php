@@ -66,6 +66,23 @@ final class Anexos
     }
 
     /**
+     * O tipo que o WhatsApp espera, deduzido do mime.
+     *
+     * `document` é o padrão porque é o único que aceita qualquer coisa: errar
+     * para `image` um arquivo que não é imagem faz a Meta recusar a mensagem
+     * inteira, e o atendente veria o envio falhar sem entender por quê.
+     */
+    public static function tipoDoMime(string $mime): string
+    {
+        return match (true) {
+            str_starts_with($mime, 'image/') => 'image',
+            str_starts_with($mime, 'audio/') => 'audio',
+            str_starts_with($mime, 'video/') => 'video',
+            default => 'document',
+        };
+    }
+
+    /**
      * Grava o arquivo e registra a linha. Devolve o id do anexo.
      *
      * A ordem importa: arquivo primeiro, linha depois. Se a escrita falhar,

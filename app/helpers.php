@@ -234,6 +234,60 @@ function anexos_html(array $anexos): string
     return $saida;
 }
 
+/**
+ * Os mesmos anexos, mas para o widget, que roda no site do cliente.
+ *
+ * Duas diferenças em relação ao painel, e as duas vêm de onde a página está:
+ *
+ * - **URL absoluta.** O widget vive no domínio do cliente; um endereço
+ *   relativo apontaria para o site dele, não para o nosso.
+ * - **Autorização por token e sessão**, e não por login — o mesmo par que já
+ *   guarda o histórico dessa conversa.
+ *
+ * @param list<array<string, mixed>> $anexos
+ */
+function anexos_html_publico(array $anexos, string $token, string $sessao): string
+{
+    if ($anexos === []) {
+        return '';
+    }
+
+    $saida = '';
+    $sufixo = '&t=' . rawurlencode($token) . '&sessao=' . rawurlencode($sessao);
+    $base = APP_URL . '/api/anexo-publico.php?id=';
+
+    foreach ($anexos as $anexo) {
+        if (($anexo['removido_em'] ?? null) !== null) {
+            continue;
+        }
+
+        $url = $base . (int) $anexo['id'] . $sufixo;
+        $mime = (string) $anexo['mime'];
+
+        if (str_starts_with($mime, 'image/')) {
+            $saida .= '<a class="sa-anexo" href="' . e($url) . '" target="_blank" rel="noopener">'
+                . '<img src="' . e($url) . '" alt="Arquivo enviado no atendimento" loading="lazy"></a>';
+            continue;
+        }
+
+        if (str_starts_with($mime, 'audio/')) {
+            $saida .= '<audio class="sa-anexo" controls preload="none" src="' . e($url) . '"></audio>';
+            continue;
+        }
+
+        if (str_starts_with($mime, 'video/')) {
+            $saida .= '<video class="sa-anexo" controls preload="none" src="' . e($url) . '"></video>';
+            continue;
+        }
+
+        $nome = trim((string) ($anexo['nome_original'] ?? '')) ?: 'arquivo';
+        $saida .= '<a class="sa-anexo sa-anexo-arquivo" href="' . e($url) . '" target="_blank" rel="noopener">📎 '
+            . e($nome) . '</a>';
+    }
+
+    return $saida;
+}
+
 function tamanho_legivel(int $bytes): string
 {
     if ($bytes < 1024) {

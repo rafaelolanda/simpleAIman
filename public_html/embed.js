@@ -115,6 +115,19 @@
     '.de-usuario .balao code,.de-atendente .balao code{background:rgba(255,255,255,.22)}',
     '.fontes{margin-top:6px;font-size:12px;color:#6b7280}',
 
+    // Arquivo que o atendente mandou. So o operador humano envia — o agente
+    // nao tem como —, entao isto so aparece em atendimento humano.
+    '.sa-anexo{display:block;margin-top:6px;max-width:100%}',
+    // Teto de altura tambem, nao so de largura: foto em pe tomaria o balao
+    // inteiro e empurraria a conversa para fora da tela.
+    '.sa-anexo img{display:block;max-width:100%;max-height:220px;width:auto;',
+    'border-radius:8px;cursor:zoom-in}',
+    '.sa-anexo audio{width:100%}',
+    '.sa-anexo video{max-width:100%;max-height:220px;border-radius:8px}',
+    '.sa-anexo-arquivo{padding:6px 9px;border-radius:8px;background:rgba(0,0,0,.08);',
+    'text-decoration:none;color:inherit;font-size:13px}',
+    '.de-atendente .sa-anexo-arquivo{background:rgba(255,255,255,.22)}',
+
     '.pensando .balao{color:#6b7280;font-style:italic}',
 
     '.rodape{flex:0 0 auto;display:flex;gap:8px;padding:12px;background:#fff;',
