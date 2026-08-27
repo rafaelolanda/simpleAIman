@@ -141,16 +141,48 @@ final class Fila
         $orfas = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         foreach ($orfas as $c) {
+            $id = (int) $c['id'];
+
+            // Há OUTRO atendente para assumir?
+            //
+            // Sem esta pergunta, a conversa voltava para a fila mesmo com o
+            // painel inteiro vazio, e a pessoa ouvia "estamos transferindo
+            // você" para uma sala onde não havia ninguém. É a mesma promessa
+            // que `solicitar()` se recusa a fazer desde o começo — faltava
+            // aplicar a regra aqui, que é justamente onde ela é mais provável:
+            // se o único atendente sumiu, o normal é não haver outro.
+            //
+            // Medido em uso real: 44 minutos de espera sem uma palavra.
+            if (!self::haDisponivel()) {
+                self::registrarNota(
+                    $id,
+                    (int) $c['atendente_id'],
+                    'Atendimento encerrado automaticamente: ' . self::nomeDoAtendente((int) $c['atendente_id'])
+                        . ' saiu do painel e não havia outro atendente disponível.'
+                );
+
+                self::devolverAoBot($id, 'expirado');
+
+                self::registrarBot(
+                    $id,
+                    'O atendente precisou sair e não encontrei outra pessoa disponível agora. '
+                        . 'Quer que eu registre sua dúvida para alguém retornar? '
+                        . 'Se preferir, é só tentar de novo mais tarde.'
+                );
+
+                continue;
+            }
+
             $pdo->prepare(
                 "UPDATE conversas SET modo = 'aguardando', atendente_id = NULL,
                         aguardando_desde = :agora, editado_em = :agora
                  WHERE id = :id AND modo = 'humano'"
-            )->execute(['id' => (int) $c['id'], 'agora' => now()]);
+            )->execute(['id' => $id, 'agora' => now()]);
 
-            self::registrarAviso((int) $c['id'], 'Estamos transferindo você para outro atendente. Um instante.');
+            self::registrarAviso($id, 'Estamos transferindo você para outro atendente. Um instante.');
 
             self::registrarNota(
-                (int) $c['id'],
+                $id,
                 (int) $c['atendente_id'],
                 'Devolvida à fila automaticamente: ' . self::nomeDoAtendente((int) $c['atendente_id'])
                     . ' saiu do painel sem encerrar o atendimento.'
@@ -430,14 +462,15 @@ final class Fila
             // abriria espaço para ele dizer outra coisa. É o mesmo raciocínio
             // da frase de encaminhamento, fixa desde o começo.
             //
-            // Vai como `bot`, então entra no histórico do modelo: no próximo
-            // turno ele sabe o que já foi oferecido.
-            self::gravar(
+            // `registrarBot()` e não `gravar()`: a frase precisa CHEGAR. Com
+            // `gravar()` ela ficava só no banco, e quem esperou pelo WhatsApp
+            // não recebia nem o aviso de que não havia ninguém — a pior versão
+            // possível deste caso, porque a pessoa continua esperando.
+            self::registrarBot(
                 (int) $id,
-                'bot',
                 'Desculpe a espera! Não encontrei nenhum atendente disponível agora. '
-                    . 'Quer que eu registre sua dúvida para alguém retornar?',
-                null
+                    . 'Quer que eu registre sua dúvida para alguém retornar? '
+                    . 'Se preferir, é só tentar de novo mais tarde.'
             );
         }
 
@@ -638,6 +671,25 @@ final class Fila
      * chat. Eram dois significados na mesma etiqueta, e o filtro do widget
      * não tinha como distinguir — entregaria erro técnico ao visitante.
      */
+    /**
+     * O próprio assistente falando, por decisão nossa e não do modelo.
+     *
+     * Existe porque `gravar()` só escreve no banco. No widget isso bastaria —
+     * a tela consulta e a mensagem aparece —, mas no WhatsApp ninguém consulta:
+     * a frase ficava no banco e nunca no telefone da pessoa. Foi assim que
+     * quem esperou 44 minutos na fila não recebeu nem o aviso de que não havia
+     * atendente.
+     *
+     * Vai como `bot`, e não como `aviso`, porque entra no histórico do modelo:
+     * no turno seguinte ele sabe o que já foi oferecido e não repete.
+     */
+    public static function registrarBot(int $conversaId, string $texto): void
+    {
+        self::gravar($conversaId, 'bot', $texto, null);
+
+        \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
+    }
+
     public static function registrarAviso(int $conversaId, string $texto): void
     {
         self::gravar($conversaId, 'aviso', $texto, null);
