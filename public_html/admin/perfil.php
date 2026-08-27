@@ -19,6 +19,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         $novoUsuario = trim((string) ($_POST['usuario'] ?? ''));
+        // Nome de EXIBICAO. E o unico dado desta tela que sai da casa: e ele
+        // que o visitante ve em "Fulano entrou na conversa" e no prefixo de
+        // cada mensagem no WhatsApp. Vazio faz o sistema dizer so "Atendente",
+        // porque o usuario de login e credencial e nao pode aparecer la.
+        $novoNome = mb_substr(trim((string) ($_POST['nome'] ?? '')), 0, 80);
         $novoEmail = trim((string) ($_POST['email'] ?? '')) ?: null;
         $senhaAtual = (string) ($_POST['senha_atual'] ?? '');
         $novaSenha = (string) ($_POST['nova_senha'] ?? '');
@@ -54,10 +59,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($trocandoSenha) {
             $stmt = $pdo->prepare(
-                'UPDATE admin_users SET usuario = :usuario, email = :email, senha_hash = :hash, editado_em = :agora WHERE id = :id'
+                'UPDATE admin_users SET usuario = :usuario, nome = :nome, email = :email, senha_hash = :hash, editado_em = :agora WHERE id = :id'
             );
             $stmt->execute([
                 'usuario' => $novoUsuario,
+                'nome' => $novoNome,
                 'email' => $novoEmail,
                 'hash' => password_hash($novaSenha, PASSWORD_DEFAULT),
                 'agora' => now(),
@@ -66,10 +72,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Auth::log('trocar_senha', 'Senha alterada pelo próprio usuário');
         } else {
             $stmt = $pdo->prepare(
-                'UPDATE admin_users SET usuario = :usuario, email = :email, editado_em = :agora WHERE id = :id'
+                'UPDATE admin_users SET usuario = :usuario, nome = :nome, email = :email, editado_em = :agora WHERE id = :id'
             );
             $stmt->execute([
                 'usuario' => $novoUsuario,
+                'nome' => $novoNome,
                 'email' => $novoEmail,
                 'agora' => now(),
                 'id' => Auth::userId(),
@@ -105,6 +112,21 @@ include __DIR__ . '/partials/head.php';
             <div class="field">
                 <label>Usuário</label>
                 <input type="text" name="usuario" required value="<?= e($usuarioAtual['usuario']) ?>">
+                <p class="dica-campo">Serve para entrar no painel. O visitante nunca vê.</p>
+            </div>
+            <div class="field">
+                <label>Nome de exibição</label>
+                <input type="text" name="nome" maxlength="80"
+                       value="<?= e((string) ($usuarioAtual['nome'] ?? '')) ?>"
+                       placeholder="ex.: Maria Souza">
+                <p class="dica-campo">
+                    <?php // Unico campo desta tela que sai da casa. Merece dizer onde aparece. ?>
+                    É o que a pessoa atendida vê: <em>“Fulano entrou na conversa”</em> e o nome
+                    antes de cada mensagem no WhatsApp.
+                    <?php if (trim((string) ($usuarioAtual['nome'] ?? '')) === ''): ?>
+                        <strong>Em branco, você aparece apenas como “Atendente”.</strong>
+                    <?php endif; ?>
+                </p>
             </div>
             <div class="field">
                 <label>E-mail (usado pra recuperação de senha)</label>

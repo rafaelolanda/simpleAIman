@@ -525,6 +525,14 @@ thead th a:hover {
     color: var(--danger);
 }
 
+/* Nem ligado nem desligado: algo que precisa de atencao mas nao esta quebrado
+   — o atendente sem nome de exibicao, que chega ao visitante so como
+   "Atendente". */
+.badge.alerta {
+    background: color-mix(in srgb, var(--warning, #b45309) 18%, transparent);
+    color: var(--warning, #b45309);
+}
+
 .thumb {
     width: 44px;
     height: 44px;

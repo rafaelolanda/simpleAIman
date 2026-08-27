@@ -127,6 +127,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('sucesso', 'Senha redefinida. Informe a nova senha ao usuário.');
         } else {
             $usuario = strtolower(trim((string) ($_POST['usuario'] ?? '')));
+            // Nome de EXIBICAO: o unico campo daqui que o visitante ve.
+            $nome = mb_substr(trim((string) ($_POST['nome'] ?? '')), 0, 80);
             $email = trim((string) ($_POST['email'] ?? '')) ?: null;
             $senha = (string) ($_POST['senha'] ?? '');
 
@@ -154,11 +156,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $papel = Painel::papelValido($_POST['papel'] ?? '');
 
             $stmt = $pdo->prepare(
-                'INSERT INTO admin_users (usuario, email, senha_hash, admin_master, papel, criado_em, editado_em)
-                 VALUES (:usuario, :email, :hash, 0, :papel, :agora, :agora)'
+                'INSERT INTO admin_users (usuario, nome, email, senha_hash, admin_master, papel, criado_em, editado_em)
+                 VALUES (:usuario, :nome, :email, :hash, 0, :papel, :agora, :agora)'
             );
             $stmt->execute([
                 'usuario' => $usuario,
+                'nome' => $nome,
                 'email' => $email,
                 'hash' => password_hash($senha, PASSWORD_DEFAULT),
                 'papel' => $papel,
@@ -176,7 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $usuarios = $pdo->query(
-    'SELECT u.id, u.usuario, u.email, u.admin_master, u.papel, u.criado_em, u.atende, u.disponivel, u.setor_id,
+    // `u.nome` explicito e ANTES do alias do setor: as duas tabelas tem coluna
+    // `nome`, e sem o prefixo o PDO devolveria uma so.
+    'SELECT u.id, u.usuario, u.nome, u.email, u.admin_master, u.papel, u.criado_em,
+            u.atende, u.disponivel, u.setor_id,
             s.nome AS setor
      FROM admin_users u
      LEFT JOIN setores s ON s.id = u.setor_id
@@ -206,6 +212,14 @@ include __DIR__ . '/partials/head.php';
             <div class="field">
                 <label>Usuário (para login)</label>
                 <input type="text" name="usuario" required minlength="3" maxlength="30" placeholder="ex.: maria.silva" autocomplete="off">
+            </div>
+            <div class="field">
+                <label>Nome de exibição</label>
+                <input type="text" name="nome" maxlength="80" placeholder="ex.: Maria Silva" autocomplete="off">
+                <p class="dica-campo">
+                    O que a pessoa atendida vê. Em branco, aparece só como “Atendente” —
+                    o usuário de login nunca é mostrado a ela.
+                </p>
                 <p class="dica-campo">Letras minúsculas, números, ponto, hífen ou underline.</p>
             </div>
             <div class="field">
@@ -241,11 +255,26 @@ include __DIR__ . '/partials/head.php';
     <h2>Usuários cadastrados</h2>
     <div class="table-wrap">
     <table class="cards-mobile">
-        <thead><tr><th>Usuário</th><th>E-mail</th><th>Papel</th><th>Atendimento</th><th>Criado em</th><th></th></tr></thead>
+        <thead><tr><th>Usuário</th><th>Nome de exibição</th><th>E-mail</th><th>Papel</th><th>Atendimento</th><th>Criado em</th><th></th></tr></thead>
         <tbody>
         <?php foreach ($usuarios as $u): ?>
             <tr>
                 <td data-label="Usuário"><?= e($u['usuario']) ?><?= (int) $u['id'] === Auth::userId() ? ' <span class="badge on">você</span>' : '' ?></td>
+                <td data-label="Nome de exibição">
+                    <?php
+                    // Vazio aparece marcado, e não em branco: quem atende sem
+                    // nome cadastrado chega ao visitante como "Atendente", e
+                    // esse é o tipo de detalhe que ninguém descobre sozinho.
+                    $nomeExib = trim((string) ($u['nome'] ?? ''));
+                    ?>
+                    <?php if ($nomeExib !== ''): ?>
+                        <?= e($nomeExib) ?>
+                    <?php elseif ($u['atende']): ?>
+                        <span class="badge alerta" title="Aparece ao visitante apenas como “Atendente”">sem nome</span>
+                    <?php else: ?>
+                        <span class="vazio">—</span>
+                    <?php endif; ?>
+                </td>
                 <td data-label="E-mail"><?= e($u['email'] ?? '—') ?></td>
                 <td data-label="Papel">
                     <?php if ($u['admin_master']): ?>
