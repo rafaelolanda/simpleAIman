@@ -202,7 +202,14 @@ include __DIR__ . '/partials/head.php';
         <input type="hidden" name="acao" value="salvar">
         <input type="hidden" name="id" value="<?= (int) ($editando['id'] ?? 0) ?>">
 
-        <h3 class="secao-form">Identidade</h3>
+        <div class="form-abas" role="tablist">
+            <button type="button" class="form-aba-btn ativa" data-alvo="identidade">Identidade</button>
+            <button type="button" class="form-aba-btn" data-alvo="modelo">Modelo</button>
+            <button type="button" class="form-aba-btn" data-alvo="conhecimento">Conhecimento</button>
+            <button type="button" class="form-aba-btn" data-alvo="captacao">Captação de contato</button>
+        </div>
+
+        <div class="form-aba" data-aba="identidade">
         <div class="form-grid">
             <label>
                 Nome
@@ -263,7 +270,9 @@ include __DIR__ . '/partials/head.php';
             </label>
         </div>
 
-        <h3 class="secao-form">Modelo</h3>
+        </div>
+
+        <div class="form-aba" data-aba="modelo" hidden>
         <div class="form-grid">
             <label>
                 Provedor
@@ -309,7 +318,9 @@ include __DIR__ . '/partials/head.php';
             </label>
         </div>
 
-        <h3 class="secao-form">Conhecimento</h3>
+        </div>
+
+        <div class="form-aba" data-aba="conhecimento" hidden>
         <div class="form-grid">
             <label>
                 Trechos por pergunta (top_k)
@@ -351,7 +362,9 @@ include __DIR__ . '/partials/head.php';
             <label class="check"><input type="checkbox" name="ativo" <?= $v('ativo', 1) ? 'checked' : '' ?>> Ativo</label>
         </div>
 
-        <h3 class="secao-form">Captação de contato</h3>
+        </div>
+
+        <div class="form-aba" data-aba="captacao" hidden>
         <div class="form-grid">
             <label>
                 Destino do lead
@@ -375,6 +388,8 @@ include __DIR__ . '/partials/head.php';
                     esta caixa só marca a intenção.
                 </small>
             </label>
+        </div>
+
         </div>
 
         <div class="form-acoes">

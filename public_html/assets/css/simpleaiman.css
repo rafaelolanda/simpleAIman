@@ -849,3 +849,46 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 }
 
 .btn-usar:hover { background: #1d6fb8; color: #fff; }
+
+
+/* -----------------------------------------------------------------
+   Abas de formulario
+   Para o cadastro que nao cabe numa tela — o de agente tem 22 campos.
+   As secoes ja existiam como titulos; virar aba so troca "rolar" por
+   "escolher", sem reagrupar nada.
+   ----------------------------------------------------------------- */
+.form-abas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin: 0 0 1.1rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.form-aba-btn {
+    padding: 0.5rem 0.85rem;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    background: none;
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    font-weight: 600;
+    cursor: pointer;
+    /* -1px cola a borda de baixo do botao na borda do contentor, senao a aba
+       ativa fica flutuando um pixel acima da linha. */
+    margin-bottom: -1px;
+}
+
+.form-aba-btn:hover { color: var(--text); }
+
+.form-aba-btn.ativa {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+}
+
+/* Aba que contem campo invalido. Sem isto, o navegador tenta focar um campo
+   escondido, nao mostra mensagem nenhuma e o botao Salvar parece quebrado. */
+.form-aba-btn.com-erro {
+    color: var(--danger);
+    border-bottom-color: var(--danger);
+}

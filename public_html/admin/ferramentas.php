@@ -298,7 +298,14 @@ include __DIR__ . '/partials/head.php';
         <input type="hidden" name="acao" value="salvar">
         <input type="hidden" name="id" value="<?= (int) ($editando['id'] ?? 0) ?>">
 
-        <h3 class="secao-form">O que é</h3>
+        <div class="form-abas" role="tablist">
+            <button type="button" class="form-aba-btn ativa" data-alvo="oque">O que é</button>
+            <button type="button" class="form-aba-btn" data-alvo="http">Chamada HTTP</button>
+            <button type="button" class="form-aba-btn" data-alvo="campos">Campos</button>
+            <button type="button" class="form-aba-btn" data-alvo="agentes">Agentes</button>
+        </div>
+
+        <div class="form-aba" data-aba="oque">
         <div class="form-grid">
             <label>
                 Nome
@@ -362,7 +369,12 @@ include __DIR__ . '/partials/head.php';
             </label>
         </div>
 
-        <h3 class="secao-form">Chamada HTTP <small style="text-transform:none;font-weight:400">— só para o tipo "API externa"</small></h3>
+        </div>
+
+        <div class="form-aba" data-aba="http" hidden>
+            <p class="vazio" style="margin-bottom:0.7rem">
+                Só vale para o tipo <strong>API externa</strong>. Nos outros, o que está aqui é ignorado.
+            </p>
         <div class="form-grid">
             <label>
                 Método
@@ -447,7 +459,9 @@ include __DIR__ . '/partials/head.php';
             </label>
         </div>
 
-        <h3 class="secao-form">Campos que o agente preenche</h3>
+        </div>
+
+        <div class="form-aba" data-aba="campos" hidden>
         <p class="vazio" style="margin-bottom:0.7rem">
             O modelo só preenche o que estiver declarado aqui. Campo obrigatório faltando faz ele
             <strong>perguntar à pessoa</strong> antes de chamar — é assim que a conversa coleta os dados.
@@ -491,7 +505,9 @@ include __DIR__ . '/partials/head.php';
             <button type="button" class="btn btn-secondary btn-sm" id="add-param">Acrescentar campo</button>
         </div>
 
-        <h3 class="secao-form">Agentes que podem usar</h3>
+        </div>
+
+        <div class="form-aba" data-aba="agentes" hidden>
         <div class="form-checks">
             <?php foreach ($agentes as $a): ?>
                 <label class="check">
@@ -500,6 +516,8 @@ include __DIR__ . '/partials/head.php';
                 </label>
             <?php endforeach; ?>
             <label class="check"><input type="checkbox" name="ativo" <?= $v('ativo', 1) ? 'checked' : '' ?>> Ativa</label>
+        </div>
+
         </div>
 
         <div class="form-acoes">
