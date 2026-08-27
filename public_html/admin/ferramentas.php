@@ -508,6 +508,11 @@ include __DIR__ . '/partials/head.php';
         </div>
 
         <div class="form-aba" data-aba="agentes" hidden>
+        <p class="dica-campo" style="margin:0 0 0.7rem">
+            <strong>Sem nenhum agente marcado, a ferramenta existe e ninguém a chama.</strong>
+            É a causa mais comum de “configurei e não funciona”: a tela mostra a ferramenta
+            cadastrada e ativa, e mesmo assim ela nunca entra numa conversa.
+        </p>
         <div class="form-checks">
             <?php foreach ($agentes as $a): ?>
                 <label class="check">

@@ -83,6 +83,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'reasoning_effort' => valor_em($_POST['reasoning_effort'] ?? '', array_keys($ESFORCOS), 'none'),
             'top_k' => max(1, min(20, (int) ($_POST['top_k'] ?? 5))),
             'limiar_similaridade' => max(0.0, min(1.0, (float) ($_POST['limiar_similaridade'] ?? 0.55))),
+            'limiar_faq_direto' => max(0.0, min(1.0, (float) ($_POST['limiar_faq_direto'] ?? 0.78))),
             'max_iteracoes_tool' => max(1, min(10, (int) ($_POST['max_iteracoes_tool'] ?? 5))),
             'usa_rag' => isset($_POST['usa_rag']) ? 1 : 0,
             'usa_faq' => isset($_POST['usa_faq']) ? 1 : 0,
@@ -102,7 +103,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         modelo=:modelo, modo=:modo, system_prompt=:system_prompt, mensagem_abertura=:mensagem_abertura,
                         idioma=:idioma, temperatura=:temperatura, max_tokens=:max_tokens,
                         reasoning_effort=:reasoning_effort, top_k=:top_k,
-                        limiar_similaridade=:limiar_similaridade, max_iteracoes_tool=:max_iteracoes_tool,
+                        limiar_similaridade=:limiar_similaridade, limiar_faq_direto=:limiar_faq_direto,
+                        max_iteracoes_tool=:max_iteracoes_tool,
                         usa_rag=:usa_rag, usa_faq=:usa_faq, captura_lead=:captura_lead,
                         lead_destino_id=:lead_destino_id, ativo=:ativo, editado_em=:editado_em
                  WHERE id=:id'
@@ -117,11 +119,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare(
                 'INSERT INTO agentes (nome, slug, descricao, provedor_id, modelo, modo, system_prompt,
                         mensagem_abertura, idioma, temperatura, max_tokens, reasoning_effort, top_k,
-                        limiar_similaridade, max_iteracoes_tool, usa_rag, usa_faq, captura_lead,
+                        limiar_similaridade, limiar_faq_direto, max_iteracoes_tool, usa_rag, usa_faq, captura_lead,
                         lead_destino_id, ativo, token_publico, criado_em, editado_em)
                  VALUES (:nome, :slug, :descricao, :provedor_id, :modelo, :modo, :system_prompt,
                         :mensagem_abertura, :idioma, :temperatura, :max_tokens, :reasoning_effort, :top_k,
-                        :limiar_similaridade, :max_iteracoes_tool, :usa_rag, :usa_faq, :captura_lead,
+                        :limiar_similaridade, :limiar_faq_direto, :max_iteracoes_tool, :usa_rag, :usa_faq, :captura_lead,
                         :lead_destino_id, :ativo, :token_publico, :criado_em, :editado_em)'
             )->execute($dados);
 
@@ -284,6 +286,10 @@ include __DIR__ . '/partials/head.php';
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    Quem responde de fato. <strong>Sem provedor, o agente não responde</strong> —
+                    a exceção é o modo roteador, que não chama modelo nenhum.
+                </small>
             </label>
 
             <label>
@@ -338,6 +344,17 @@ include __DIR__ . '/partials/head.php';
             </label>
 
             <label>
+                Limiar da FAQ direta
+                <input type="number" name="limiar_faq_direto" value="<?= e((string) $v('limiar_faq_direto', 0.78)) ?>"
+                       min="0" max="1" step="0.01">
+                <small>
+                    Acima disto, a resposta curada sai <strong>inteira e sem passar pelo modelo</strong> —
+                    mais barata e sempre igual. Baixo demais, a FAQ responde perguntas que não são dela;
+                    alto demais, ela só dispara em pergunta idêntica e o dinheiro da curadoria se perde.
+                </small>
+            </label>
+
+            <label>
                 Máximo de ferramentas por turno
                 <input type="number" name="max_iteracoes_tool" value="<?= (int) $v('max_iteracoes_tool', 5) ?>" min="1" max="10">
                 <small>Teto contra o agente chamar a mesma ferramenta em círculo.</small>
@@ -355,6 +372,10 @@ include __DIR__ . '/partials/head.php';
                 <span class="vazio">Nenhuma base ativa — crie uma em <a href="bases.php">Bases</a>.</span>
             <?php endif; ?>
         </div>
+        <p class="dica-campo" style="margin-top:-0.6rem">
+            O que este agente pode consultar. <strong>Nenhuma marcada e o RAG não tem onde buscar</strong> —
+            ele responde só com o que estiver no prompt e na FAQ.
+        </p>
 
         <div class="form-checks">
             <label class="check"><input type="checkbox" name="usa_rag" <?= $v('usa_rag', 1) ? 'checked' : '' ?>> Consultar as bases (RAG)</label>

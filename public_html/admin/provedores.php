@@ -236,6 +236,12 @@ include __DIR__ . '/partials/head.php';
                         <option value="<?= e($k) ?>" <?= ($editando['driver'] ?? 'gemini') === $k ? 'selected' : '' ?>><?= e($rotulo) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    <strong>Precisa combinar com o endereço abaixo.</strong> Driver nativo com endereço
+                    do caminho compatível com OpenAI (ou o contrário) devolve 404 em toda pergunta —
+                    e o erro não diz que a causa é esta. Na dúvida, deixe o endereço vazio: cada driver
+                    conhece o padrão dele.
+                </small>
             </label>
 
             <label>
@@ -282,6 +288,12 @@ include __DIR__ . '/partials/head.php';
                 <small>768 em vez de 1536 dobra o teto de chunks por base, com perda desprezível.</small>
             </label>
         </div>
+
+        <p class="dica-campo" style="margin-bottom:0.5rem">
+            Desmarcar <strong>desliga o recurso para todos os agentes</strong> que usam este provedor,
+            sem aviso na conversa: as ferramentas simplesmente deixam de ser chamadas, e a resposta
+            sai como se elas não existissem. Só desmarque se o fornecedor realmente não suportar.
+        </p>
 
         <div class="form-checks">
             <label class="check"><input type="checkbox" name="suporta_tools" <?= ($editando['suporta_tools'] ?? 1) ? 'checked' : '' ?>> Suporta ferramentas</label>

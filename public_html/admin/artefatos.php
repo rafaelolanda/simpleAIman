@@ -195,6 +195,11 @@ include __DIR__ . '/partials/head.php';
                         <option value="<?= (int) $b['id'] ?>" <?= $baseFiltro === (int) $b['id'] ? 'selected' : '' ?>><?= e($b['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    Decide <strong>quais agentes encontram este documento</strong>: só os que têm esta
+                    base marcada. Documento na base errada é indexado, aparece como pronto aqui, e
+                    mesmo assim nunca é achado numa conversa.
+                </small>
             </label>
 
             <label>

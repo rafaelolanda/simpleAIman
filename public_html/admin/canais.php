@@ -226,6 +226,11 @@ include __DIR__ . '/partials/head.php';
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    Quem responde neste canal. <em>Usar o agente padrão</em> depende de haver um
+                    escolhido em <a href="configuracoes.php">Configurações</a> —
+                    <strong>sem ele, este canal não responde.</strong>
+                </small>
             </label>
 
             <label class="so-whatsapp">

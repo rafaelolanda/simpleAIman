@@ -224,6 +224,12 @@ include __DIR__ . '/partials/head.php';
                 Setor padrão — destino do que não se encaixa em nenhum outro
             </label>
         </div>
+        <p class="dica-campo" style="margin-top:-0.4rem">
+            <strong>Precisa existir um setor padrão.</strong> É ele que impede o agente de inventar
+            telefone e e-mail quando nenhum setor casa com a pergunta: sem destino válido, a saída
+            fácil do modelo é preencher a lacuna com um contato plausível e falso. Marcar um novo
+            desmarca o anterior. E desativar um setor o tira do roteamento na hora.
+        </p>
 
         <div class="form-acoes">
             <button type="submit" class="btn btn-primary"><?= $editando ? 'Salvar' : 'Criar' ?></button>

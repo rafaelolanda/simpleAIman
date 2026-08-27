@@ -176,6 +176,12 @@ include __DIR__ . '/partials/head.php';
                         <option value="<?= (int) $s['id'] ?>" <?= (int) ($editando['setor_id'] ?? 0) === (int) $s['id'] ? 'selected' : '' ?>><?= e($s['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    Quem transforma o texto em vetor. <strong>Trocar depois de indexar invalida
+                    tudo o que já está nesta base</strong> — os vetores antigos e os novos deixam de
+                    ser comparáveis, e a busca passa a devolver resultado ruim sem erro nenhum.
+                    Mudou o modelo, reindexe a base.
+                </small>
             </label>
 
             <label>
