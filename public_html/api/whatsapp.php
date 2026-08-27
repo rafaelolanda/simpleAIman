@@ -101,6 +101,10 @@ foreach ($valor['statuses'] ?? [] as $status) {
     }
 }
 
+// Conta o que entrou na fila: sem mensagem nova não há o que cutucar, e
+// evento de status sozinho acordaria o worker à toa a cada "lido".
+$enfileirados = 0;
+
 foreach ($valor['messages'] ?? [] as $mensagem) {
     $tipo = (string) ($mensagem['type'] ?? '');
     $de = (string) ($mensagem['from'] ?? '');
@@ -125,9 +129,42 @@ foreach ($valor['messages'] ?? [] as $mensagem) {
         'texto' => $texto,
         'nome' => (string) ($valor['contacts'][0]['profile']['name'] ?? ''),
     ]);
+
+    $enfileirados++;
 }
 
 // 200 sempre, mesmo sem nada para fazer: qualquer outra coisa faz a Meta
 // reenviar o evento indefinidamente.
 http_response_code(200);
+header('Content-Type: text/plain; charset=UTF-8');
+header('Content-Length: 2');
+header('Connection: close');
 echo 'ok';
+
+// ---------------------------------------------------------------------
+// A resposta já foi entregue à Meta — daqui para baixo ninguém espera
+// ---------------------------------------------------------------------
+//
+// O cron é a rede de segurança; a cutucada é o caminho normal. Sem ela a
+// mensagem fica na fila até alguém passar: em hospedagem compartilhada o
+// intervalo mínimo do cron costuma ser de cinco minutos, e cinco minutos de
+// silêncio no WhatsApp é a pessoa concluindo que ninguém vai responder.
+//
+// Precisa vir DEPOIS do flush. A cutucada abre um socket e lê a linha de
+// status antes de fechar — são milissegundos, mas somados ao resto podem
+// encostar no limite de poucos segundos que a Meta tolera antes de reenviar
+// o evento. Com a resposta já entregue, o tempo daqui não conta mais.
+while (ob_get_level() > 0) {
+    ob_end_flush();
+}
+
+flush();
+
+if (function_exists('fastcgi_finish_request')) {
+    fastcgi_finish_request();
+}
+
+if ($enfileirados > 0) {
+    ignore_user_abort(true);
+    Queue::cutucarWorker();
+}
