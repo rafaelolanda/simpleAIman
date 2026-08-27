@@ -706,12 +706,18 @@ final class Fila
      */
     private static function avisarAtendentes(int $conversaId, array $atendentes, string $motivo): void
     {
-        $destinos = array_values(array_filter(
-            array_map(static fn (array $a): string => trim((string) ($a['email'] ?? '')), $atendentes),
-            static fn (string $e): bool => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL) !== false
+        // Quem tem e-mail utilizável. Sai cedo se ninguém tiver: montar o
+        // corpo para depois não enviar a ninguém é trabalho à toa.
+        $atendentes = array_values(array_filter(
+            $atendentes,
+            static function (array $a): bool {
+                $email = trim((string) ($a['email'] ?? ''));
+
+                return $email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+            }
         ));
 
-        if ($destinos === []) {
+        if ($atendentes === []) {
             return;
         }
 
@@ -723,9 +729,19 @@ final class Fila
             . "Atenda em: {$url}\n\n"
             . 'A conversa volta para o assistente automaticamente após ' . ESPERA_MAX_MIN . " minutos sem ninguém assumir.";
 
-        foreach ($destinos as $destino) {
+        foreach ($atendentes as $a) {
             try {
-                Mailer::send($destino, "[Assistente] Atendimento pedido — conversa #{$conversaId}", $corpo);
+                // Mesmo defeito do chamado: faltavam argumentos, e a falha era
+                // engolida pelo catch — o atendente simplesmente nunca recebia
+                // o aviso de que alguém estava esperando.
+                if (!Mailer::send(
+                    (string) $a['email'],
+                    (string) ($a['nome'] ?: $a['usuario']),
+                    "[Assistente] Atendimento pedido — conversa #{$conversaId}",
+                    nl2br(e($corpo))
+                )) {
+                    error_log('[simpleAIman] aviso de handoff não saiu para ' . $a['email'] . '.');
+                }
             } catch (Throwable $e) {
                 // Aviso que falha não pode derrubar a transferência: a conversa
                 // já está na fila e aparece no painel de qualquer forma.

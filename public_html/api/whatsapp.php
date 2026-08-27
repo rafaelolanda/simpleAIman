@@ -28,6 +28,10 @@ use SimpleAIman\Jobs\Queue;
 // Verificação (GET) — só acontece ao configurar o webhook no painel da Meta
 // ---------------------------------------------------------------------
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET') {
+    // A Meta manda `hub.mode`, `hub.verify_token` e `hub.challenge` — com
+    // PONTO. O PHP converte ponto em sublinhado ao montar $_GET, então os
+    // nomes abaixo são os certos. Parece erro de digitação e não é: trocar
+    // para `hub.verify_token` quebraria a verificação.
     $canal = CanalWhatsapp::primeiro();
     $enviado = (string) ($_GET['hub_verify_token'] ?? '');
     $esperado = $canal?->segredo('VERIFY_TOKEN') ?? '';

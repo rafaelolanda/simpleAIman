@@ -193,7 +193,27 @@ final class SetorTool
             . "Conversa:\n" . $historico;
 
         try {
-            Mailer::send($destino, "[Assistente] Chamado #{$chamadoId} — {$assunto}", $corpo);
+            // Quatro argumentos, e o corpo em HTML.
+            //
+            // Estava chamando com três: o PHP recusava, a exceção era engolida
+            // pelo catch abaixo, e o chamado ficava gravado como "não avisado"
+            // — ninguém recebia nada e nada na tela indicava isso. O Mailer
+            // manda `Content-Type: text/html`, então texto puro chegaria como
+            // um parágrafo só, sem as quebras de linha.
+            // O retorno IMPORTA: o Mailer engole a falha e devolve false. Marcar
+            // como avisado sem conferir faria o agente dizer "o setor vai
+            // retornar" sobre um e-mail que nunca saiu — a promessa que o
+            // projeto inteiro tenta não fazer.
+            if (!Mailer::send(
+                $destino,
+                (string) ($setor['responsavel_nome'] ?: $setor['nome']),
+                "[Assistente] Chamado #{$chamadoId} — {$assunto}",
+                nl2br(e($corpo))
+            )) {
+                error_log('[simpleAIman] e-mail do chamado ' . $chamadoId . ' não saiu (Mailer devolveu false).');
+
+                return false;
+            }
 
             Database::connection()
                 ->prepare('UPDATE chamados SET email_enviado_em = :agora WHERE id = :id')
