@@ -1,19 +1,30 @@
 <?php
 /** @var string $paginaAtual */
 
-// Agrupado por camada da arquitetura (ARQUITETURA.md §2): quem mexe em
-// conhecimento não mexe em ferramenta, e ver isso no menu ajuda a não
-// confundir "o que o agente sabe" com "o que o agente faz".
+// Agrupado por QUANDO se usa, não pela camada da arquitetura.
+//
+// O agrupamento anterior espelhava o ARQUITETURA.md — Agentes, Conhecimento,
+// Ações — e descrevia bem o sistema para quem o construiu. Só que a pessoa que
+// abre este painel todo dia é o atendente, e o que ela usa (Atendimento,
+// Chamados) estava no fim de um grupo chamado "Ações", junto de ferramentas
+// HTTP e setores, que ela nem pode abrir.
+//
+// A divisão agora é: o que se olha todo dia, o que se alimenta de vez em
+// quando, o que se configura uma vez, e o que quase nunca se mexe.
+//
+// Dentro de Configuração a ordem é a da DEPENDÊNCIA, não alfabética: um agente
+// precisa de provedor para responder, e um canal precisa de agente. Quem
+// instala pela primeira vez segue a lista de cima para baixo e nunca esbarra
+// num campo cujo pré-requisito ainda não existe.
 $grupos = [
     '' => [
         'index.php' => ['icone' => 'grafico', 'label' => 'Dashboard'],
     ],
-    'Agentes' => [
-        'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
-        'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
-        'playground.php' => ['icone' => 'chat', 'label' => 'Playground'],
+    'Operação' => [
+        'atendimento.php' => ['icone' => 'usuario', 'label' => 'Atendimento'],
+        'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],
         'conversas.php' => ['icone' => 'chat', 'label' => 'Conversas'],
-        'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],
+        'leads.php' => ['icone' => 'lead', 'label' => 'Leads'],
     ],
     'Conhecimento' => [
         'bases.php' => ['icone' => 'base', 'label' => 'Bases'],
@@ -21,13 +32,14 @@ $grupos = [
         'faq.php' => ['icone' => 'faq', 'label' => 'FAQ'],
         'testar-busca.php' => ['icone' => 'grafico', 'label' => 'Testar busca'],
     ],
-    'Ações' => [
+    'Configuração' => [
+        'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
+        'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
+        'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],
         'ferramentas.php' => ['icone' => 'ferramenta', 'label' => 'Ferramentas'],
-        'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
         'setores.php' => ['icone' => 'setor', 'label' => 'Setores'],
-        'leads.php' => ['icone' => 'lead', 'label' => 'Leads'],
-        'atendimento.php' => ['icone' => 'usuario', 'label' => 'Atendimento'],
-        'chamados.php' => ['icone' => 'chamado', 'label' => 'Chamados'],
+        'playground.php' => ['icone' => 'chat', 'label' => 'Playground'],
+        'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
     ],
     'Sistema' => [
         'configuracoes.php' => ['icone' => 'engrenagem', 'label' => 'Configurações'],
