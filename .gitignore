@@ -10,14 +10,24 @@ database/*.sqlite-wal
 public_html/assets/uploads/*
 !public_html/assets/uploads/.gitkeep
 
-# Locks do worker E os arquivos recebidos nas conversas.
+# Arquivos recebidos nas conversas, e os locks do worker.
 #
 # Fica fora do versionamento por duas razões, e a segunda é a séria: é por
 # instância, e é DADO PESSOAL — a foto que alguém mandou, o áudio que gravou.
 # Um `git push` distraído publicaria isso num repositório.
+#
+# A pasta é criada sozinha por `caminho_storage()` na primeira gravação, junto
+# de um `.htaccess` de recusa — por isso não há `.gitkeep` aqui.
 storage/
-*.lock
 *.log
+
+# `*.lock` NÃO entra aqui.
+#
+# A regra existia por causa da trava do worker, mas ela vive em
+# `sys_get_temp_dir()`, fora do repositório — não protegia nada. O que ela
+# fazia de fato era excluir o `composer.lock`, e isso contradiz a premissa do
+# projeto: `vendor/` vai commitado para o deploy ser `git pull` sem build, e
+# sem o lock as versões transitivas não ficam registradas em lugar nenhum.
 
 # vendor/ NÃO entra aqui: é commitado de propósito, para que o deploy
 # continue sendo apenas `git pull`, sem build. Ver ARQUITETURA.md §1.
