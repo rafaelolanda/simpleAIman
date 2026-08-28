@@ -39,6 +39,10 @@ final class Painel
     private const TELAS = [
         // Todo mundo que loga
         'perfil.php' => ['admin', 'editor', 'atendente'],
+        // A ajuda serve aos tres papeis, e a secao de atendimento e justamente
+        // a que o atendente precisa. Esconder dele seria esconder o manual de
+        // quem mais usa o sistema.
+        'ajuda.php' => ['admin', 'editor', 'atendente'],
 
         // Atendimento humano
         'atendimento.php' => ['admin', 'editor', 'atendente'],

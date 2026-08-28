@@ -42,6 +42,7 @@ $grupos = [
         'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
     ],
     'Sistema' => [
+        'ajuda.php' => ['icone' => 'faq', 'label' => 'Como usar'],
         'configuracoes.php' => ['icone' => 'engrenagem', 'label' => 'Configurações'],
         'privacidade.php' => ['icone' => 'chave', 'label' => 'Privacidade'],
         'logs.php' => ['icone' => 'log', 'label' => 'Logs'],
