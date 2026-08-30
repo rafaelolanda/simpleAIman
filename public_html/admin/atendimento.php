@@ -246,8 +246,33 @@ if (($_GET['acao'] ?? '') === 'json') {
 
     $desde = max(0, (int) ($_GET['desde'] ?? 0));
 
+    // A LISTA VAI PRONTA, em HTML.
+    //
+    // Antes o polling devolvia so a CONTAGEM da fila, e o crachá subia enquanto
+    // a lista continuava do jeito que o servidor pintou ao abrir a pagina. Quem
+    // entrava na fila so aparecia depois de um F5 — e ninguem atualiza uma tela
+    // que parece estar mostrando tudo.
+    //
+    // O HTML sai do mesmo parcial que a pagina usa, entao nao ha uma segunda
+    // montagem em JavaScript para divergir da primeira.
+    $fila = Fila::aguardando();
+    $minhas = Fila::emAtendimento($eu);
+    $vejoTudo = ($meuPapel ?? 'atendente') === 'admin';
+    $outras = $vejoTudo
+        ? array_values(array_filter(
+            Fila::emAtendimento(),
+            static fn (array $c): bool => (int) $c['atendente_id'] !== $eu
+        ))
+        : [];
+    $plantao = Fila::cargaDosAtendentes($eu);
+
+    ob_start();
+    include __DIR__ . '/partials/lista-conversas.php';
+    $listaHtml = (string) ob_get_clean();
+
     $resposta = [
-        'aguardando' => count(Fila::aguardando()),
+        'aguardando' => count($fila),
+        'lista' => $listaHtml,
         'mensagens' => [],
         'modo' => null,
     ];
@@ -397,117 +422,7 @@ include __DIR__ . '/partials/head.php';
 <?php endif; ?>
 
 <div class="atendimento-grade">
-    <section class="card lista-conversas">
-        <?php
-        // Uma linha de conversa, do mesmo jeito nas tres listas.
-        //
-        // Fechada num closure e nao repetida tres vezes: a diferenca entre elas
-        // e o que se faz ao clicar, nao o que se mostra. Tres copias divergiriam
-        // na primeira correcao de layout.
-        $linha = static function (array $c, string $estado) use ($abrindo): void {
-            $nome = nome_do_contato($c);
-            $av = avatar_do_contato($nome);
-            $zap = ($c['canal_tipo'] ?? '') === 'whatsapp';
-            $previa = trim((string) ($c['ultima'] ?? ''));
-
-            // Prefixo de quem falou por ultimo: sem ele, a previa da resposta do
-            // proprio atendente parece fala do visitante.
-            if ($previa !== '' && ($c['ultima_de'] ?? '') !== 'usuario') {
-                $previa = 'Você: ' . $previa;
-            }
-
-            $quando = $estado === 'fila'
-                ? tempo_relativo((string) ($c['aguardando_desde'] ?? ''))
-                : tempo_relativo((string) ($c['ultima_em'] ?? $c['editado_em'] ?? ''));
-            ?>
-            <div class="conversa-linha <?= $abrindo === (int) $c['id'] ? 'ativa' : '' ?>">
-                <span class="conversa-avatar" style="background: <?= e($av['cor']) ?>"><?= e($av['iniciais']) ?></span>
-                <span class="conversa-corpo">
-                    <span class="conversa-topo">
-                        <strong class="conversa-nome"><?= e($nome) ?></strong>
-                        <span class="conversa-quando"><?= e($quando) ?></span>
-                    </span>
-                    <span class="conversa-previa"><?= e(mb_substr($previa, 0, 90)) ?></span>
-                    <span class="conversa-marcas">
-                        <span class="canal-tag <?= $zap ? 'canal-zap' : 'canal-web' ?>"><?= $zap ? 'WhatsApp' : 'Site' ?></span>
-                        <?php if ($estado === 'outras' && !empty($c['atendente'])): ?>
-                            <span class="tag tag-neutro">com <?= e((string) $c['atendente']) ?></span>
-                        <?php endif; ?>
-                    </span>
-                </span>
-            </div>
-            <?php
-        };
-        ?>
-
-        <h2 class="card-title">
-            Esperando
-            <?php if ($fila !== []): ?><span class="nav-badge" id="badge-fila"><?= count($fila) ?></span><?php endif; ?>
-        </h2>
-
-        <?php if ($fila === []): ?>
-            <p class="vazio">Ninguém esperando.</p>
-        <?php else: ?>
-            <ul class="conversa-lista">
-                <?php foreach ($fila as $c): ?>
-                    <li>
-                        <?php // A fila e a UNICA lista com botao: aqui o clique
-                              // assume a conversa, e assumir e uma acao, nao
-                              // navegacao. Um link abriria conversa de outro. ?>
-                        <form method="post" class="conversa-form">
-                            <?= csrf_field() ?>
-                            <input type="hidden" name="acao" value="assumir">
-                            <input type="hidden" name="conversa" value="<?= (int) $c['id'] ?>">
-                            <button type="submit" class="conversa-botao" title="Assumir esta conversa">
-                                <?php $linha($c, 'fila'); ?>
-                                <span class="conversa-acao">Assumir</span>
-                            </button>
-                        </form>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
-
-        <h3 class="secao-form">Meus atendimentos<?= $minhas !== [] ? ' (' . count($minhas) . ')' : '' ?></h3>
-
-        <?php if ($minhas === []): ?>
-            <p class="vazio">Nenhuma conversa sua no momento.</p>
-        <?php else: ?>
-            <ul class="conversa-lista">
-                <?php foreach ($minhas as $c): ?>
-                    <li><a href="?c=<?= (int) $c['id'] ?>"><?php $linha($c, 'minhas'); ?></a></li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
-
-        <?php if ($vejoTudo && $outras !== []): ?>
-            <h3 class="secao-form">Conversas de outros (<?= count($outras) ?>)</h3>
-            <ul class="conversa-lista">
-                <?php foreach ($outras as $c): ?>
-                    <li><a href="?c=<?= (int) $c['id'] ?>"><?php $linha($c, 'outras'); ?></a></li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
-
-        <?php
-        // Voce sai da lista: o titulo diz "outros", e a sua propria contagem ja
-        // esta no titulo de "Meus atendimentos" logo acima.
-        $outrosAtendentes = array_values(array_filter($plantao, static fn (array $u): bool => !$u['eu']));
-        ?>
-        <?php if ($outrosAtendentes !== []): ?>
-            <h3 class="secao-form">Outros atendentes</h3>
-            <?php // So o numero de conversas de cada um. Basta para a equipe se
-                  // distribuir, e nao expoe conversa alheia a quem nao administra. ?>
-            <ul class="plantao-lista">
-                <?php foreach ($outrosAtendentes as $u): ?>
-                    <li>
-                        <span><?= e($u['nome']) ?></span>
-                        <span class="tag tag-neutro" title="conversas em atendimento"><?= $u['conversas'] ?></span>
-                    </li>
-                <?php endforeach; ?>
-            </ul>
-        <?php endif; ?>
-    </section>
+    <?php include __DIR__ . '/partials/lista-conversas.php'; ?>
 
     <section class="card">
         <?php if (!$conversa): ?>
@@ -726,7 +641,8 @@ include __DIR__ . '/partials/head.php';
     var conversa = <?= (int) $abrindo ?>;
     var ultimo = <?= (int) $ultimoId ?>;
     var historico = document.getElementById('historico');
-    var badge = document.getElementById('badge-fila');
+    var lista = document.getElementById('lista-conversas');
+    var listaAnterior = null;
     var filaAnterior = <?= count($fila) ?>;
 
     if (historico) { historico.scrollTop = historico.scrollHeight; }
@@ -742,22 +658,34 @@ include __DIR__ . '/partials/head.php';
             .then(function (d) {
                 if (!d) { return; }
 
-                if (badge) { badge.textContent = d.aguardando; }
+                // O crachá não é atualizado a parte: ele vem dentro do HTML da
+                // lista. Guardar a referencia dele aqui daria um elemento MORTO
+                // depois da primeira troca — e o numero congelaria em silencio.
 
-                // A fila mudou de tamanho. O crachá sozinho não basta: a LISTA
-                // precisa mostrar a conversa nova, senão o atendente vê o número
-                // subir e não tem no que clicar — foi preciso F5 no primeiro teste.
+                if (d.aguardando > filaAnterior) { tocar(); }
+                filaAnterior = d.aguardando;
+
+                // A LISTA E TROCADA NO LUGAR, sem recarregar a pagina.
                 //
-                // Recarregar só vale quando não há conversa aberta: dentro de uma,
-                // recarregar apagaria o que o atendente estivesse digitando.
-                if (d.aguardando !== filaAnterior) {
-                    if (d.aguardando > filaAnterior) { tocar(); }
-                    filaAnterior = d.aguardando;
+                // Antes so o crachá subia: a lista continuava do jeito que o
+                // servidor pintou ao abrir, e quem entrava na fila so aparecia
+                // depois de um F5. Havia um `location.reload()`, mas condicionado
+                // a NAO haver conversa aberta — justamente o caso em que o
+                // atendente esta na tela olhando. Ou seja, quem estava atendendo
+                // nunca via chegar.
+                //
+                // Trocar so quando mudou de fato: `innerHTML` a cada 4 segundos
+                // derrubaria o `:hover`, fecharia menu aberto e piscaria a lista
+                // inteira sem motivo.
+                if (lista && typeof d.lista === 'string' && d.lista !== listaAnterior) {
+                    listaAnterior = d.lista;
 
-                    if (!conversa) {
-                        location.reload();
-                        return;
-                    }
+                    var molde = document.createElement('div');
+                    molde.innerHTML = d.lista;
+
+                    var nova = molde.querySelector('#lista-conversas');
+
+                    if (nova) { lista.innerHTML = nova.innerHTML; }
                 }
 
                 (d.mensagens || []).forEach(function (m) {
