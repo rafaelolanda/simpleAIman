@@ -70,6 +70,8 @@ $badges = [
     <div class="admin-brand">
         <span class="dot"></span>
         <span><?= e($config['nome_instancia'] ?? 'simpleAIman') ?></span>
+        <button type="button" class="btn-recolher" id="btn-recolher"
+                aria-label="Recolher menu" title="Recolher menu">&#10096;</button>
     </div>
     <nav class="admin-nav">
         <?php foreach ($grupos as $titulo => $itens): ?>
@@ -77,7 +79,9 @@ $badges = [
                 <span class="admin-nav-grupo"><?= e($titulo) ?></span>
             <?php endif; ?>
             <?php foreach ($itens as $arquivo => $menuItem): ?>
-                <a href="<?= e($arquivo) ?>" class="<?= $paginaAtual === $arquivo ? 'active' : '' ?>">
+                <?php // `title` para o modo recolhido: sem o rotulo, e ele que diz o que o icone faz. ?>
+                <a href="<?= e($arquivo) ?>" title="<?= e($menuItem['label']) ?>"
+                   class="<?= $paginaAtual === $arquivo ? 'active' : '' ?>">
                     <span class="icon"><?= svg_icon($menuItem['icone']) ?></span>
                     <span><?= e($menuItem['label']) ?></span>
                     <?php if (!empty($badges[$arquivo])): ?>

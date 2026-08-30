@@ -976,3 +976,76 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
    o atendente reconhecer a tela sem treinamento. O que sai e o contraste
    artificial de um bloco claro cravado num painel preto. */
 .zap { box-shadow: none; }
+
+
+/* ============================================================
+   MENU RECOLHIDO (desktop)
+   ============================================================
+   So os icones, para devolver largura ao conteudo. Nasceu da tela
+   de atendimento, onde cada pixel a mais e uma linha a menos de
+   conversa visivel.
+
+   A classe fica no <html> e nao no <body> ou na barra: e o unico
+   elemento que existe antes de o CSS pintar, o que permite ao
+   script do <head> aplicar o estado salvo SEM piscar a barra
+   larga por um quadro.
+
+   Acima de 900px apenas. Abaixo disso a barra ja e off-canvas
+   (`.open`), e um terceiro estado la seria um modo escondido
+   dentro de outro.
+   ============================================================ */
+
+@media (min-width: 901px) {
+    html.menu-recolhido { --sidebar-w: 64px; }
+
+    html.menu-recolhido .admin-sidebar { padding: 1.5rem 0.6rem; }
+
+    /* Rotulo, titulo de grupo e rodape somem. O icone fica, centralizado. */
+    html.menu-recolhido .admin-nav a span:not(.icon):not(.nav-badge),
+    html.menu-recolhido .admin-nav-grupo,
+    html.menu-recolhido .admin-brand span,
+    html.menu-recolhido .admin-sidebar-footer {
+        display: none;
+    }
+
+    html.menu-recolhido .admin-nav a {
+        justify-content: center;
+        padding: 0.65rem 0;
+        position: relative;
+    }
+
+    /* O contador nao pode sumir junto: e ele que avisa que ha gente
+       esperando, e essa e a informacao que menos pode se esconder. */
+    html.menu-recolhido .nav-badge {
+        position: absolute;
+        top: 0.15rem;
+        right: 0.4rem;
+        font-size: 0.62rem;
+        padding: 0 0.28rem;
+        min-width: auto;
+    }
+
+    html.menu-recolhido .admin-brand { justify-content: center; }
+}
+
+.btn-recolher {
+    margin-left: auto;
+    border: 0;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.2rem 0.3rem;
+    border-radius: 4px;
+}
+
+.btn-recolher:hover { color: var(--text); background: var(--bg-elevated-2); }
+
+/* No modo recolhido o botao vira o unico item da linha da marca. */
+html.menu-recolhido .btn-recolher { margin: 0; }
+
+/* Escondido no mobile: la quem abre e fecha e o botao da barra do topo. */
+@media (max-width: 900px) {
+    .btn-recolher { display: none; }
+}

@@ -16,6 +16,10 @@ $corSecundaria = $config['cor_secundaria'] ?? '#0f172a';
     <title><?= e($tituloPagina) ?> · <?= e($config['nome_instancia'] ?? 'Admin') ?></title>
     <link rel="stylesheet" href="../<?= asset_ver('assets/css/admin.css') ?>">
     <link rel="stylesheet" href="../<?= asset_ver('assets/css/simpleaiman.css') ?>">
+    <?php // Estado do menu ANTES da pintura: aplicado no fim da pagina, a barra
+          // larga apareceria por um quadro e encolheria na frente de quem olha,
+          // a cada navegacao. ?>
+    <script>try{if(localStorage.getItem('sa_menu_recolhido')==='1'){document.documentElement.classList.add('menu-recolhido');}}catch(e){}</script>
     <style>
         :root { --accent: <?= e($corPrimaria) ?>; --accent-2: <?= e($corSecundaria) ?>; --on-accent: <?= cor_contraste($corPrimaria) ?>; }
     </style>
