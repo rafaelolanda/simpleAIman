@@ -235,6 +235,60 @@ function anexos_html(array $anexos): string
 }
 
 /**
+ * Por quanto tempo um link de anexo do widget continua valendo.
+ *
+ * Seis horas: sobra para quem deixa a janela aberta a manhã inteira, e é curto
+ * o bastante para um endereço que vazou parar de funcionar no mesmo dia. Ao
+ * recarregar, o widget recebe assinatura nova, então o visitante nunca esbarra
+ * no prazo.
+ */
+const ANEXO_PUBLICO_VALIDADE_SEG = 21600;
+
+/**
+ * Assina o link do anexo para o widget, com prazo.
+ *
+ * Sem isto o endereço é uma **URL-capacidade**: quem o tiver, tem o arquivo,
+ * de qualquer navegador e para sempre. O identificador de sessão viaja na
+ * própria URL, então basta ela vazar — histórico, print, log de proxy, um
+ * "abrir imagem em nova aba" — para o arquivo ficar acessível a quem não
+ * participou da conversa.
+ *
+ * A conferência de dono continua existindo no endpoint, e não é substituída
+ * por esta: uma diz que o anexo pertence àquela conversa, a outra diz que o
+ * link foi emitido por nós e ainda está no prazo. As duas juntas é que fecham.
+ *
+ * `SESSION_SECRET` é a chave. Instalação que deixou o texto de exemplo no
+ * `.env` tem assinatura previsível — está avisado na tela de instalação, e é o
+ * mesmo segredo que já protege a sessão do painel.
+ */
+function anexo_assinatura(int $anexoId, string $token, string $sessao): string
+{
+    $expira = time() + ANEXO_PUBLICO_VALIDADE_SEG;
+    $assinatura = hash_hmac('sha256', $anexoId . '|' . $sessao . '|' . $expira, SESSION_SECRET);
+
+    return '&t=' . rawurlencode($token)
+        . '&sessao=' . rawurlencode($sessao)
+        . '&exp=' . $expira
+        . '&sig=' . $assinatura;
+}
+
+/**
+ * A assinatura confere e ainda está no prazo?
+ */
+function anexo_assinatura_valida(int $anexoId, string $sessao, int $expira, string $assinatura): bool
+{
+    if ($expira < time()) {
+        return false;
+    }
+
+    // `hash_equals` e não `===`: comparação de segredo em tempo constante.
+    return hash_equals(
+        hash_hmac('sha256', $anexoId . '|' . $sessao . '|' . $expira, SESSION_SECRET),
+        $assinatura
+    );
+}
+
+/**
  * Os mesmos anexos, mas para o widget, que roda no site do cliente.
  *
  * Duas diferenças em relação ao painel, e as duas vêm de onde a página está:
@@ -253,13 +307,14 @@ function anexos_html_publico(array $anexos, string $token, string $sessao): stri
     }
 
     $saida = '';
-    $sufixo = '&t=' . rawurlencode($token) . '&sessao=' . rawurlencode($sessao);
     $base = APP_URL . '/api/anexo-publico.php?id=';
 
     foreach ($anexos as $anexo) {
         if (($anexo['removido_em'] ?? null) !== null) {
             continue;
         }
+
+        $sufixo = anexo_assinatura((int) $anexo['id'], $token, $sessao);
 
         $url = $base . (int) $anexo['id'] . $sufixo;
         $mime = (string) $anexo['mime'];

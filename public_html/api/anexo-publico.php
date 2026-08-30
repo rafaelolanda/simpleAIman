@@ -34,6 +34,28 @@ if ($canal === null || $sessao === '' || $anexoId <= 0) {
     exit;
 }
 
+// A ASSINATURA COM PRAZO.
+//
+// Sem ela o endereco e uma URL-capacidade: quem o tiver, tem o arquivo, de
+// qualquer navegador e para sempre. O identificador de sessao viaja na propria
+// URL, entao bastava ela vazar — historico, print, log de proxy, um "abrir
+// imagem em nova aba" — para o arquivo ficar aberto a quem nao participou da
+// conversa. Foi assim que apareceu num segundo navegador durante um teste.
+//
+// Nao substitui a conferencia de dono abaixo: uma diz que o link foi emitido
+// por nos e ainda vale, a outra diz que o anexo pertence aquela conversa.
+if (!anexo_assinatura_valida(
+    $anexoId,
+    $sessao,
+    (int) ($_GET['exp'] ?? 0),
+    (string) ($_GET['sig'] ?? '')
+)) {
+    // Mesmo 404 do anexo inexistente: distinguir "assinatura vencida" de "nao
+    // existe" contaria a quem sonda que o id acertou.
+    http_response_code(404);
+    exit;
+}
+
 // Uma consulta só, e ela É a autorização: o anexo tem de estar numa mensagem
 // de uma conversa deste canal e desta sessão. Buscar o anexo primeiro e
 // conferir depois deixaria a porta aberta para alguém esquecer a conferência.
