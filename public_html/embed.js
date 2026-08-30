@@ -101,7 +101,17 @@
     '.de-usuario{justify-content:flex-end}',
     '.de-usuario .balao{background:var(--cor);color:#fff;border-bottom-right-radius:4px}',
     '.de-atendente .balao{background:#0f766e;color:#fff;border-bottom-left-radius:4px}',
-    '.de-atendente .quem{font-size:11px;opacity:.75;margin:0 0 3px 4px}',
+
+    // O nome do atendente vai ACIMA do balao, nao ao lado.
+    //
+    // `.msg` e flex em linha e o nome era irmao do balao: ficava a esquerda,
+    // empurrando a mensagem e comendo largura util em TODA fala. Numa janela de
+    // 380px isso custa caro.
+    '.de-atendente{flex-direction:column;align-items:flex-start}',
+    '.de-atendente .quem{font-size:11px;opacity:.7;margin:0 0 3px 4px;font-weight:600}',
+
+    // Mensagens seguidas da mesma pessoa andam juntas e sem repetir o nome.
+    '.msg.agrupada{margin-bottom:3px}',
     '.de-sistema{justify-content:center}',
     '.de-sistema .balao{background:none;font-size:12px;font-style:italic;opacity:.6;text-align:center;max-width:100%}',
     '.esperando{display:flex;align-items:center;gap:7px;font-size:12px;opacity:.7;padding:6px 4px}',
@@ -192,11 +202,19 @@
   var ocupado = false;
   var abriuAlgumaVez = false;
 
-  function balao(quem, texto, autor, html) {
-    var linha = document.createElement('div');
-    linha.className = 'msg de-' + quem;
+  // Quem falou por ultimo, para agrupar. Repetir "Administrador" em cada uma de
+  // tres mensagens seguidas nao informa nada e gasta tres linhas de tela.
+  var ultimoAutor = null;
 
-    if (autor) {
+  function balao(quem, texto, autor, html) {
+    var assinatura = quem + '|' + (autor || '');
+    var mesmaPessoa = assinatura === ultimoAutor;
+    ultimoAutor = assinatura;
+
+    var linha = document.createElement('div');
+    linha.className = 'msg de-' + quem + (mesmaPessoa ? ' agrupada' : '');
+
+    if (autor && !mesmaPessoa) {
       var nome = document.createElement('div');
       nome.className = 'quem';
       nome.textContent = autor;
