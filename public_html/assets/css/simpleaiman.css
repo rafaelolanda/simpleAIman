@@ -111,7 +111,9 @@
 .alerta code {
     padding: 0.08rem 0.32rem;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.08);
+    /* Preto translucido, nao branco: o alerta agora vive sobre fundo claro, e
+       o branco de antes sumia dentro dele. */
+    background: rgba(0, 0, 0, 0.06);
     font-size: 0.86em;
 }
 
@@ -922,3 +924,55 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     color: var(--danger);
     border-bottom-color: var(--danger);
 }
+
+
+/* ============================================================
+   TEMA CLARO
+   ============================================================
+   O `admin.css` define tudo por variavel e tem apenas seis cores
+   fixas fora do `:root` — por isso o tema inteiro cabe aqui, sem
+   tocar naquele arquivo, que segue byte a byte igual ao da base
+   institucional.
+
+   NAO redefine `--accent`, `--accent-2` nem `--on-accent`: o
+   `head.php` injeta os tres num `<style>` depois destas folhas,
+   com as cores que o cliente escolheu em Configuracoes. Mexer
+   aqui seria escrever algo que perde a disputa de qualquer jeito.
+
+   `--success`, `--danger` e `--warning` escurecem: os tons
+   originais foram escolhidos para brilhar sobre fundo preto e
+   reprovam em contraste sobre branco.
+   ============================================================ */
+
+:root {
+    --bg: #f5f6f8;
+    --bg-elevated: #ffffff;
+    --bg-elevated-2: #f0f2f5;
+    --border: #dde1e8;
+    --text: #1b1f27;
+    --text-muted: #5a6472;
+    --shadow: 0 6px 20px rgba(16, 24, 40, 0.08);
+    --success: #1a7f4b;
+    --danger: #c22f4c;
+    --warning: #9a6100;
+}
+
+/* A barra lateral continua escura.
+   As variaveis sao redeclaradas NELA, e propriedades customizadas descem para
+   os filhos — entao o menu inteiro, os grupos e o rodape herdam o tema escuro
+   sem uma regra sequer por elemento. */
+.admin-sidebar {
+    --bg: #12141a;
+    --bg-elevated: #171a21;
+    --bg-elevated-2: #1e222b;
+    --border: #2a2f3a;
+    --text: #eef0f4;
+    --text-muted: #9aa1b1;
+    color: var(--text);
+}
+
+/* A ilha clara do atendimento deixa de ser ilha.
+   As variaveis `--zap-*` continuam: o verde e o bege sao a identidade que faz
+   o atendente reconhecer a tela sem treinamento. O que sai e o contraste
+   artificial de um bloco claro cravado num painel preto. */
+.zap { box-shadow: none; }
