@@ -553,38 +553,137 @@ final class Fila
      */
     public static function anotarContatoDeEspera(int $conversaId, string $texto): void
     {
+        // A JANELA DO CONVITE, e não apenas "está aguardando".
+        //
+        // A premissa anterior era que quem está na fila acabou de ser convidado
+        // a se identificar. É falsa: uma conversa fica em `aguardando`
+        // indefinidamente quando ninguém assume e o cron não roda para
+        // expirá-la. Em teste real, um widget reaberto DIAS depois caiu aqui, e
+        // a primeira frase digitada na sessão nova foi lida como resposta a um
+        // convite feito em outro dia.
+        //
+        // `humano` também sai: com um atendente na conversa, quem pergunta o
+        // nome é ele, e o que a pessoa escreve é resposta a outra coisa.
         $stmt = Database::connection()->prepare(
-            "SELECT COALESCE(contato_nome, '') n, COALESCE(contato_valor, '') v
+            "SELECT COALESCE(contato_nome, '') n, COALESCE(contato_valor, '') v,
+                    modo, aguardando_desde
                FROM conversas WHERE id = :id"
         );
         $stmt->execute(['id' => $conversaId]);
-        $atual = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['n' => '', 'v' => ''];
+        $atual = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
-        if ($atual['n'] !== '' && $atual['v'] !== '') {
+        if (($atual['modo'] ?? '') !== 'aguardando' || ($atual['aguardando_desde'] ?? null) === null) {
             return;
         }
 
-        $valor = '';
+        if (strtotime((string) $atual['aguardando_desde']) < time() - 300) {
+            return;
+        }
 
+        if (($atual['n'] ?? '') !== '' && ($atual['v'] ?? '') !== '') {
+            return;
+        }
+
+        self::registrarContatoAnotado(
+            $conversaId,
+            self::nomeDeclarado($texto),
+            self::contatoNoTexto($texto)
+        );
+    }
+
+    /**
+     * E-mail ou telefone dentro de uma frase.
+     *
+     * Aqui adivinhar é seguro porque o FORMATO decide: um endereço de e-mail
+     * não se confunde com outra coisa, e uma sequência longa de dígitos com
+     * pontuação de telefone também não.
+     */
+    private static function contatoNoTexto(string $texto): string
+    {
         if (preg_match('/[\w.+-]+@[\w-]+\.[\w.-]{2,}/u', $texto, $m) === 1) {
-            $valor = $m[0];
-        } elseif (preg_match('/(?:\+?\d[\d\s().-]{8,}\d)/u', $texto, $m) === 1) {
-            $valor = trim($m[0]);
+            return $m[0];
         }
 
-        // Tira o contato encontrado e as ligações mais comuns; o que restar,
-        // curto e sem dígito, tem chance razoável de ser o nome.
-        $nome = $valor !== '' ? str_replace($valor, ' ', $texto) : $texto;
-        $nome = preg_replace('/\b(meu|nome|e|é|eh|sou|o|a|telefone|celular|email|e-mail|contato|fone)\b/iu', ' ', $nome) ?? $nome;
-        $nome = trim(preg_replace('/[^\p{L}\s]+/u', ' ', $nome) ?? '');
-        $nome = preg_replace('/\s+/u', ' ', $nome) ?? '';
-
-        // Frase longa não é nome: é a pessoa continuando a contar o problema.
-        if ($nome === '' || mb_strlen($nome) > 40 || str_word_count($nome, 0, 'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ') > 4) {
-            $nome = '';
+        if (preg_match('/(?:\+?\d[\d\s().-]{8,}\d)/u', $texto, $m) === 1) {
+            return trim($m[0]);
         }
 
-        self::registrarContatoAnotado($conversaId, $nome, $valor);
+        return '';
+    }
+
+    /**
+     * Nome, e SÓ quando a pessoa o declara.
+     *
+     * A versão anterior tentava deduzir: tirava o contato e as palavras de
+     * ligação e aceitava o que sobrasse, desde que curto. Em uso real, a
+     * primeira frase de um visitante — "quero desconto" — virou o nome dele.
+     * Duas palavras, catorze caracteres, passou em todos os testes que eu tinha
+     * escrito.
+     *
+     * O erro não era o limite estar frouxo: era eu estar adivinhando. Apertar o
+     * número só trocaria "quero desconto" por outra frase curta qualquer, e
+     * cada aperto novo derrubaria junto um nome legítimo.
+     *
+     * Agora só entra o que vem numa fórmula de apresentação. "Sou o Pedro" é a
+     * pessoa dizendo quem é; "quero desconto" é ela dizendo o que quer, e a
+     * diferença entre as duas não está no tamanho.
+     *
+     * O custo é perder "João Silva, 55 99999-8888", em que o nome está lá sem
+     * fórmula nenhuma. Aceito de propósito: o telefone ainda é capturado, e o
+     * atendente prefere ver um telefone a ser apresentado a alguém chamado
+     * "Quero Desconto".
+     */
+    private static function nomeDeclarado(string $texto): string
+    {
+        // A borda de palavra impede casar no meio de outra: sem ela, "pessoa"
+        // conteria "sou". Cada alternativa consome o próprio espaço final, para
+        // a captura começar já na primeira letra do nome.
+        $formulas = [
+            // O artigo opcional vale para TODAS as fórmulas, não só para "sou":
+            // "aqui é o Carlos" é tão comum quanto "sou o Carlos", e sem isto o
+            // "o" caía dentro da captura e era descartado por ser curto demais.
+            '/\b(?:meu\s+nome\s+(?:é|eh|e)|me\s+chamo|aqui\s+(?:é|eh|e)|sou)\s+(?:o\s+|a\s+)?([\p{L}][\p{L}\s]{1,39})/iu',
+            '/^\s*nome\s*[:\-]\s*([\p{L}][\p{L}\s]{1,39})/iu',
+        ];
+
+        // "Sou de Porto Alegre" não apresenta ninguém: diz de onde a pessoa é.
+        // O mesmo vale para "sou cliente", "sou aluno". Sem esta lista, a forma
+        // mais comum de continuar a frase depois de "sou" virava nome próprio.
+        $naoSaoNomes = [
+            'de', 'da', 'do', 'dos', 'das', 'um', 'uma', 'muito', 'bem', 'apenas',
+            'so', 'só', 'cliente', 'aluno', 'novo', 'nova', 'aqui', 'eu',
+        ];
+
+        foreach ($formulas as $formula) {
+            if (preg_match($formula, $texto, $m) !== 1) {
+                continue;
+            }
+
+            // Corta na primeira pontuação ou conectivo: em "sou o Pedro e
+            // preciso de ajuda", o nome acaba no Pedro.
+            $nome = preg_split('/\s+(?:e|mas|que|do|da|preciso|quero|gostaria)\s+/iu', trim($m[1]))[0] ?? '';
+            $nome = trim(preg_replace('/\s+/u', ' ', $nome) ?? '');
+            $palavras = $nome === '' ? [] : explode(' ', $nome);
+
+            // Até três palavras: nome composto cabe, frase não.
+            if ($palavras === [] || count($palavras) > 3) {
+                continue;
+            }
+
+            if (in_array(mb_strtolower($palavras[0]), $naoSaoNomes, true)) {
+                continue;
+            }
+
+            foreach ($palavras as $palavra) {
+                if (mb_strlen($palavra) < 2) {
+                    continue 2;
+                }
+            }
+
+            return mb_convert_case($nome, MB_CASE_TITLE, 'UTF-8');
+        }
+
+        return '';
     }
 
     private static function registrarContatoAnotado(int $conversaId, string $nome, string $valor): void
