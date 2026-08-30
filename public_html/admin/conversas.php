@@ -165,16 +165,11 @@ include __DIR__ . '/partials/head.php';
         <div class="chat" style="max-height:none">
             <?php foreach ($mensagens as $m): ?>
                 <?php if ($m['autor_tipo'] === 'sistema'): ?>
-                    <div class="bolha sistema" title="Falha técnica — não foi mostrada ao visitante">
-                        <?= e((string) $m['conteudo']) ?>
-                    </div>
+                    <div class="bolha sistema" title="Falha técnica — não foi mostrada ao visitante"><span class="bolha-corpo"><?= e((string) $m['conteudo']) ?></span></div>
                     <?php continue; ?>
                 <?php endif; ?>
 
-                <div class="bolha <?= $m['autor_tipo'] === 'usuario' ? 'user' : 'bot' ?>">
-                    <?= e((string) $m['conteudo']) ?>
-
-                    <?php if (!empty($fontes[(int) $m['id']])): ?>
+                <div class="bolha <?= $m['autor_tipo'] === 'usuario' ? 'user' : 'bot' ?>"><span class="bolha-corpo"><?= e((string) $m['conteudo']) ?></span><?php if (!empty($fontes[(int) $m['id']])): ?>
                         <div class="bolha-fontes">
                             <?php foreach ($fontes[(int) $m['id']] as $f): ?>
                                 <?= $f['tipo'] === 'faq' ? 'FAQ' : 'doc' ?>:
@@ -182,15 +177,12 @@ include __DIR__ . '/partials/head.php';
                                 (<?= number_format((float) $f['score'], 3, ',', '.') ?>)<br>
                             <?php endforeach; ?>
                         </div>
-                    <?php endif; ?>
-
-                    <span class="bolha-meta">
+                    <?php endif; ?><span class="bolha-meta">
                         <?= e(date('d/m H:i:s', strtotime((string) $m['criado_em']))) ?>
                         <?php if ($m['autor_tipo'] === 'atendente'): ?> · atendente<?php endif; ?>
                         <?php if ($m['latencia_ms']): ?> · <?= (int) $m['latencia_ms'] ?> ms<?php endif; ?>
                         <?php if ($m['tokens_in']): ?> · <?= (int) $m['tokens_in'] ?>/<?= (int) $m['tokens_out'] ?> tokens<?php endif; ?>
-                    </span>
-                </div>
+                    </span></div>
             <?php endforeach; ?>
         </div>
 

@@ -78,6 +78,15 @@ final class Worker
             $log("{$orfas} conversa(s) devolvida(s) a fila: atendente sem presenca.");
         }
 
+        // Antes de encerrar por inatividade: conversa parada porque o
+        // ATENDENTE nao respondeu nao pode ser tratada como visitante ausente.
+        $mudos = Fila::cobrarAtendentesMudos();
+
+        if (array_sum($mudos) > 0) {
+            $log("atendente sem responder: {$mudos['devolvidas']} conversa(s) devolvida(s) a fila, "
+                . "{$mudos['encerradas']} encerrada(s) sem ninguem disponivel.");
+        }
+
         $inativas = Fila::encerrarInativas();
 
         if (array_sum($inativas) > 0) {

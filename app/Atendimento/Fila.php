@@ -254,8 +254,14 @@ final class Fila
         }
 
         // Nome PUBLICO: este texto vai para o visitante.
-        $nome = self::nomeDoAtendente($atendenteId, publico: true);
-        self::registrarAviso($conversaId, $nome . ' entrou na conversa.');
+        //
+        // Entre asteriscos porque essa e a marcacao que os dois canais
+        // entendem: `formatar_whatsapp()` transforma em <strong> no painel e no
+        // widget, e o WhatsApp faz negrito nativo. Uma escrita, dois destinos.
+        // Asterisco DENTRO do nome sai antes, senao quebra a marcacao e o
+        // visitante ve o simbolo cru.
+        $nome = str_replace(['*', '_', '~'], '', self::nomeDoAtendente($atendenteId, publico: true));
+        self::registrarAviso($conversaId, '*' . $nome . '* entrou na conversa.');
 
         return true;
     }
@@ -489,6 +495,115 @@ final class Fila
      *
      * @return array{avisadas: int, humano: int, bot: int}
      */
+    /**
+     * A conversa está esperando o ATENDENTE, e não o contrário?
+     *
+     * Verdade quando o atendente ainda não falou nada, ou falou antes da última
+     * mensagem do visitante. Não precisa de coluna nova: a própria ordem das
+     * mensagens diz quem deve a resposta.
+     *
+     * Existe porque `encerrarInativas()` mede o silêncio do VISITANTE, e nesse
+     * caso ele não está calado, está esperando. Sem esta distinção o sistema
+     * encerrava a conversa por inatividade de quem não tinha o que fazer além
+     * de aguardar. Aconteceu em teste.
+     */
+    private const ESPERANDO_ATENDENTE = "(
+        SELECT MAX(a.criado_em) FROM mensagens a
+         WHERE a.conversa_id = c.id AND a.autor_tipo = 'atendente'
+    ) IS NULL OR (
+        SELECT MAX(a.criado_em) FROM mensagens a
+         WHERE a.conversa_id = c.id AND a.autor_tipo = 'atendente'
+    ) < (
+        SELECT MAX(u.criado_em) FROM mensagens u
+         WHERE u.conversa_id = c.id AND u.autor_tipo = 'usuario'
+    )";
+
+    /**
+     * Atendente assumiu e não respondeu. Cobra, e depois tira da mão dele.
+     *
+     * O caso é diferente do órfão (`resgatarOrfas`), onde a pessoa sumiu do
+     * painel: aqui ela está online, com a tela aberta, e simplesmente não
+     * respondeu. Do lado de fora as duas situações são idênticas, e o visitante
+     * não tem como saber a diferença.
+     *
+     * Passado o prazo, a conversa volta para a fila se houver outro atendente
+     * disponível, e encerra com a oferta honesta se não houver. Nunca fica
+     * parada esperando alguém que já teve a chance.
+     *
+     * @return array{devolvidas: int, encerradas: int}
+     */
+    public static function cobrarAtendentesMudos(): array
+    {
+        $placar = ['devolvidas' => 0, 'encerradas' => 0];
+
+        if (ESPERA_MAX_MIN <= 0) {
+            return $placar;
+        }
+
+        $pdo = Database::connection();
+
+        // Reaproveita o prazo da fila de propósito: os dois medem a mesma
+        // coisa do ponto de vista de quem espera, que é quanto tempo alguém
+        // fica sem resposta. Dois números diferentes para a mesma experiência
+        // seriam duas coisas para calibrar e nenhuma razão para divergirem.
+        $stmt = $pdo->prepare(
+            "SELECT c.id, c.atendente_id FROM conversas c
+              WHERE c.modo = 'humano'
+                AND c.atendente_id IS NOT NULL
+                AND (" . self::ESPERANDO_ATENDENTE . ")
+                AND (
+                    SELECT MAX(u.criado_em) FROM mensagens u
+                     WHERE u.conversa_id = c.id AND u.autor_tipo = 'usuario'
+                ) < :limite"
+        );
+        $stmt->execute(['limite' => date('Y-m-d H:i:s', time() - (ESPERA_MAX_MIN * 60))]);
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $c) {
+            $id = (int) $c['id'];
+            $atendente = (int) $c['atendente_id'];
+
+            self::registrarNota(
+                $id,
+                $atendente,
+                self::nomeDoAtendente($atendente) . ' assumiu e não respondeu em '
+                    . ESPERA_MAX_MIN . ' minutos. A conversa saiu da fila dele.'
+            );
+
+            // Solta a conversa ANTES de perguntar quem está livre: senão o
+            // próprio atendente mudo contaria como disponível e poderia
+            // receber de volta a conversa que acabou de largar.
+            $pdo->prepare(
+                "UPDATE conversas SET modo = 'aguardando', atendente_id = NULL,
+                        aguardando_desde = :agora, editado_em = :agora
+                 WHERE id = :id AND modo = 'humano'"
+            )->execute(['id' => $id, 'agora' => now()]);
+
+            $outros = array_filter(
+                self::disponiveis(),
+                static fn (array $u): bool => (int) $u['id'] !== $atendente
+            );
+
+            if ($outros !== []) {
+                self::registrarAviso($id, 'Estamos transferindo você para outro atendente. Um instante.');
+                self::avisarAtendentes($id, $outros, 'Conversa devolvida à fila sem resposta.');
+                $placar['devolvidas']++;
+
+                continue;
+            }
+
+            self::devolverAoBot($id, 'expirado');
+            self::registrarBot(
+                $id,
+                'Desculpe a demora. Não consegui falar com um atendente agora. '
+                    . 'Quer que eu registre sua dúvida para alguém retornar? '
+                    . 'Se preferir, é só tentar de novo mais tarde.'
+            );
+            $placar['encerradas']++;
+        }
+
+        return $placar;
+    }
+
     public static function encerrarInativas(): array
     {
         $pdo = Database::connection();
@@ -508,6 +623,11 @@ final class Fila
             $stmt = $pdo->prepare(
                 "SELECT c.id, c.atendente_id FROM conversas c
                   WHERE c.modo = 'humano'
+                    -- Quem deve a resposta e o ATENDENTE: o visitante nao esta
+                    -- sumido, esta esperando. Esse caso e da
+                    -- `cobrarAtendentesMudos()`, e avisar aqui seria dizer ao
+                    -- atendente que o outro lado sumiu quando o silencio e dele.
+                    AND NOT (" . self::ESPERANDO_ATENDENTE . ")
                     AND {$ultimaFala} < :limite
                     -- Não avisa quem o passo 2 vai encerrar logo abaixo: seria
                     -- um bilhete para o atendente sobre uma conversa que fecha
@@ -540,7 +660,13 @@ final class Fila
         // 2. Silêncio longo demais, mesmo em atendimento: encerra e diz por quê.
         if (INATIVIDADE_HUMANO_MIN > 0) {
             $stmt = $pdo->prepare(
-                "SELECT c.id FROM conversas c WHERE c.modo = 'humano' AND {$ultimaFala} < :limite"
+                // Mesma ressalva do passo 1: encerrar aqui puniria quem so
+                // aguarda resposta. Conversa esperando atendente sai pela
+                // `cobrarAtendentesMudos()`, que devolve a fila em vez de fechar.
+                "SELECT c.id FROM conversas c
+                  WHERE c.modo = 'humano'
+                    AND NOT (" . self::ESPERANDO_ATENDENTE . ")
+                    AND {$ultimaFala} < :limite"
             );
             $stmt->execute(['limite' => $limite(INATIVIDADE_HUMANO_MIN)]);
 

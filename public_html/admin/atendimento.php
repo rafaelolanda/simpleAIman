@@ -40,6 +40,7 @@ Fila::baterPonto($eu);
 // momento em que há alguém olhando — não dá para depender só do cron, que em
 // compartilhada pode nem existir.
 Fila::expirarAbandonadas();
+Fila::cobrarAtendentesMudos();
 Fila::encerrarInativas();
 Fila::resgatarOrfas();
 
@@ -503,10 +504,7 @@ include __DIR__ . '/partials/head.php';
                     ?>
                     <div class="msg <?= $classe ?>" data-id="<?= (int) $m['id'] ?>">
                         <div class="msg-texto">
-                            <span class="msg-quem"><?= e($quem) ?></span>
-                            <?= formatar_whatsapp((string) $m['conteudo']) ?>
-                            <?= anexos_html($anexosPorMensagem[(int) $m['id']] ?? []) ?>
-                            <span class="msg-hora"><?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
+                            <span class="msg-quem"><?= e($quem) ?></span><span class="msg-corpo"><?= formatar_whatsapp((string) $m['conteudo']) ?></span><?= anexos_html($anexosPorMensagem[(int) $m['id']] ?? []) ?><span class="msg-hora"><?= e(date('H:i', strtotime((string) $m['criado_em']))) ?></span>
                         </div>
                         <?php if ($m['autor_tipo'] === 'copiloto' && !str_starts_with((string) $m['conteudo'], '❓')): ?>
                             <?php if (!empty($fontes[(int) $m['id']])): ?>
@@ -712,6 +710,7 @@ include __DIR__ . '/partials/head.php';
                     cab.textContent = rotulos[m.quem] || 'Assistente';
 
                     var corpo = document.createElement('span');
+                    corpo.className = 'msg-corpo';
                     // HTML produzido por formatar_whatsapp(), que escapa antes
                     // de formatar. Ver o comentário no endpoint.
                     corpo.innerHTML = m.html;
