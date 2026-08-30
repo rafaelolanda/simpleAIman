@@ -287,10 +287,22 @@ if (($_GET['acao'] ?? '') === 'json') {
 // -------------------------------------------------------------------------
 $fila = Fila::aguardando();
 $minhas = Fila::emAtendimento($eu);
-$outras = array_values(array_filter(
-    Fila::emAtendimento(),
-    static fn (array $c): bool => (int) $c['atendente_id'] !== $eu
-));
+
+// Conversa alheia é dado de terceiro, e curiosidade não é justificativa.
+//
+// Só o administrador vê a lista dos outros. O atendente comum enxerga apenas
+// QUEM está de plantão e com quantas conversas — número, nunca conteúdo. Isso
+// basta para a equipe se distribuir, que era o motivo de mostrar.
+$vejoTudo = ($meuPapel ?? 'atendente') === 'admin';
+
+$outras = $vejoTudo
+    ? array_values(array_filter(
+        Fila::emAtendimento(),
+        static fn (array $c): bool => (int) $c['atendente_id'] !== $eu
+    ))
+    : [];
+
+$plantao = Fila::cargaDosAtendentes($eu);
 
 $conversa = $abrindo > 0 ? Fila::conversa($abrindo) : null;
 $mensagens = [];
@@ -387,60 +399,108 @@ include __DIR__ . '/partials/head.php';
 </div>
 
 <div class="atendimento-grade">
-    <section class="card">
+    <section class="card lista-conversas">
+        <?php
+        // Uma linha de conversa, do mesmo jeito nas tres listas.
+        //
+        // Fechada num closure e nao repetida tres vezes: a diferenca entre elas
+        // e o que se faz ao clicar, nao o que se mostra. Tres copias divergiriam
+        // na primeira correcao de layout.
+        $linha = static function (array $c, string $estado) use ($abrindo): void {
+            $nome = nome_do_contato($c);
+            $av = avatar_do_contato($nome);
+            $zap = ($c['canal_tipo'] ?? '') === 'whatsapp';
+            $previa = trim((string) ($c['ultima'] ?? ''));
+
+            // Prefixo de quem falou por ultimo: sem ele, a previa da resposta do
+            // proprio atendente parece fala do visitante.
+            if ($previa !== '' && ($c['ultima_de'] ?? '') !== 'usuario') {
+                $previa = 'Você: ' . $previa;
+            }
+
+            $quando = $estado === 'fila'
+                ? tempo_relativo((string) ($c['aguardando_desde'] ?? ''))
+                : tempo_relativo((string) ($c['ultima_em'] ?? $c['editado_em'] ?? ''));
+            ?>
+            <div class="conversa-linha <?= $abrindo === (int) $c['id'] ? 'ativa' : '' ?>">
+                <span class="conversa-avatar" style="background: <?= e($av['cor']) ?>"><?= e($av['iniciais']) ?></span>
+                <span class="conversa-corpo">
+                    <span class="conversa-topo">
+                        <strong class="conversa-nome"><?= e($nome) ?></strong>
+                        <span class="conversa-quando"><?= e($quando) ?></span>
+                    </span>
+                    <span class="conversa-previa"><?= e(mb_substr($previa, 0, 90)) ?></span>
+                    <span class="conversa-marcas">
+                        <span class="canal-tag <?= $zap ? 'canal-zap' : 'canal-web' ?>"><?= $zap ? 'WhatsApp' : 'Site' ?></span>
+                        <?php if ($estado === 'outras' && !empty($c['atendente'])): ?>
+                            <span class="tag tag-neutro">com <?= e((string) $c['atendente']) ?></span>
+                        <?php endif; ?>
+                    </span>
+                </span>
+            </div>
+            <?php
+        };
+        ?>
+
         <h2 class="card-title">
-            Na fila
+            Esperando
             <?php if ($fila !== []): ?><span class="nav-badge" id="badge-fila"><?= count($fila) ?></span><?php endif; ?>
         </h2>
 
         <?php if ($fila === []): ?>
             <p class="vazio">Ninguém esperando.</p>
         <?php else: ?>
-            <ul class="fila-lista">
+            <ul class="conversa-lista">
                 <?php foreach ($fila as $c): ?>
-                    <?php $espera = max(0, time() - strtotime((string) $c['aguardando_desde'])); ?>
                     <li>
-                        <?php $zap = ($c['canal_tipo'] ?? '') === 'whatsapp'; ?>
-                        <div class="fila-cabeca">
-                            <strong>#<?= (int) $c['id'] ?></strong>
-                            <span class="canal-tag <?= $zap ? 'canal-zap' : 'canal-web' ?>"
-                                  title="<?= $zap ? e(telefone_legivel((string) ($c['externo_id'] ?? ''))) : 'Chat do site' ?>">
-                                <?= $zap ? '📱 WhatsApp' : '💬 Site' ?>
-                            </span>
-                            <span class="tag <?= $espera > 120 ? 'tag-alerta' : '' ?>">
-                                esperando <?= $espera < 60 ? $espera . 's' : intdiv($espera, 60) . 'min' ?>
-                            </span>
-                        </div>
-                        <p class="fila-previa"><?= e(mb_substr((string) ($c['ultima'] ?? ''), 0, 140)) ?></p>
-                        <form method="post">
+                        <?php // A fila e a UNICA lista com botao: aqui o clique
+                              // assume a conversa, e assumir e uma acao, nao
+                              // navegacao. Um link abriria conversa de outro. ?>
+                        <form method="post" class="conversa-form">
                             <?= csrf_field() ?>
                             <input type="hidden" name="acao" value="assumir">
                             <input type="hidden" name="conversa" value="<?= (int) $c['id'] ?>">
-                            <button type="submit" class="btn btn-primary btn-sm">Assumir</button>
+                            <button type="submit" class="conversa-botao" title="Assumir esta conversa">
+                                <?php $linha($c, 'fila'); ?>
+                                <span class="conversa-acao">Assumir</span>
+                            </button>
                         </form>
                     </li>
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
 
-        <?php if ($minhas !== []): ?>
-            <h3 class="secao-form">Comigo</h3>
-            <ul class="fila-lista">
+        <h3 class="secao-form">Comigo<?= $minhas !== [] ? ' (' . count($minhas) . ')' : '' ?></h3>
+
+        <?php if ($minhas === []): ?>
+            <p class="vazio">Nenhuma conversa sua no momento.</p>
+        <?php else: ?>
+            <ul class="conversa-lista">
                 <?php foreach ($minhas as $c): ?>
-                    <li>
-                        <a href="?c=<?= (int) $c['id'] ?>" class="<?= $abrindo === (int) $c['id'] ? 'ativo' : '' ?>">
-                            <strong>#<?= (int) $c['id'] ?></strong> · <?= (int) $c['msgs'] ?> msgs
-                        </a>
-                    </li>
+                    <li><a href="?c=<?= (int) $c['id'] ?>"><?php $linha($c, 'minhas'); ?></a></li>
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
 
-        <?php if ($outras !== []): ?>
-            <h3 class="secao-form">Com outros</h3>
-            <ul class="fila-lista">
+        <?php if ($vejoTudo && $outras !== []): ?>
+            <h3 class="secao-form">Com outros (<?= count($outras) ?>)</h3>
+            <ul class="conversa-lista">
                 <?php foreach ($outras as $c): ?>
-                    <li><small>#<?= (int) $c['id'] ?> — <?= e((string) $c['atendente']) ?></small></li>
+                    <li><a href="?c=<?= (int) $c['id'] ?>"><?php $linha($c, 'outras'); ?></a></li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+
+        <?php if ($plantao !== []): ?>
+            <h3 class="secao-form">De plantão agora</h3>
+            <?php // So o numero de conversas de cada um. Basta para a equipe se
+                  // distribuir, e nao expoe conversa alheia a quem nao administra. ?>
+            <ul class="plantao-lista">
+                <?php foreach ($plantao as $u): ?>
+                    <li>
+                        <span><?= e($u['nome']) ?><?= $u['eu'] ? ' (você)' : '' ?></span>
+                        <span class="tag tag-neutro"><?= $u['conversas'] ?></span>
+                    </li>
                 <?php endforeach; ?>
             </ul>
         <?php endif; ?>
@@ -456,20 +516,34 @@ include __DIR__ . '/partials/head.php';
                 // Por onde a pessoa está falando muda o que o atendente pode
                 // fazer: no WhatsApp há um telefone e a janela de 24h; no
                 // widget não há nem um nem outra, e quem fecha a aba some.
+                // `nome_do_contato()` ja resolve o telefone quando nao ha nome,
+                // entao a variavel separada virou codigo morto.
                 $ehZap = ($conversa['canal_tipo'] ?? '') === 'whatsapp';
-                $telefone = $ehZap ? telefone_legivel((string) ($conversa['externo_id'] ?? '')) : '';
+                ?>
+                <?php
+                $nomeContato = nome_do_contato($conversa);
+                $avatar = avatar_do_contato($nomeContato);
+
+                // O contato so aparece se ACRESCENTAR alguma coisa. No WhatsApp
+                // sem nome, o proprio titulo ja e o telefone, e repeti-lo
+                // embaixo seria a mesma linha duas vezes.
+                $contatoExtra = trim((string) ($conversa['contato_valor'] ?? ''));
+                $mostraContato = $contatoExtra !== '' && $contatoExtra !== $nomeContato
+                    && telefone_legivel($contatoExtra) !== $nomeContato;
                 ?>
                 <div class="zap-cabecalho">
-                    <span class="zap-avatar"><?= $ehZap ? '📱' : '💬' ?></span>
+                    <span class="conversa-avatar zap-avatar-iniciais" style="background: <?= e($avatar['cor']) ?>">
+                        <?= e($avatar['iniciais']) ?>
+                    </span>
                     <div>
-                        <div class="zap-quem">
-                            <?= $ehZap && $telefone !== '' ? e($telefone) : 'Visitante' ?>
-                            · conversa #<?= (int) $conversa['id'] ?>
-                        </div>
+                        <div class="zap-quem"><?= e($nomeContato) ?></div>
                         <div class="zap-estado">
                             <span class="canal-tag <?= $ehZap ? 'canal-zap' : 'canal-web' ?>">
                                 <?= $ehZap ? 'WhatsApp' : 'Chat do site' ?>
                             </span>
+                            <?php if ($mostraContato): ?>
+                                <span class="zap-contato"><?= e($contatoExtra) ?></span>
+                            <?php endif; ?>
                             <?php if ($conversa['modo'] === 'humano'): ?>
                                 em atendimento com <?= e((string) ($conversa['atendente'] ?? 'você')) ?>
                             <?php elseif ($conversa['modo'] === 'aguardando'): ?>

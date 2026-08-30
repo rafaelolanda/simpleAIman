@@ -1049,3 +1049,135 @@ html.menu-recolhido .btn-recolher { margin: 0; }
 @media (max-width: 900px) {
     .btn-recolher { display: none; }
 }
+
+
+/* ============================================================
+   LISTA DE CONVERSAS (tela de atendimento)
+   ============================================================
+   Por PESSOA, nao por registro. A lista antiga mostrava "#131" e
+   "12 msgs" — numero de linha de banco e contagem, nenhum dos
+   dois ajuda a decidir o que atender primeiro.
+   ============================================================ */
+
+.lista-conversas { overflow-y: auto; max-height: 78vh; }
+
+.conversa-lista,
+.plantao-lista {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+}
+
+.conversa-lista > li { border-bottom: 1px solid var(--border); }
+.conversa-lista > li:last-child { border-bottom: 0; }
+
+/* O <a> e o <button> ficam sem aparencia propria: quem desenha a linha e o
+   `.conversa-linha` dentro deles, para as tres listas ficarem identicas
+   independentemente de a acao ser navegar ou assumir. */
+.conversa-lista a,
+.conversa-botao {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    text-align: left;
+    text-decoration: none;
+    font: inherit;
+    cursor: pointer;
+}
+
+.conversa-form { margin: 0; }
+
+.conversa-linha {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem 0.4rem;
+    border-radius: var(--radius-sm);
+}
+
+.conversa-lista a:hover .conversa-linha,
+.conversa-botao:hover .conversa-linha { background: var(--bg-elevated-2); }
+
+.conversa-linha.ativa { background: var(--bg-elevated-2); }
+
+.conversa-avatar {
+    flex: 0 0 auto;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+/* `min-width: 0` para o texto poder encolher: sem isto o flex se recusa a
+   reduzir o filho abaixo do conteudo e a previa empurra a coluna inteira. */
+.conversa-corpo { flex: 1; min-width: 0; display: block; }
+
+.conversa-topo {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+}
+
+.conversa-nome {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.conversa-quando {
+    flex: 0 0 auto;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.conversa-previa {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.conversa-marcas {
+    display: flex;
+    gap: 0.3rem;
+    margin-top: 0.2rem;
+    flex-wrap: wrap;
+}
+
+.conversa-acao {
+    display: block;
+    padding: 0 0.4rem 0.5rem 3.1rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.plantao-lista > li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.84rem;
+}
+
+/* Avatar de iniciais no cabecalho da conversa aberta. O emoji generico que
+   estava ali era o mesmo em todas, e nao dizia com quem se esta falando. */
+.zap-avatar-iniciais { width: 40px; height: 40px; font-size: 0.85rem; }
+
+.zap-contato { color: var(--zap-secundario); }
