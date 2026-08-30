@@ -197,6 +197,44 @@ final class Fila
         return self::disponiveis($setorId) !== [];
     }
 
+    /**
+     * Quem está de plantão agora e com quantas conversas cada um.
+     *
+     * O NÚMERO, nunca o conteúdo. É o que permite a equipe se distribuir sem
+     * abrir conversa alheia: ver que o colega está com sete e você com uma
+     * muda a decisão de assumir a próxima da fila.
+     *
+     * Esta é a única informação sobre outros atendentes que um atendente comum
+     * enxerga. A lista de conversas dos outros é de administrador — conversa
+     * alheia é dado de terceiro, e a curiosidade não é justificativa.
+     *
+     * @return list<array{id: int, nome: string, conversas: int, eu: bool}>
+     */
+    public static function cargaDosAtendentes(int $euId): array
+    {
+        $stmt = Database::connection()->prepare(
+            "SELECT u.id,
+                    COALESCE(NULLIF(u.nome, ''), u.usuario) AS nome,
+                    (SELECT COUNT(*) FROM conversas c
+                      WHERE c.atendente_id = u.id AND c.modo = 'humano') AS conversas
+               FROM admin_users u
+              WHERE u.atende = 1 AND u.disponivel = 1
+                AND u.visto_em IS NOT NULL AND u.visto_em >= :desde
+              ORDER BY conversas ASC, nome ASC"
+        );
+        $stmt->execute(['desde' => date('Y-m-d H:i:s', time() - PRESENCA_JANELA_SEG)]);
+
+        return array_map(
+            static fn (array $u): array => [
+                'id' => (int) $u['id'],
+                'nome' => (string) $u['nome'],
+                'conversas' => (int) $u['conversas'],
+                'eu' => (int) $u['id'] === $euId,
+            ],
+            $stmt->fetchAll(PDO::FETCH_ASSOC)
+        );
+    }
+
     // -----------------------------------------------------------------
     // Transições
     // -----------------------------------------------------------------
@@ -761,12 +799,16 @@ final class Fila
     public static function aguardando(): array
     {
         return Database::connection()->query(
-            "SELECT c.id, c.aguardando_desde, c.criado_em, c.externo_id, a.nome AS agente,
+            "SELECT c.id, c.aguardando_desde, c.criado_em, a.nome AS agente,
+                    c.contato_nome, c.contato_valor, c.externo_id,
                     ca.tipo AS canal_tipo,
-                    (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs,
                     (SELECT m.conteudo FROM mensagens m
-                      WHERE m.conversa_id = c.id AND m.autor_tipo = 'usuario'
-                      ORDER BY m.id DESC LIMIT 1) AS ultima
+                      WHERE m.conversa_id = c.id AND m.autor_tipo IN ('usuario', 'atendente', 'bot')
+                      ORDER BY m.id DESC LIMIT 1) AS ultima,
+                    (SELECT m.autor_tipo FROM mensagens m
+                      WHERE m.conversa_id = c.id AND m.autor_tipo IN ('usuario', 'atendente', 'bot')
+                      ORDER BY m.id DESC LIMIT 1) AS ultima_de,
+                    (SELECT MAX(m.criado_em) FROM mensagens m WHERE m.conversa_id = c.id) AS ultima_em
              FROM conversas c
              LEFT JOIN agentes a ON a.id = c.agente_id
              LEFT JOIN canais ca ON ca.id = c.canal_id
@@ -780,9 +822,17 @@ final class Fila
     {
         $pdo = Database::connection();
 
-        $sql = "SELECT c.id, c.atendente_id, c.editado_em, c.externo_id, a.nome AS agente,
-                       u.usuario AS atendente, ca.tipo AS canal_tipo,
-                       (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs
+        $sql = "SELECT c.id, c.atendente_id, c.editado_em, a.nome AS agente,
+                       COALESCE(NULLIF(u.nome, ''), u.usuario) AS atendente,
+                       c.contato_nome, c.contato_valor, c.externo_id,
+                       ca.tipo AS canal_tipo,
+                       (SELECT m.conteudo FROM mensagens m
+                         WHERE m.conversa_id = c.id AND m.autor_tipo IN ('usuario', 'atendente', 'bot')
+                         ORDER BY m.id DESC LIMIT 1) AS ultima,
+                       (SELECT m.autor_tipo FROM mensagens m
+                         WHERE m.conversa_id = c.id AND m.autor_tipo IN ('usuario', 'atendente', 'bot')
+                         ORDER BY m.id DESC LIMIT 1) AS ultima_de,
+                       (SELECT MAX(m.criado_em) FROM mensagens m WHERE m.conversa_id = c.id) AS ultima_em
                 FROM conversas c
                 LEFT JOIN agentes a ON a.id = c.agente_id
                 LEFT JOIN admin_users u ON u.id = c.atendente_id

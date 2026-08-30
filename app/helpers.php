@@ -289,6 +289,105 @@ function anexos_html_publico(array $anexos, string $token, string $sessao): stri
 }
 
 /**
+ * Como chamar quem está do outro lado da conversa.
+ *
+ * Ordem de preferência: o nome que ela deu, o telefone formatado, e só então
+ * "Visitante". Nunca o `#131`, que é número de linha de banco e não diz nada a
+ * ninguém — era o que a tela mostrava antes.
+ *
+ * @param array<string, mixed> $conversa
+ */
+function nome_do_contato(array $conversa): string
+{
+    $nome = trim((string) ($conversa['contato_nome'] ?? ''));
+
+    if ($nome !== '') {
+        return $nome;
+    }
+
+    // No WhatsApp o `externo_id` É o telefone; no widget é um identificador de
+    // sessão, que não serve para ninguém ler.
+    if (($conversa['canal_tipo'] ?? '') === 'whatsapp') {
+        $tel = telefone_legivel((string) ($conversa['contato_valor'] ?? $conversa['externo_id'] ?? ''));
+
+        if ($tel !== '') {
+            return $tel;
+        }
+    }
+
+    return 'Visitante';
+}
+
+/**
+ * Iniciais para o avatar, e uma cor estável derivada do nome.
+ *
+ * Não temos foto de ninguém, e um ícone genérico repetido em toda linha não
+ * ajuda a distinguir uma conversa da outra. Duas letras e uma cor resolvem: a
+ * cor sai de um hash do próprio nome, então a mesma pessoa aparece sempre igual
+ * e a lista fica reconhecível de relance.
+ *
+ * @return array{iniciais: string, cor: string}
+ */
+function avatar_do_contato(string $nome): array
+{
+    $limpo = trim(preg_replace('/[^\p{L}\s]+/u', '', $nome) ?? '');
+    $partes = preg_split('/\s+/u', $limpo, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+    if ($partes === []) {
+        // Sem letra nenhuma é o contato que só tem telefone. Os dois últimos
+        // dígitos distinguem uma linha da outra melhor que uma interrogação
+        // repetida em todas.
+        $digitos = preg_replace('/\D+/', '', $nome) ?? '';
+        $iniciais = $digitos !== '' ? mb_substr($digitos, -2) : '?';
+    } elseif (count($partes) === 1) {
+        $iniciais = mb_strtoupper(mb_substr($partes[0], 0, 2));
+    } else {
+        $iniciais = mb_strtoupper(mb_substr($partes[0], 0, 1) . mb_substr((string) end($partes), 0, 1));
+    }
+
+    // Matiz do hash, com saturação e luminosidade fixas: garante contraste com
+    // o texto branco em qualquer nome, sem sortear cor ilegível.
+    $matiz = crc32(mb_strtolower($nome)) % 360;
+
+    return ['iniciais' => $iniciais, 'cor' => 'hsl(' . $matiz . ', 45%, 42%)'];
+}
+
+/**
+ * "agora", "3 min", "2 h", "ontem", "12/08".
+ *
+ * Hora exata numa lista de conversas obriga a pessoa a fazer a conta de quanto
+ * tempo faz — e é a conta, não o horário, que decide o que atender primeiro.
+ */
+function tempo_relativo(?string $quando): string
+{
+    $ts = $quando ? strtotime($quando) : false;
+
+    if ($ts === false) {
+        return '';
+    }
+
+    $seg = time() - $ts;
+
+    if ($seg < 60) {
+        return 'agora';
+    }
+
+    if ($seg < 3600) {
+        return intdiv($seg, 60) . ' min';
+    }
+
+    if ($seg < 86400 && date('d', $ts) === date('d')) {
+        return date('H:i', $ts);
+    }
+
+    if ($seg < 172800) {
+        return 'ontem';
+    }
+
+    return date('d/m', $ts);
+}
+
+/**
  * Telefone em E.164 escrito como gente lê.
  *
  * O WhatsApp entrega `555599544904`; o atendente precisa reconhecer aquilo
