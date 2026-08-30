@@ -957,7 +957,11 @@ final class Fila
             // de 24h; no widget não existe nem um nem outra. Atender os dois
             // como se fossem o mesmo leva a prometer retorno "mais tarde" para
             // quem vai fechar a aba e sumir.
-            'SELECT c.*, a.nome AS agente, u.usuario AS atendente,
+            // Nome de exibição, não o login. O cabeçalho da conversa dizia "em
+            // atendimento com admin" — o usuário de entrada no painel, que é
+            // credencial e não identidade.
+            'SELECT c.*, a.nome AS agente,
+                    COALESCE(NULLIF(u.nome, \'\'), u.usuario) AS atendente,
                     ca.tipo AS canal_tipo, ca.nome AS canal_nome
              FROM conversas c
              LEFT JOIN agentes a ON a.id = c.agente_id

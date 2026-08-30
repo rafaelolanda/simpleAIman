@@ -542,7 +542,12 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
        mensagem de uma linha isso quase dobrava a altura, e uma conversa de
        vinte mensagens ocupava o dobro da tela. Agora a hora flutua no fim do
        texto: cabendo na ultima linha, ela fica ali; nao cabendo, desce
-       sozinha. E o comportamento do proprio WhatsApp. */
+       sozinha. E o comportamento do proprio WhatsApp.
+
+       O `::after` que limpa o float nao e enfeite: elemento flutuante NAO conta
+       para a altura do pai, entao sem ele o balao nao cresce para conter a hora
+       e ela aparece por baixo do fundo, do lado de fora. Foi exatamente o que
+       aconteceu. */
     padding: 0.38rem 0.6rem 0.32rem;
     border-radius: 8px;
     line-height: 1.45;
@@ -563,6 +568,13 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
 .msg-corpo {
     display: block;
     white-space: pre-wrap;
+}
+
+/* Contem o float da hora. Sem isto o balao nao cresce e ela cai para fora. */
+.msg-texto::after {
+    content: '';
+    display: block;
+    clear: both;
 }
 
 .msg-texto strong { font-weight: 700; }
