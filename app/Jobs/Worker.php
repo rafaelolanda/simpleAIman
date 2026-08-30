@@ -344,6 +344,12 @@ final class Worker
         $svc = ChatService::paraAgente($canal->agenteId());
         $conversa = $svc->conversa($canalId, $de, null);
 
+        // O nome do perfil vem em todo evento da Meta e era descartado desde o
+        // primeiro dia: o painel mostrava um numero de telefone onde podia
+        // mostrar gente. O telefone e o proprio `externo_id`, entao no WhatsApp
+        // nao ha nada a perguntar — os dois chegam de graca.
+        ChatService::anotarContato($conversa, (string) ($dados['nome'] ?? ''), $de);
+
         try {
             $tipo = (string) ($dados['tipo'] ?? 'text');
 

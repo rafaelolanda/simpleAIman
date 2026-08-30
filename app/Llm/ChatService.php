@@ -93,6 +93,37 @@ final class ChatService
     }
 
     /**
+     * Anota quem esta do outro lado, sem sobrescrever o que ja se sabe.
+     *
+     * Preenche so o que estiver vazio: no WhatsApp o nome chega no primeiro
+     * evento e nao muda, e no widget a pessoa pode informar depois. Sobrescrever
+     * faria o nome que a pessoa DIGITOU ser trocado pelo do perfil na mensagem
+     * seguinte.
+     */
+    public static function anotarContato(int $conversaId, ?string $nome, ?string $valor): void
+    {
+        $nome = trim((string) $nome);
+        $valor = trim((string) $valor);
+
+        if ($nome === '' && $valor === '') {
+            return;
+        }
+
+        Database::connection()->prepare(
+            "UPDATE conversas
+                SET contato_nome  = CASE WHEN COALESCE(contato_nome, '')  = '' THEN :nome  ELSE contato_nome  END,
+                    contato_valor = CASE WHEN COALESCE(contato_valor, '') = '' THEN :valor ELSE contato_valor END,
+                    editado_em = :agora
+              WHERE id = :id"
+        )->execute([
+            'nome' => $nome !== '' ? mb_substr($nome, 0, 120) : null,
+            'valor' => $valor !== '' ? mb_substr($valor, 0, 120) : null,
+            'agora' => now(),
+            'id' => $conversaId,
+        ]);
+    }
+
+    /**
      * Abre ou recupera a conversa de uma sessão de canal.
      */
     public function conversa(?int $canalId, string $externoId, ?string $ip = null): int

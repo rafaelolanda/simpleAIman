@@ -496,6 +496,65 @@ final class Fila
      * @return array{avisadas: int, humano: int, bot: int}
      */
     /**
+     * Aproveita o que a pessoa escreveu enquanto esperava na fila.
+     *
+     * Chamado só para conversa que NÃO está sendo respondida pelo assistente,
+     * ou seja, quem está aguardando atendente. Nesse ponto ela acabou de ser
+     * convidada a se identificar: pelo roteador, junto da confirmação da
+     * transferência, ou pela ferramenta, no modo com IA.
+     *
+     * **O convite é o que torna a captação legítima.** Extrair e-mail de
+     * qualquer mensagem porque tem formato de e-mail seria coletar dado pessoal
+     * sem pedir, e este projeto já decidiu não fazer isso. Por isso a função
+     * também só preenche o que ainda está vazio: quem já se identificou não é
+     * reinterpretado a cada frase.
+     *
+     * O nome é o que sobra depois de tirar o contato e as palavras de ligação.
+     * Reconhecer nome próprio de verdade exigiria modelo, e aqui não há um —
+     * este caminho existe justamente para funcionar quando o provedor caiu.
+     */
+    public static function anotarContatoDeEspera(int $conversaId, string $texto): void
+    {
+        $stmt = Database::connection()->prepare(
+            "SELECT COALESCE(contato_nome, '') n, COALESCE(contato_valor, '') v
+               FROM conversas WHERE id = :id"
+        );
+        $stmt->execute(['id' => $conversaId]);
+        $atual = $stmt->fetch(PDO::FETCH_ASSOC) ?: ['n' => '', 'v' => ''];
+
+        if ($atual['n'] !== '' && $atual['v'] !== '') {
+            return;
+        }
+
+        $valor = '';
+
+        if (preg_match('/[\w.+-]+@[\w-]+\.[\w.-]{2,}/u', $texto, $m) === 1) {
+            $valor = $m[0];
+        } elseif (preg_match('/(?:\+?\d[\d\s().-]{8,}\d)/u', $texto, $m) === 1) {
+            $valor = trim($m[0]);
+        }
+
+        // Tira o contato encontrado e as ligações mais comuns; o que restar,
+        // curto e sem dígito, tem chance razoável de ser o nome.
+        $nome = $valor !== '' ? str_replace($valor, ' ', $texto) : $texto;
+        $nome = preg_replace('/\b(meu|nome|e|é|eh|sou|o|a|telefone|celular|email|e-mail|contato|fone)\b/iu', ' ', $nome) ?? $nome;
+        $nome = trim(preg_replace('/[^\p{L}\s]+/u', ' ', $nome) ?? '');
+        $nome = preg_replace('/\s+/u', ' ', $nome) ?? '';
+
+        // Frase longa não é nome: é a pessoa continuando a contar o problema.
+        if ($nome === '' || mb_strlen($nome) > 40 || str_word_count($nome, 0, 'áàâãéêíóôõúüçÁÀÂÃÉÊÍÓÔÕÚÜÇ') > 4) {
+            $nome = '';
+        }
+
+        self::registrarContatoAnotado($conversaId, $nome, $valor);
+    }
+
+    private static function registrarContatoAnotado(int $conversaId, string $nome, string $valor): void
+    {
+        \SimpleAIman\Llm\ChatService::anotarContato($conversaId, $nome, $valor);
+    }
+
+    /**
      * A conversa está esperando o ATENDENTE, e não o contrário?
      *
      * Verdade quando o atendente ainda não falou nada, ou falou antes da última

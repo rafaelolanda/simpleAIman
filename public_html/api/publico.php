@@ -245,6 +245,16 @@ try {
     // por cima do atendente.
     if (!$svc->botDeveResponder($conversa)) {
         $svc->gravarMensagem($conversa, 'usuario', $pergunta);
+
+        // Quem espera na fila e acabou de ser convidado a se identificar: o que
+        // ele escrever agora pode ser o nome e o contato.
+        //
+        // A captacao so acontece porque o CONVITE foi feito — no modo roteador,
+        // junto da confirmacao da transferencia; no modo IA, pela ferramenta.
+        // Extrair de qualquer mensagem seria coletar dado pessoal sem pedir, o
+        // que este projeto ja decidiu nao fazer.
+        \SimpleAIman\Atendimento\Fila::anotarContatoDeEspera($conversa, $pergunta);
+
         Sse::evento('fim', ['latencia' => 0, 'modo' => 'humano']);
         exit;
     }

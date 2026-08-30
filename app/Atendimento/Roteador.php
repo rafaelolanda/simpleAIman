@@ -223,7 +223,19 @@ final class Roteador
         $resultado = Fila::solicitar($conversaId, null, 'Pedido pelo menu de atendimento');
 
         if ($resultado['transferido']) {
-            return 'Certo! Estou chamando um atendente. Aguarde um instante nesta janela, por favor.';
+            // O convite vai JUNTO da confirmacao, e nao numa pergunta separada.
+            //
+            // O roteador nao guarda estado de proposito: "em que passo a pessoa
+            // esta" quebra assim que ela digita fora de ordem. Perguntar o nome
+            // numa mensagem e esperar a resposta na seguinte seria exatamente
+            // esse estado. Convidando aqui, quem quiser responde na mensagem
+            // seguinte e a captacao passa a ser legitima — a permissao vem do
+            // convite, nao do formato do texto.
+            return "Certo! Estou chamando um atendente. Aguarde um instante nesta janela, por favor.
+
+"
+                . 'Se quiser, me diga seu nome e um telefone ou e-mail para retorno, '
+                . 'caso a conversa caia.';
         }
 
         // Ninguém disponível. A mesma regra de sempre: não se promete o que

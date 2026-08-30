@@ -89,6 +89,7 @@ garantir_colunas($pdo, 'config', ['anonimizacao_conversas_dias' => 'INTEGER NOT 
 garantir_colunas($pdo, 'canais', ['retencao_dias' => 'INTEGER NOT NULL DEFAULT 0']);
 garantir_colunas($pdo, 'conversas', ['anonimizada_em' => 'TEXT', 'expurgada_em' => 'TEXT']);
 garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
+garantir_colunas($pdo, 'conversas', ['contato_nome' => 'TEXT', 'contato_valor' => 'TEXT']);
 
 // ---------------------------------------------------------------------
 // Remocoes

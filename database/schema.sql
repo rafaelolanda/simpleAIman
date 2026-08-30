@@ -578,6 +578,17 @@ CREATE TABLE IF NOT EXISTS conversas (
     agente_id           INTEGER REFERENCES agentes (id) ON DELETE SET NULL,
     externo_id          TEXT,
     titulo              TEXT,
+    -- Quem esta do outro lado, para o atendente saber com quem fala.
+    --
+    -- No WhatsApp os dois chegam de graca: o nome vem no perfil do evento e o
+    -- `externo_id` E o telefone. No widget nao ha identidade nenhuma, entao o
+    -- agente PEDE antes de transferir — e transfere mesmo sem, porque recusar
+    -- atendimento por falta de cadastro seria erguer uma barreira justamente
+    -- onde a pessoa ja pediu ajuda.
+    --
+    -- Sao dado pessoal: a anonimizacao e o expurgo limpam os dois.
+    contato_nome        TEXT,
+    contato_valor       TEXT,                            -- telefone ou e-mail
     -- modo = humano CALA O BOT: mensagem que chega é gravada mas não vai para
     -- a LLM. Um if, mas é a feature inteira do Nível 2.
     modo                TEXT NOT NULL DEFAULT 'bot',    -- bot|aguardando|humano|encerrada

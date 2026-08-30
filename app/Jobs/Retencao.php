@@ -107,8 +107,13 @@ final class Retencao
             $arquivos += Anexos::apagarDaConversa($conversaId);
 
             // O IP também identifica. Some junto.
-            $pdo->prepare('UPDATE conversas SET ip = NULL, anonimizada_em = :agora WHERE id = :id')
-                ->execute(['agora' => now(), 'id' => $conversaId]);
+            // Nome e contato de quem conversou identificam mais que o IP, e
+            // nao ha como mascara-los pela metade: um nome com asteriscos no
+            // meio nao serve a analise nenhuma e continua identificando.
+            $pdo->prepare(
+                'UPDATE conversas SET ip = NULL, contato_nome = NULL, contato_valor = NULL,
+                        anonimizada_em = :agora WHERE id = :id'
+            )->execute(['agora' => now(), 'id' => $conversaId]);
         }
 
         $log(count($ids) . ' conversa(s) anonimizada(s)'
@@ -156,8 +161,10 @@ final class Retencao
             // resposta a um titular seria falsa.
             $arquivos += Anexos::apagarDaConversa($conversaId);
 
-            $pdo->prepare('UPDATE conversas SET ip = NULL, expurgada_em = :agora WHERE id = :id')
-                ->execute(['agora' => now(), 'id' => $conversaId]);
+            $pdo->prepare(
+                'UPDATE conversas SET ip = NULL, contato_nome = NULL, contato_valor = NULL,
+                        expurgada_em = :agora WHERE id = :id'
+            )->execute(['agora' => now(), 'id' => $conversaId]);
 
             // Parâmetros de ferramenta também carregam o que a pessoa disse.
             $pdo->prepare(
@@ -290,6 +297,19 @@ final class Retencao
             $valores['externo'] = $digitos;
         }
 
+        // O contato anotado na conversa tambem identifica, e nao aparece em
+        // mensagem nenhuma: no WhatsApp ele vem do perfil, e no widget foi
+        // digitado numa frase que a anonimizacao ja pode ter mascarado. Sem
+        // esta condicao, o titular que pede exclusao pelo proprio telefone nao
+        // acharia a conversa onde ele e justamente o contato.
+        $condicoes[] = "COALESCE(c.contato_valor, '') <> '' AND (
+            LOWER(c.contato_valor) = LOWER(:contatoExato)
+            OR REPLACE(REPLACE(REPLACE(REPLACE(c.contato_valor,
+               '(',''),')',''),'-',''),' ','') = :contatoDigitos
+        )";
+        $valores['contatoExato'] = $identificador;
+        $valores['contatoDigitos'] = $digitos !== '' ? $digitos : '__sem_digitos__';
+
         if (strlen($digitos) >= 8) {
             // Abaixo de 8 digitos a busca deixa de identificar alguem e passa
             // a varrer numero solto no meio de frase.
@@ -352,8 +372,9 @@ final class Retencao
             // `externo_id` some junto: no WhatsApp ele É o telefone, e mantê-lo
             // conservaria justamente o identificador que se pediu para apagar.
             $pdo->prepare(
-                'UPDATE conversas SET ip = NULL, externo_id = NULL, expurgada_em = :agora,
-                        anonimizada_em = :agora WHERE id = :id'
+                'UPDATE conversas SET ip = NULL, externo_id = NULL,
+                        contato_nome = NULL, contato_valor = NULL,
+                        expurgada_em = :agora, anonimizada_em = :agora WHERE id = :id'
             )->execute(['agora' => now(), 'id' => $conversaId]);
 
             $pdo->prepare("UPDATE chamados SET contato = '[apagado]', descricao = NULL WHERE conversa_id = :c")

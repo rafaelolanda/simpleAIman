@@ -32,6 +32,20 @@ final class AtendimentoTool
         $setorId = $this->setorDe($parametros['setor'] ?? null);
         $motivo = trim((string) ($parametros['motivo'] ?? ''));
 
+        // Quem esta do outro lado, para o atendente nao abrir a conversa vendo
+        // so um numero. Anotado ANTES de transferir: dando errado a transferencia,
+        // o dado ja coletado nao se perde, e serve ao chamado que vem a seguir.
+        //
+        // Os dois sao opcionais de proposito. Recusar atendimento a quem nao quis
+        // se identificar seria erguer uma barreira justamente onde a pessoa ja
+        // pediu ajuda — e no WhatsApp nem faz sentido perguntar, porque nome e
+        // telefone ja chegaram no evento.
+        \SimpleAIman\Llm\ChatService::anotarContato(
+            $this->conversaId,
+            (string) ($parametros['nome'] ?? ''),
+            (string) ($parametros['contato'] ?? '')
+        );
+
         $resultado = Fila::solicitar($this->conversaId, $setorId, $motivo);
 
         if ($resultado['transferido']) {
