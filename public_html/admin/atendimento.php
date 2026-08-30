@@ -357,46 +357,44 @@ $disponiveis = Fila::disponiveis();
 include __DIR__ . '/partials/head.php';
 ?>
 
-<div class="page-header">
+<div class="page-header atendimento-cabeca">
     <h1>Atendimento</h1>
-    <p class="page-sub">
-        Conversas transferidas pelo assistente. Enquanto você atende, o bot fica em silêncio.
-    </p>
-</div>
 
-<?php if (empty($souAtendente['atende'])): ?>
-    <div class="card">
-        <p class="alerta alerta-aviso">
-            Você não está marcado como atendente. Peça a um administrador para habilitar isso em
-            <strong>Usuários</strong> — sem essa marca você não recebe transferências.
-        </p>
-    </div>
-<?php endif; ?>
-
-<div class="card atendimento-topo">
-    <form method="post" style="margin:0">
+    <?php
+    // O botao de disponibilidade vive AQUI, na linha do titulo.
+    //
+    // Antes era um cartao inteiro logo abaixo, com o botao e tres linhas de
+    // texto de ajuda. Numa tela onde o espaco vertical vira linha de conversa
+    // visivel, um cartao inteiro para um interruptor sai caro. A explicacao foi
+    // para o `title` e para a tela de Como usar, que existe para isso.
+    ?>
+    <form method="post" class="atendimento-presenca">
         <?= csrf_field() ?>
         <input type="hidden" name="acao" value="disponibilidade">
-        <button type="submit" class="btn <?= !empty($souAtendente['disponivel']) ? 'btn-primary' : 'btn-secondary' ?>"
-                <?= empty($souAtendente['atende']) ? 'disabled' : '' ?>>
+        <button type="submit"
+                class="btn btn-sm <?= !empty($souAtendente['disponivel']) ? 'btn-primary' : 'btn-secondary' ?>"
+                <?= empty($souAtendente['atende']) ? 'disabled' : '' ?>
+                title="<?= !empty($souAtendente['disponivel'])
+                    ? 'Você recebe transferências. Vale só com esta tela aberta.'
+                    : 'Você não recebe transferências agora.' ?>">
             <?= !empty($souAtendente['disponivel']) ? '● Disponível' : '○ Ausente' ?>
         </button>
     </form>
-    <p class="atendimento-nota">
-        <?php if ($disponiveis === []): ?>
-            <strong>Ninguém disponível agora.</strong> O agente não vai oferecer transferência —
-            ele cai em registrar chamado, que funciona fora do horário.
-        <?php else: ?>
-            <?= count($disponiveis) ?> pessoa(s) disponível(is) neste momento.
-        <?php endif; ?>
-        <br>
-        <small>
-            Você só conta como disponível <strong>com esta tela aberta</strong>. Ao fechar,
-            some da fila sozinho em <?= (int) round(PRESENCA_JANELA_SEG / 60) ?> minuto(s) —
-            e conversa sua que ficar parada volta para a fila em <?= (int) PRESENCA_ORFA_MIN ?>.
-        </small>
-    </p>
 </div>
+
+<?php if (empty($souAtendente['atende'])): ?>
+    <p class="alerta alerta-aviso" style="margin-bottom:1rem">
+        Você não está marcado como atendente. Peça a um administrador para habilitar isso em
+        <strong>Usuários</strong> — sem essa marca você não recebe transferências.
+    </p>
+<?php elseif ($disponiveis === []): ?>
+    <?php // So aparece quando ha consequencia: ninguem de plantao significa que
+          // o agente para de oferecer transferencia a quem pedir. ?>
+    <p class="alerta alerta-aviso" style="margin-bottom:1rem">
+        <strong>Ninguém disponível agora.</strong> O agente não vai oferecer transferência —
+        ele cai em registrar chamado, que funciona fora do horário.
+    </p>
+<?php endif; ?>
 
 <div class="atendimento-grade">
     <section class="card lista-conversas">
@@ -470,7 +468,7 @@ include __DIR__ . '/partials/head.php';
             </ul>
         <?php endif; ?>
 
-        <h3 class="secao-form">Comigo<?= $minhas !== [] ? ' (' . count($minhas) . ')' : '' ?></h3>
+        <h3 class="secao-form">Meus atendimentos<?= $minhas !== [] ? ' (' . count($minhas) . ')' : '' ?></h3>
 
         <?php if ($minhas === []): ?>
             <p class="vazio">Nenhuma conversa sua no momento.</p>
@@ -483,7 +481,7 @@ include __DIR__ . '/partials/head.php';
         <?php endif; ?>
 
         <?php if ($vejoTudo && $outras !== []): ?>
-            <h3 class="secao-form">Com outros (<?= count($outras) ?>)</h3>
+            <h3 class="secao-form">Conversas de outros (<?= count($outras) ?>)</h3>
             <ul class="conversa-lista">
                 <?php foreach ($outras as $c): ?>
                     <li><a href="?c=<?= (int) $c['id'] ?>"><?php $linha($c, 'outras'); ?></a></li>
@@ -491,15 +489,20 @@ include __DIR__ . '/partials/head.php';
             </ul>
         <?php endif; ?>
 
-        <?php if ($plantao !== []): ?>
-            <h3 class="secao-form">De plantão agora</h3>
+        <?php
+        // Voce sai da lista: o titulo diz "outros", e a sua propria contagem ja
+        // esta no titulo de "Meus atendimentos" logo acima.
+        $outrosAtendentes = array_values(array_filter($plantao, static fn (array $u): bool => !$u['eu']));
+        ?>
+        <?php if ($outrosAtendentes !== []): ?>
+            <h3 class="secao-form">Outros atendentes</h3>
             <?php // So o numero de conversas de cada um. Basta para a equipe se
                   // distribuir, e nao expoe conversa alheia a quem nao administra. ?>
             <ul class="plantao-lista">
-                <?php foreach ($plantao as $u): ?>
+                <?php foreach ($outrosAtendentes as $u): ?>
                     <li>
-                        <span><?= e($u['nome']) ?><?= $u['eu'] ? ' (você)' : '' ?></span>
-                        <span class="tag tag-neutro"><?= $u['conversas'] ?></span>
+                        <span><?= e($u['nome']) ?></span>
+                        <span class="tag tag-neutro" title="conversas em atendimento"><?= $u['conversas'] ?></span>
                     </li>
                 <?php endforeach; ?>
             </ul>

@@ -402,20 +402,6 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
    Atendimento humano (handoff Nível 2)
    ============================================================== */
 
-.atendimento-topo {
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-
-.atendimento-nota {
-    margin: 0;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    flex: 1 1 320px;
-}
-
 .atendimento-grade {
     display: grid;
     grid-template-columns: minmax(240px, 320px) 1fr;
@@ -1026,6 +1012,23 @@ td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center
     }
 
     html.menu-recolhido .admin-brand { justify-content: center; }
+
+    /* Aperta a faixa para ela raramente precisar rolar.
+       Sem os rotulos e sem os titulos de grupo, o que sobra e uma coluna de
+       icones — e ai a folga generosa do menu largo vira altura desperdicada. */
+    html.menu-recolhido .admin-sidebar { gap: 0.9rem; }
+    html.menu-recolhido .admin-nav { gap: 0.1rem; }
+
+    /* A BARRA DE ROLAGEM SOME, a rolagem fica.
+       Numa faixa de 64px a barra ocupa cerca de 15px: um quarto da largura,
+       sobre um icone que tem 20. A roda do mouse, o teclado e o foco continuam
+       rolando normalmente — o que sai e a barra, nao a capacidade. */
+    html.menu-recolhido .admin-nav {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    html.menu-recolhido .admin-nav::-webkit-scrollbar { width: 0; height: 0; }
 }
 
 .btn-recolher {
@@ -1181,3 +1184,68 @@ html.menu-recolhido .btn-recolher { margin: 0; }
 .zap-avatar-iniciais { width: 40px; height: 40px; font-size: 0.85rem; }
 
 .zap-contato { color: var(--zap-secundario); }
+
+
+/* ============================================================
+   CABECALHO DA TELA DE ATENDIMENTO
+   ============================================================
+   Titulo e interruptor de disponibilidade na mesma linha. Antes o
+   interruptor tinha um cartao so para ele, com tres linhas de
+   ajuda — e nesta tela cada centimetro vertical e uma linha de
+   conversa que deixa de aparecer.
+   ============================================================ */
+
+.atendimento-cabeca {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+}
+
+.atendimento-cabeca h1 { margin: 0; }
+.atendimento-presenca { margin: 0; }
+
+/* Respiro entre as tres listas.
+   "Esperando" e "Meus atendimentos" estavam colados, e a fila e justamente a
+   parte que precisa saltar aos olhos. */
+.lista-conversas .secao-form {
+    margin: 1.4rem 0 0.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+}
+
+/* O titulo da fila nao leva borda: e o primeiro, e uma linha acima dele so
+   separaria do nada. */
+.lista-conversas > .card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+/* A CONVERSA OCUPA A ALTURA DISPONIVEL.
+   Altura fixa em `vh` desperdicava tela em monitor alto e cortava em tela
+   baixa. `calc` desconta o cabecalho da pagina e as margens, e o corpo da
+   conversa fica com o resto. */
+.atendimento-grade { align-items: stretch; }
+
+.zap {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 11rem);
+    min-height: 420px;
+}
+
+.zap-corpo { max-height: none; flex: 1 1 auto; }
+
+.lista-conversas { max-height: calc(100vh - 11rem); }
