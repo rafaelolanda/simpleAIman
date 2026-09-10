@@ -94,6 +94,11 @@ garantir_colunas($pdo, 'conversas', ['contato_nome' => 'TEXT', 'contato_valor' =
 // Papel do provedor e padroes por universo. Ver os comentarios no schema: a
 // migracao precisa CLASSIFICAR o que ja existe, nao so criar a coluna vazia.
 garantir_colunas($pdo, 'provedores', ['papel' => "TEXT NOT NULL DEFAULT 'ambos'"]);
+
+// Correlacao por turno. A tabela `turnos` nasce pelo schema.sql; estas duas
+// colunas sao em tabelas que ja existiam.
+garantir_colunas($pdo, 'mensagens', ['trace_id' => 'TEXT']);
+garantir_colunas($pdo, 'ferramenta_execucoes', ['trace_id' => 'TEXT']);
 garantir_colunas($pdo, 'config', [
     'provedor_chat_padrao_id' => 'INTEGER',
     'provedor_embedding_padrao_id' => 'INTEGER',

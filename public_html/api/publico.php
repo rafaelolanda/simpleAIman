@@ -259,6 +259,8 @@ try {
         exit;
     }
 
+    \Turno::iniciar('widget');
+
     $resposta = '';
 
     foreach ($svc->stream($conversa, $pergunta) as $pedaco) {
@@ -285,9 +287,9 @@ try {
         'html' => formatar_whatsapp($resposta),
     ]);
 } catch (ErroAgente $e) {
-    error_log('[simpleAIman] publico: ' . $e->paraLog());
+    \Log::erro('publico_falhou', ['codigo' => $e->codigo, 'detalhe' => $e->paraLog()]);
     Sse::evento('erro', ['mensagem' => $e->mensagemPublica()]);
 } catch (Throwable $e) {
-    error_log('[simpleAIman] publico inesperado: ' . $e->getMessage());
+    \Log::erro('publico_inesperado', ['erro' => $e->getMessage()]);
     Sse::evento('erro', ['mensagem' => 'Não consegui responder agora. Quer que eu registre sua dúvida para alguém retornar?']);
 }

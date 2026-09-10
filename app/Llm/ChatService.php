@@ -86,6 +86,27 @@ final class ChatService
         return $this->fabrica;
     }
 
+    /**
+     * Garante um turno aberto para este atendimento.
+     *
+     * Quem conhece o canal (a rota do widget, o worker do WhatsApp) abre antes
+     * e passa o nome certo; aqui so se completa o contexto. Quando ninguem
+     * abriu — chamada pela API, teste pelo painel — abre-se com `api`, porque
+     * turno sem id e o caso que a fase de correlacao existe para eliminar.
+     */
+    private function abrirTurno(int $conversaId): void
+    {
+        $campos = ['agente_id' => (int) $this->agente['id'], 'conversa_id' => $conversaId];
+
+        if (\Turno::ativo()) {
+            \Turno::definir($campos);
+
+            return;
+        }
+
+        \Turno::iniciar('api', $campos['agente_id'], $conversaId);
+    }
+
     /** @return array<string, mixed> */
     public function agente(): array
     {
@@ -200,14 +221,15 @@ final class ChatService
         $pdo = Database::connection();
 
         $pdo->prepare(
-            'INSERT INTO mensagens (conversa_id, autor_tipo, autor_id, conteudo, latencia_ms, externo_id, criado_em)
-             VALUES (:conversa, :autor_tipo, :autor_id, :conteudo, :latencia, :externo, :agora)'
+            'INSERT INTO mensagens (conversa_id, autor_tipo, autor_id, conteudo, latencia_ms, externo_id, trace_id, criado_em)
+             VALUES (:conversa, :autor_tipo, :autor_id, :conteudo, :latencia, :externo, :trace, :agora)'
         )->execute([
             'conversa' => $conversaId,
             'autor_tipo' => $autorTipo,
             'autor_id' => $autorId,
             'conteudo' => $conteudo,
             'latencia' => $latenciaMs,
+            'trace' => \Turno::id(),
             // String vazia viraria valor repetido sob o índice único — só NULL
             // fica de fora dele.
             'externo' => ($externoId !== null && $externoId !== '') ? $externoId : null,
@@ -337,6 +359,15 @@ final class ChatService
 
         $agenteId = (int) $this->agente['id'];
 
+        // Do lado de dentro da chamada ao modelo so o Neuron enxerga. Ver
+        // ObservadorNeuron.
+        ObservadorNeuron::ligar();
+
+        \Turno::definir([
+            'provedor_id' => ((int) ($this->agente['provedor_id'] ?? 0)) ?: null,
+            'modelo' => trim((string) ($this->agente['modelo'] ?? '')) ?: $this->fabrica()->modeloChat(),
+        ]);
+
         // O agente só pode oferecer encaminhamento se tiver a ferramenta
         // ligada. É o que impede a promessa falsa: enquanto a capacidade nao
         // existir de fato, o prompt proibe menciona-la.
@@ -395,7 +426,7 @@ final class ChatService
             );
         } catch (Throwable $e) {
             // Falha aqui não pode custar o turno: segue pelo RAG.
-            error_log('[simpleAIman] busca na FAQ falhou: ' . $e->getMessage());
+            \Log::erro('faq_busca_falhou', ['erro' => $e->getMessage()]);
 
             return null;
         }
@@ -426,6 +457,10 @@ final class ChatService
         ]];
 
         Metrics::log('faq_direta', (int) $this->agente['id']);
+
+        // Caminho que NAO chama o modelo. Separa-lo e o que permite ver quanto
+        // do atendimento sai sem custo de inferencia.
+        \Turno::definir(['caminho' => 'faq', 'mensagem_id' => $id]);
 
         return $achada['resposta'];
     }
@@ -487,7 +522,7 @@ final class ChatService
                 ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
                 ->embedText($pergunta);
         } catch (Throwable $e) {
-            error_log('[simpleAIman] embedding da pergunta falhou: ' . $e->getMessage());
+            \Log::erro('embedding_pergunta_falhou', ['erro' => $e->getMessage()]);
 
             return null;
         }
@@ -535,7 +570,15 @@ final class ChatService
                 $this->vetorDaPergunta($pergunta),
             );
 
+            // `tempoBusca` era gravado aqui e nunca lido por ninguem — campo
+            // morto, do tipo que o migrate.php chama de "botao que mente". O
+            // Retriever ja media embedding, vetorial e lexical em ms; faltava
+            // alguem levar isso adiante.
             $this->tempoBusca = $retriever->tempos;
+
+            \Turno::somar('embedding', $retriever->tempos['embedding'] ?? 0.0);
+            \Turno::somar('busca', ($retriever->tempos['total'] ?? 0.0) - ($retriever->tempos['embedding'] ?? 0.0));
+            \Turno::contar('trechos', count($trechos));
 
             // A melhor nota rente ao piso significa que nada casou de fato: a
             // busca devolveu os trechos menos distantes, não os relacionados.
@@ -548,7 +591,7 @@ final class ChatService
 
             return $trechos;
         } catch (Throwable $e) {
-            error_log('[simpleAIman] recuperação falhou: ' . $e->getMessage());
+            \Log::erro('recuperacao_falhou', ['erro' => $e->getMessage()]);
 
             return [];
         }
@@ -607,6 +650,11 @@ final class ChatService
             'saida' => $uso->outputTokens + $uso->reasoningTokens,
             'id' => $mensagemId,
         ]);
+
+        \Turno::definir([
+            'tokens_in' => $uso->inputTokens,
+            'tokens_out' => $uso->outputTokens + $uso->reasoningTokens,
+        ]);
     }
 
     /**
@@ -623,6 +671,7 @@ final class ChatService
     public function responder(int $conversaId, string $pergunta, ?string $externoId = null): string
     {
         $inicio = microtime(true);
+        $this->abrirTurno($conversaId);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta, null, null, $externoId);
 
 
@@ -635,7 +684,10 @@ final class ChatService
         // material sem relação. Agora as duas modalidades entendem o mesmo.
         if (Roteador::temMenu() && ($comando = Roteador::comandoDeNavegacao($pergunta)) !== null) {
             $texto = Roteador::responder($conversaId, $comando);
-            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+            $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+            \Turno::definir(['caminho' => 'roteador']);
+            \Turno::finalizar('ok', $id);
 
             return $texto;
         }
@@ -645,6 +697,8 @@ final class ChatService
         $curada = $this->faqDireta($conversaId, $pergunta, $inicio);
 
         if ($curada !== null) {
+            \Turno::finalizar('ok');
+
             return $curada;
         }
 
@@ -661,10 +715,12 @@ final class ChatService
             }
         } catch (ErroAgente $e) {
             $this->registrarFalha($conversaId, $e);
+            \Turno::finalizar('erro');
             throw $e;
         } catch (Throwable $e) {
             $erro = ErroAgente::deProvedor($e, 'chat');
             $this->registrarFalha($conversaId, $erro);
+            \Turno::finalizar('erro');
             throw $erro;
         }
 
@@ -676,6 +732,9 @@ final class ChatService
         $this->gravarUso($id, $resposta);
 
         $this->ultimasFontes = (new PromptBuilder())->fontesCitadas($texto, $trechos);
+
+        \Turno::definir(['caminho' => 'rag']);
+        \Turno::finalizar('ok', $id);
 
         return $texto;
     }
@@ -707,6 +766,19 @@ final class ChatService
     public function consultar(int $conversaId, string $pergunta, int $atendenteId): array
     {
         $inicio = microtime(true);
+
+        // Canal proprio: consulta de atendente nao e atendimento, e misturar
+        // as duas na mesma metrica esconde as duas. O copiloto tem volume,
+        // latencia e taxa de falha diferentes.
+        \Turno::iniciar('copiloto', (int) $this->agente['id'], $conversaId);
+        \Turno::definir([
+            'caminho' => 'rag',
+            'provedor_id' => ((int) ($this->agente['provedor_id'] ?? 0)) ?: null,
+            'modelo' => trim((string) ($this->agente['modelo'] ?? '')) ?: $this->fabrica()->modeloChat(),
+        ]);
+
+        ObservadorNeuron::ligar();
+
         $trechos = $this->recuperar($pergunta);
 
         // O tom do agente é feito para o visitante — inclusive o sotaque, se
@@ -755,10 +827,12 @@ final class ChatService
             }
         } catch (ErroAgente $e) {
             $this->registrarFalha($conversaId, $e);
+            \Turno::finalizar('erro');
             throw $e;
         } catch (Throwable $e) {
             $erro = ErroAgente::deProvedor($e, 'copiloto');
             $this->registrarFalha($conversaId, $erro);
+            \Turno::finalizar('erro');
             throw $erro;
         }
 
@@ -772,6 +846,8 @@ final class ChatService
         );
 
         $this->gravarFontes($id, $trechos);
+
+        \Turno::finalizar('ok', $id);
 
         return [
             'texto' => $texto,
@@ -845,6 +921,7 @@ _" . implode(' ', $avisos) . '_';
     public function stream(int $conversaId, string $pergunta): Generator
     {
         $inicio = microtime(true);
+        $this->abrirTurno($conversaId);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta);
 
         // Agente em modo roteador não toca no provedor: menu de setores,
@@ -852,7 +929,11 @@ _" . implode(' ', $avisos) . '_';
         // sentido aqui — sem chave de API, nada disso existe.
         if (($this->agente['modo'] ?? 'ia') === 'roteador') {
             $texto = Roteador::responder($conversaId, $pergunta);
-            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+            $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+            \Turno::definir(['caminho' => 'roteador']);
+            \Turno::finalizar('ok', $id);
+
             yield $texto;
 
             return;
@@ -868,7 +949,10 @@ _" . implode(' ', $avisos) . '_';
         // material sem relação. Agora as duas modalidades entendem o mesmo.
         if (Roteador::temMenu() && ($comando = Roteador::comandoDeNavegacao($pergunta)) !== null) {
             $texto = Roteador::responder($conversaId, $comando);
-            $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+            $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+            \Turno::definir(['caminho' => 'roteador']);
+            \Turno::finalizar('ok', $id);
 
             yield $texto;
 
@@ -881,7 +965,10 @@ _" . implode(' ', $avisos) . '_';
         $curada = $this->faqDireta($conversaId, $pergunta, $inicio);
 
         if ($curada !== null) {
+            \Turno::finalizar('ok');
+
             yield $curada;
+
             return;
         }
 
@@ -914,10 +1001,18 @@ _" . implode(' ', $avisos) . '_';
             $this->registrarFalha($conversaId, $e);
 
             if (($alternativa = $this->degradarParaMenu($conversaId, $pergunta, $texto)) !== null) {
+                // `degradado`, nao `erro`: o modelo falhou, mas a pessoa saiu
+                // com um caminho. Separar os dois e o que distingue "o
+                // atendimento caiu" de "o atendimento se defendeu".
+                \Turno::definir(['caminho' => 'roteador']);
+                \Turno::finalizar('degradado');
+
                 yield $alternativa;
 
                 return;
             }
+
+            \Turno::finalizar('erro');
 
             throw $e;
         } catch (Throwable $e) {
@@ -925,10 +1020,15 @@ _" . implode(' ', $avisos) . '_';
             $this->registrarFalha($conversaId, $erro);
 
             if (($alternativa = $this->degradarParaMenu($conversaId, $pergunta, $texto)) !== null) {
+                \Turno::definir(['caminho' => 'roteador']);
+                \Turno::finalizar('degradado');
+
                 yield $alternativa;
 
                 return;
             }
+
+            \Turno::finalizar('erro');
 
             throw $erro;
         }
@@ -949,6 +1049,9 @@ _" . implode(' ', $avisos) . '_';
         // mensagem de retorno — por isso não há gravarUso() aqui. Os tokens
         // do turno em streaming ficam nulos até haver um gancho confiável.
         $this->ultimasFontes = (new PromptBuilder())->fontesCitadas($texto, $trechos);
+
+        \Turno::definir(['caminho' => 'rag']);
+        \Turno::finalizar('ok', $id);
     }
 
     /**
@@ -1003,15 +1106,24 @@ _" . implode(' ', $avisos) . '_';
     {
         try {
             Database::connection()->prepare(
-                'INSERT INTO mensagens (conversa_id, autor_tipo, conteudo, criado_em)
-                 VALUES (:conversa, \'sistema\', :conteudo, :agora)'
+                'INSERT INTO mensagens (conversa_id, autor_tipo, conteudo, trace_id, criado_em)
+                 VALUES (:conversa, \'sistema\', :conteudo, :trace, :agora)'
             )->execute([
                 'conversa' => $conversaId,
                 'conteudo' => $e->paraLog(),
+                'trace' => \Turno::id(),
                 'agora' => now(),
             ]);
         } catch (Throwable) {
             // Falhar ao registrar a falha não pode derrubar o atendimento.
         }
+
+        // Fecha o turno pela causa, não só pelo sintoma.
+        //
+        // `erro_codigo` é o código NOSSO (`ErroAgente`), já traduzido do erro
+        // do fornecedor. É o que permite perguntar "quantos turnos morreram de
+        // cota estourada esta semana" sem reler texto de exceção.
+        \Log::erro('turno_falhou', ['codigo' => $e->codigo, 'detalhe' => $e->paraLog()]);
+        \Turno::definir(['erro_codigo' => $e->codigo]);
     }
 }

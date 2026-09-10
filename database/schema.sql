@@ -120,6 +120,54 @@ CREATE TABLE IF NOT EXISTS metricas (
 
 CREATE INDEX IF NOT EXISTS idx_metricas_data ON metricas (data DESC);
 
+-- Um turno: uma pergunta e o que ela provocou.
+--
+-- `metricas` conta quantas vezes algo aconteceu; esta tabela diz o que houve
+-- DENTRO de uma vez — qual caminho a resposta tomou e onde o tempo foi gasto.
+-- Sem ela sabia-se que a resposta levou 4s, e nao se o custo foi o embedding,
+-- a busca, o modelo ou a ferramenta HTTP.
+--
+-- SO METADADO. Nem pergunta, nem resposta, nem trecho recuperado: o conteudo
+-- vive em `mensagens`, sob a anonimizacao e o expurgo configurados em `config`.
+-- Duplicar texto aqui criaria copia fora do alcance dessas regras.
+--
+-- Por isso a linha SOBREVIVE ao expurgo, como `metricas`: o que ela guarda nao
+-- tem dado pessoal e tem valor longo. Mas cai junto com a conversa quando a
+-- conversa e apagada de fato (ON DELETE CASCADE).
+--
+-- Nomes seguem, onde da, as convencoes `gen_ai.*` do OpenTelemetry. Nao
+-- adotamos o OTel; nomear igual e o que permite plugar Langfuse ou Grafana
+-- depois sem reescrever a instrumentacao.
+CREATE TABLE IF NOT EXISTS turnos (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    trace_id            TEXT NOT NULL,
+    conversa_id         INTEGER REFERENCES conversas (id) ON DELETE CASCADE,
+    mensagem_id         INTEGER REFERENCES mensagens (id) ON DELETE SET NULL,
+    agente_id           INTEGER,
+    canal               TEXT,     -- widget|whatsapp|api|copiloto|worker
+    -- Por onde a resposta saiu. `roteador` e `faq` nao chamam o modelo, e
+    -- separa-los e o que permite ver quanto do atendimento sai sem custo.
+    caminho             TEXT,     -- roteador|faq|rag|erro
+    status              TEXT NOT NULL DEFAULT 'ok',   -- ok|erro|degradado
+    erro_codigo         TEXT,
+    provedor_id         INTEGER,
+    modelo              TEXT,
+    tokens_in           INTEGER,
+    tokens_out          INTEGER,
+    ms_total            INTEGER,
+    ms_embedding        INTEGER,
+    ms_busca            INTEGER,
+    ms_inferencia       INTEGER,
+    ms_ferramentas      INTEGER,
+    n_ferramentas       INTEGER NOT NULL DEFAULT 0,
+    n_trechos           INTEGER NOT NULL DEFAULT 0,
+    criado_em           TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_turnos_criado ON turnos (criado_em DESC);
+CREATE INDEX IF NOT EXISTS idx_turnos_conversa ON turnos (conversa_id);
+CREATE INDEX IF NOT EXISTS idx_turnos_trace ON turnos (trace_id);
+
 -- Fila de trabalho. Um único worker (bin/worker.php) atende todos os tipos.
 -- `progresso` guarda o ponto de retomada: o worker processa um lote, grava, e
 -- sai limpo antes do max_execution_time. Ver ARQUITETURA.md §6.
@@ -568,6 +616,7 @@ CREATE TABLE IF NOT EXISTS ferramenta_execucoes (
     resposta            TEXT,
     duracao_ms          INTEGER,
     erro                TEXT,
+    trace_id            TEXT,
     criado_em           TEXT NOT NULL
 );
 
@@ -660,6 +709,10 @@ CREATE TABLE IF NOT EXISTS mensagens (
     -- mesma pergunta. Fica NULL no widget web, onde não há id externo — por
     -- isso o índice único é parcial, e mora no migrate.php.
     externo_id          TEXT,
+
+    -- Amarra a mensagem ao turno que a produziu, e por tabelela as ferramentas
+    -- chamadas no mesmo turno. Ver a tabela `turnos`.
+    trace_id            TEXT,
     criado_em           TEXT NOT NULL
 );
 

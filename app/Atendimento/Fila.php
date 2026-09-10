@@ -1244,12 +1244,12 @@ final class Fila
                     "[Assistente] Atendimento pedido — conversa #{$conversaId}",
                     nl2br(e($corpo))
                 )) {
-                    error_log('[simpleAIman] aviso de handoff não saiu para ' . $a['email'] . '.');
+                    \Log::erro('handoff_aviso_nao_saiu', ['destinatario_id' => (int) ($a['id'] ?? 0)]);
                 }
             } catch (Throwable $e) {
                 // Aviso que falha não pode derrubar a transferência: a conversa
                 // já está na fila e aparece no painel de qualquer forma.
-                error_log('[simpleAIman] aviso de handoff falhou: ' . $e->getMessage());
+                \Log::erro('handoff_aviso_falhou', ['erro' => $e->getMessage()]);
             }
         }
     }

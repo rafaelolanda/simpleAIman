@@ -210,7 +210,7 @@ final class SetorTool
                 "[Assistente] Chamado #{$chamadoId} — {$assunto}",
                 nl2br(e($corpo))
             )) {
-                error_log('[simpleAIman] e-mail do chamado ' . $chamadoId . ' não saiu (Mailer devolveu false).');
+                \Log::erro('chamado_email_nao_saiu', ['chamado_id' => $chamadoId, 'causa' => 'mailer_false']);
 
                 return false;
             }
@@ -223,7 +223,7 @@ final class SetorTool
         } catch (Throwable $e) {
             // O chamado já está gravado: falhar o e-mail não pode desfazê-lo.
             // Ele aparece no painel como não avisado.
-            error_log('[simpleAIman] e-mail do chamado ' . $chamadoId . ' falhou: ' . $e->getMessage());
+            \Log::erro('chamado_email_falhou', ['chamado_id' => $chamadoId, 'erro' => $e->getMessage()]);
 
             return false;
         }

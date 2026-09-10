@@ -322,13 +322,19 @@ final class Executor
         float $inicio,
         ?int $mensagemId,
     ): void {
+        // O tempo real da ferramenta sai daqui, nao do observer do Neuron: o
+        // Neuron sabe quando o modelo PEDIU a ferramenta, nos sabemos quanto o
+        // trabalho levou de fato — HTTP, banco, e-mail.
+        \Turno::somar('ferramentas', (microtime(true) - $inicio) * 1000);
+
         try {
             Database::connection()->prepare(
                 'INSERT INTO ferramenta_execucoes
-                    (conversa_id, mensagem_id, ferramenta_id, params, status, resposta, duracao_ms, erro, criado_em)
-                 VALUES (:c, :m, :f, :p, :s, :r, :d, :e, :agora)'
+                    (conversa_id, mensagem_id, ferramenta_id, params, status, resposta, duracao_ms, erro, trace_id, criado_em)
+                 VALUES (:c, :m, :f, :p, :s, :r, :d, :e, :trace, :agora)'
             )->execute([
                 'c' => $this->conversaId,
+                'trace' => \Turno::id(),
                 'm' => $mensagemId,
                 'f' => (int) $ferramenta['id'],
                 'p' => json_encode($parametros, JSON_UNESCAPED_UNICODE),
@@ -339,7 +345,7 @@ final class Executor
                 'agora' => now(),
             ]);
         } catch (Throwable $e) {
-            error_log('[simpleAIman] falha ao registrar execução de ferramenta: ' . $e->getMessage());
+            \Log::erro('execucao_nao_registrada', ['erro' => $e->getMessage()]);
         }
     }
 }

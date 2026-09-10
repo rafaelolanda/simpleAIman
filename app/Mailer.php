@@ -33,7 +33,7 @@ final class Mailer
 
             return self::enviarPhpMail($paraEmail, $paraNome, $assunto, $corpoHtml, $responderPara, $responderParaNome);
         } catch (Throwable $e) {
-            error_log('Falha ao enviar e-mail: ' . $e->getMessage());
+            \Log::erro('email_falhou', ['erro' => $e->getMessage()]);
             return false;
         }
     }

@@ -57,11 +57,11 @@ if ($fp === false || !flock($fp, LOCK_EX | LOCK_NB)) {
 try {
     (new Worker(WORKER_TEMPO_MAX_S, WORKER_LOTE))->executar(
         static function (string $m): void {
-            error_log('[simpleAIman worker] ' . $m);
+            \Log::evento('worker', ['msg' => $m]);
         }
     );
 } catch (Throwable $e) {
-    error_log('[simpleAIman worker] abortou: ' . $e->getMessage());
+    \Log::erro('worker_abortou', ['erro' => $e->getMessage()]);
 } finally {
     flock($fp, LOCK_UN);
     fclose($fp);

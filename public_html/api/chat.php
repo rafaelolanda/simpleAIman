@@ -100,6 +100,10 @@ try {
         exit;
     }
 
+    // Canal aberto ANTES do turno: quem esta na borda sabe de onde a fala veio,
+    // o ChatService nao. Sem isto todo turno cairia como `api`.
+    \Turno::iniciar('widget');
+
     $resposta = '';
 
     foreach ($svc->stream($conversa, $pergunta) as $pedaco) {
@@ -124,9 +128,9 @@ try {
 } catch (ErroAgente $e) {
     // Só a mensagem pública atravessa. O detalhe técnico fica no log —
     // nome de modelo, provedor e status HTTP não podem chegar ao visitante.
-    error_log('[simpleAIman] ' . $e->paraLog());
+    \Log::erro('chat_falhou', ['codigo' => $e->codigo, 'detalhe' => $e->paraLog()]);
     sse('erro', ['mensagem' => $e->mensagemPublica()]);
 } catch (Throwable $e) {
-    error_log('[simpleAIman] inesperado: ' . $e->getMessage());
+    \Log::erro('chat_inesperado', ['erro' => $e->getMessage()]);
     sse('erro', ['mensagem' => 'Não consegui responder agora. Quer que eu registre sua dúvida para alguém retornar?']);
 }

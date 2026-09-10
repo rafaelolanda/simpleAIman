@@ -92,12 +92,13 @@ foreach ($valor['statuses'] ?? [] as $status) {
     }
 
     foreach ($status['errors'] ?? [] as $erro) {
-        error_log(sprintf(
-            '[simpleAIman] whatsapp: ENVIO FALHOU para %s — código %s: %s',
-            (string) ($status['recipient_id'] ?? '?'),
-            (string) ($erro['code'] ?? '?'),
-            (string) ($erro['title'] ?? $erro['message'] ?? 'sem descrição')
-        ));
+        \Log::erro('whatsapp_envio_falhou_na_meta', [
+            // O destinatario e telefone: identifica pessoa. Fica so o codigo,
+            // que e o que diz o que houve, e o wamid, que liga a mensagem.
+            'wamid' => (string) ($status['id'] ?? '?'),
+            'codigo' => (string) ($erro['code'] ?? '?'),
+            'titulo' => (string) ($erro['title'] ?? $erro['message'] ?? 'sem descricao'),
+        ]);
     }
 }
 

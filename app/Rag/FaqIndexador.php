@@ -133,7 +133,7 @@ final class FaqIndexador
         } catch (Throwable $e) {
             // A FAQ fica salva e aparece como pendente no painel; o worker
             // pega depois. Perder o vetor não pode perder o texto curado.
-            error_log('[simpleAIman] indexação da FAQ falhou: ' . $e->getMessage());
+            \Log::erro('faq_indexacao_falhou', ['erro' => $e->getMessage()]);
         }
     }
 }

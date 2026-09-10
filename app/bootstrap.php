@@ -40,6 +40,9 @@ if (is_file($autoload)) {
 
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/Database.php';
+// Turno antes de Log: Log consulta o turno aberto para carimbar a linha.
+require_once __DIR__ . '/Turno.php';
+require_once __DIR__ . '/Log.php';
 require_once __DIR__ . '/Auth.php';
 require_once __DIR__ . '/Painel.php';
 require_once __DIR__ . '/Metrics.php';

@@ -292,7 +292,7 @@ final class Roteador
             // caso seria um segundo lugar de onde lead some sem ninguém saber.
             (new LeadTool($conversaId, $agenteId))->registrar($contato);
         } catch (Throwable $e) {
-            error_log('[simpleAIman] captacao pelo roteador falhou: ' . $e->getMessage());
+            \Log::erro('roteador_captacao_falhou', ['erro' => $e->getMessage()]);
 
             return 'Não consegui registrar agora. Se puder, use um dos contatos abaixo — '
                 . 'digite *MENU* para vê-los.';

@@ -183,7 +183,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             \SimpleAIman\Llm\ChatService::paraAgente((int) $conversa['agente_id'])
                 ->consultar($conversaId, mb_substr(texto_utf8($pergunta), 0, 1000), $eu);
         } catch (Throwable $e) {
-            error_log('[simpleAIman] copiloto: ' . $e->getMessage());
+            \Log::erro('copiloto_falhou', ['erro' => $e->getMessage()]);
             flash_set('erro', 'Não consegui consultar o assistente agora.');
         }
 

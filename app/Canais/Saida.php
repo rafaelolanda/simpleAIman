@@ -52,7 +52,7 @@ final class Saida
         // aprovado. Melhor registrar o motivo do que tentar e receber um erro
         // que ninguém liga à causa.
         if (!CanalWhatsapp::dentroDaJanela($conversaId)) {
-            error_log('[simpleAIman] whatsapp: fora da janela de 24h, conversa ' . $conversaId);
+            \Log::evento('whatsapp_fora_da_janela', ['conversa_id' => $conversaId, 'tipo' => 'texto']);
 
             return false;
         }
@@ -62,7 +62,7 @@ final class Saida
 
             return true;
         } catch (Throwable $e) {
-            error_log('[simpleAIman] whatsapp: envio falhou na conversa ' . $conversaId . ': ' . $e->getMessage());
+            \Log::erro('whatsapp_envio_falhou', ['conversa_id' => $conversaId, 'erro' => $e->getMessage()]);
 
             return false;
         }
@@ -126,7 +126,7 @@ final class Saida
         }
 
         if (!CanalWhatsapp::dentroDaJanela($conversaId)) {
-            error_log('[simpleAIman] whatsapp: fora da janela de 24h, anexo não enviado na conversa ' . $conversaId);
+            \Log::evento('whatsapp_fora_da_janela', ['conversa_id' => $conversaId, 'tipo' => 'anexo']);
 
             return false;
         }
@@ -158,7 +158,7 @@ final class Saida
 
             return true;
         } catch (Throwable $e) {
-            error_log('[simpleAIman] whatsapp: anexo não saiu na conversa ' . $conversaId . ': ' . $e->getMessage());
+            \Log::erro('whatsapp_anexo_falhou', ['conversa_id' => $conversaId, 'erro' => $e->getMessage()]);
 
             return false;
         }

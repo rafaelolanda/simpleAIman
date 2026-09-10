@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $n = (new FaqIndexador())->indexarPendentes(50);
             flash_set('sucesso', $n > 0 ? "{$n} pergunta(s) indexada(s)." : 'Nada pendente — tudo já está indexado.');
         } catch (Throwable $e) {
-            error_log('[simpleAIman] ' . $e->getMessage());
+            \Log::erro('faq_admin_falhou', ['erro' => $e->getMessage()]);
             flash_set('erro', 'Não foi possível indexar agora. Confira o provedor em Provedores › Testar.');
         }
 

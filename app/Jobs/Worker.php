@@ -10,6 +10,7 @@ use SimpleAIman\Atendimento\Fila;
 use SimpleAIman\Canais\Anexos;
 use SimpleAIman\Canais\CanalWhatsapp;
 use SimpleAIman\Llm\ChatService;
+use SimpleAIman\Llm\ObservadorNeuron;
 use SimpleAIman\Llm\ErroAgente;
 use SimpleAIman\Rag\Ingestor;
 use Throwable;
@@ -181,6 +182,21 @@ final class Worker
             $log("job #{$id}: FALHOU — {$e->getMessage()}");
 
             return 'falhas';
+        } finally {
+            // Fronteira entre jobs. Duas limpezas, dois motivos distintos:
+            //
+            // `Turno::limpar()` porque o processo do worker e LONGO e atende
+            // varios jobs em sequencia. Turno que morre no meio (excecao antes
+            // do `finalizar`) deixaria o id vazado, e o job seguinte gravaria
+            // tudo sob o trace do anterior — investigacao apontando para a
+            // conversa errada e pior que investigacao sem pista.
+            //
+            // `ObservadorNeuron::desligar()` porque o EventBus do Neuron guarda
+            // observers por escopo em propriedade estatica, e cada execucao do
+            // agente cria um escopo novo. Numa requisicao web isso morre com o
+            // processo; aqui o mapa so cresce.
+            \Turno::limpar();
+            ObservadorNeuron::desligar();
         }
     }
 
@@ -445,6 +461,8 @@ final class Worker
                 return 'concluidos';
             }
 
+            \Turno::iniciar('whatsapp');
+
             $resposta = $svc->responder($conversa, $texto, $wamid);
         } catch (ErroAgente $e) {
             // O agente falhou — e no WhatsApp isso deixa a pessoa esperando.
@@ -465,7 +483,7 @@ final class Worker
             } catch (Throwable $aviso) {
                 // Avisar falhou também. Não pode mascarar a causa original, que
                 // é o que o admin precisa ver.
-                error_log('[simpleAIman] whatsapp: nem o aviso de falha saiu: ' . $aviso->getMessage());
+                \Log::erro('whatsapp_aviso_de_falha_nao_saiu', ['erro' => $aviso->getMessage()]);
             }
 
             $log('whatsapp: agente falhou na conversa ' . $conversa . '; visitante avisado.');
@@ -543,7 +561,7 @@ final class Worker
         } catch (Throwable $e) {
             // Detalhe no log, nunca na conversa: a mensagem da Meta cita id
             // interno, e o nosso teto de tamanho é decisão de infraestrutura.
-            error_log('[simpleAIman] whatsapp: anexo ' . $midiaId . ' não guardado: ' . $e->getMessage());
+            \Log::erro('whatsapp_midia_nao_guardada', ['midia_id' => $midiaId, 'erro' => $e->getMessage()]);
             $log('whatsapp: anexo recusado — ' . $e->getMessage());
 
             return false;
