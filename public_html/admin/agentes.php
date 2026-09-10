@@ -168,6 +168,20 @@ if ($editando) {
 }
 
 $provedores = $pdo->query('SELECT id, nome, modelo_chat, ativo FROM provedores ORDER BY nome')->fetchAll();
+
+// Qual provedor o agente herda quando não escolhe um.
+//
+// Nomear o padrão em vez de dizer só "padrão" é o que evita a pergunta
+// seguinte — "padrão é qual?" — e o que denuncia na hora quando ninguém
+// definiu nenhum. Ver ProviderFactory::padraoChat().
+$padraoChat = null;
+
+foreach ($provedores as $p) {
+    if ((int) $p['id'] === (int) ($config['provedor_chat_padrao_id'] ?? 0)) {
+        $padraoChat = $p;
+        break;
+    }
+}
 $bases = $pdo->query('SELECT id, nome, (SELECT COUNT(*) FROM embeddings e WHERE e.base_id = bases.id) AS vetores FROM bases WHERE ativo = 1 ORDER BY nome')->fetchAll();
 
 $destinos = $pdo->query(
@@ -175,7 +189,7 @@ $destinos = $pdo->query(
 )->fetchAll();
 
 $agentes = $pdo->query(
-    'SELECT a.*, p.nome AS provedor, p.ativo AS provedor_ativo,
+    'SELECT a.*, p.nome AS provedor, p.ativo AS provedor_ativo, p.modelo_chat AS provedor_modelo,
             (SELECT COUNT(*) FROM agente_bases ab WHERE ab.agente_id = a.id) AS bases,
             (SELECT COUNT(*) FROM conversas c WHERE c.agente_id = a.id) AS conversas
      FROM agentes a LEFT JOIN provedores p ON p.id = a.provedor_id
@@ -279,23 +293,43 @@ include __DIR__ . '/partials/head.php';
             <label>
                 Provedor
                 <select name="provedor_id">
-                    <option value="0">(provedor ativo)</option>
+                    <option value="0">
+                        <?php if ($padraoChat): ?>
+                            Herdar o padrão do sistema — <?= e($padraoChat['nome']) ?>
+                        <?php else: ?>
+                            Herdar o padrão do sistema — nenhum definido ainda
+                        <?php endif; ?>
+                    </option>
                     <?php foreach ($provedores as $p): ?>
                         <option value="<?= (int) $p['id'] ?>" <?= (int) $v('provedor_id', 0) === (int) $p['id'] ? 'selected' : '' ?>>
-                            <?= e($p['nome']) ?><?= $p['ativo'] ? '' : ' (inativo)' ?>
+                            <?= e($p['nome']) ?><?= $p['modelo_chat'] ? ' — ' . e((string) $p['modelo_chat']) : '' ?><?= $p['ativo'] ? '' : ' (inativo)' ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
                 <small>
-                    Quem responde de fato. <strong>Sem provedor, o agente não responde</strong> —
-                    a exceção é o modo roteador, que não chama modelo nenhum.
+                    Quem responde de fato. Deixe em <strong>herdar</strong> para seguir o padrão
+                    definido em Provedores — assim, trocar de fornecedor lá vale para todos os
+                    agentes de uma vez. Escolha um aqui só quando este agente precisar de um
+                    fornecedor diferente dos demais.
+                    <?php if (!$padraoChat): ?>
+                        <br><strong>Atenção:</strong> ainda não há padrão de chat definido. Enquanto
+                        não houver, herdar cai no primeiro provedor ativo — defina o padrão em
+                        Provedores.
+                    <?php endif; ?>
                 </small>
             </label>
 
             <label>
-                Modelo
-                <input type="text" name="modelo" value="<?= e((string) $v('modelo')) ?>" placeholder="ex.: gemini-3.7-flash">
-                <small>Fixe a versão — aliases mudam custo e comportamento sem aviso.</small>
+                Modelo <span style="font-weight:400;opacity:.6">(opcional)</span>
+                <input type="text" name="modelo" value="<?= e((string) $v('modelo')) ?>" placeholder="em branco, usa o do provedor">
+                <small>
+                    <strong>Em branco, herda o modelo do provedor</strong> — que aparece ao lado do
+                    nome dele na lista acima. Preencha só para este agente rodar num modelo
+                    diferente do resto: um agente de FAQ pode usar um modelo barato enquanto outro,
+                    que encadeia ferramentas, usa um mais capaz.
+                    <br>Se preencher, fixe a versão — aliases como <code>*-latest</code> mudam custo
+                    e comportamento sem aviso.
+                </small>
             </label>
 
             <label>
@@ -475,9 +509,36 @@ include __DIR__ . '/partials/head.php';
                         <br><small style="opacity:.6"><?= e((string) $a['descricao']) ?: e((string) $a['slug']) ?></small>
                     </td>
                     <td>
-                        <code><?= e((string) $a['modelo']) ?></code>
+                        <?php
+                        // O que este agente USA de fato, não o que está gravado nele.
+                        //
+                        // Provedor e modelo são herdáveis: em branco, valem os do padrão
+                        // do sistema. Mostrar a coluna vazia escondia justamente a
+                        // configuração mais comum e fazia parecer defeito.
+                        $provEfetivo = $a['provedor_id']
+                            ? ['nome' => $a['provedor'], 'modelo_chat' => $a['provedor_modelo']]
+                            : $padraoChat;
+
+                        $modeloProprio = trim((string) $a['modelo']);
+                        $modeloEfetivo = $modeloProprio ?: (string) ($provEfetivo['modelo_chat'] ?? '');
+                        $ehRoteador = ($a['modo'] ?? 'ia') === 'roteador';
+                        ?>
+
+                        <?php if ($ehRoteador): ?>
+                            <small style="opacity:.6">não chama modelo</small>
+                        <?php else: ?>
+                            <code><?= $modeloEfetivo !== '' ? e($modeloEfetivo) : '—' ?></code>
+                            <?php if ($modeloProprio === '' && $modeloEfetivo !== ''): ?>
+                                <span class="tag tag-neutro" title="Vem do provedor; este agente não define modelo próprio">herdado</span>
+                            <?php endif; ?>
+                        <?php endif; ?>
+
                         <br><small style="opacity:.6">
-                            <?= e((string) ($a['provedor'] ?? 'provedor ativo')) ?>
+                            <?php if ($provEfetivo): ?>
+                                <?= e((string) $provEfetivo['nome']) ?><?= $a['provedor_id'] ? '' : ' (padrão)' ?>
+                            <?php else: ?>
+                                <span class="tag tag-erro">sem provedor padrão</span>
+                            <?php endif; ?>
                             <?php if ($a['provedor_id'] && !$a['provedor_ativo']): ?>
                                 <span class="tag tag-erro">provedor inativo</span>
                             <?php endif; ?>
