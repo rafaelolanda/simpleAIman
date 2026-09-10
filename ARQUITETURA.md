@@ -70,7 +70,7 @@ usar:
 | `Providers`, `Chat`, `Tools` | sim | e a razao de o pacote existir aqui |
 | `RAG\Embeddings` | sim | so a chamada que devolve o vetor |
 | `RAG` (o resto) | **nao** | sem vector store de SQLite, busca so vetorial (a nossa e hibrida com FTS lexical), sem leitor de DOCX |
-| `Observability` | **nao** | ver a secao 12 — e o candidato mais forte a ser adotado |
+| `Observability` | **sim** | so o `EventBus`, para cronometrar a inferencia. Ver secao 12 |
 | `Workflow`, `MCP`, `StructuredOutput`, `Evaluation` | **nao** | nao ha caso de uso |
 
 Consequencia pratica, e o motivo de isto estar escrito aqui: **problema de qualidade de
@@ -118,10 +118,12 @@ simpleAIman/
 │   └── partials/
 ├── app/
 │   ├── Database.php  Auth.php  Mailer.php  Metrics.php     ← do cofre
+│   ├── Turno.php  Log.php                                 observabilidade (§12)
 │   ├── Llm/
 │   │   ├── ProviderFactory.php   monta o provider Neuron a partir da tabela provedores
 │   │   ├── ChatService.php       orquestração; modos stream e completo
 │   │   ├── PromptBuilder.php     system + contexto + fontes + guardrails
+│   │   ├── ObservadorNeuron.php  cronometra a inferência pelo EventBus do Neuron
 │   │   └── ToolLoop.php          loop de tool-calling com tetos
 │   ├── Rag/
 │   │   ├── VectorStore.php       interface
@@ -1236,30 +1238,82 @@ A distinção que importa: **monitoramento** responde perguntas que você já sa
 **observabilidade** é responder perguntas *novas* sem publicar código novo. Os três pilares
 são logs, métricas e traces — e o *trace* é o pilar que separa os dois conceitos.
 
-**Onde estamos: monitoramento de negócio decente, observabilidade técnica fraca.**
+### O que existe hoje
 
-Já existe: contadores diários (`metricas` + `Metrics.php`), tokens in/out e latência por
-mensagem (`mensagens`), auditoria de tool call (`ferramenta_execucoes`), `admin_logs`, fontes
-citadas (`mensagem_fontes`) e falha do agente gravada como mensagem `sistema` via
-`ErroAgente::paraLog()`.
+Implementado em 2026-09-09. Três peças:
 
-Falta, em ordem de prioridade:
+| Peça | Onde | Papel |
+|---|---|---|
+| `Turno` | `app/Turno.php` | O contexto de um turno: um `trace_id` e o tempo de cada etapa. |
+| `Log` | `app/Log.php` | Uma linha de JSON por evento, com `trace` e `conversa` carimbados. |
+| `ObservadorNeuron` | `app/Llm/ObservadorNeuron.php` | Ouve o que acontece dentro da chamada ao modelo. |
 
-1. **Correlação.** Não há `trace_id` por turno. Cada peça grava em lugar diferente e
-   reconstruir um turno lento é garimpo manual. É o item mais barato e o de maior ganho.
-2. **Logs estruturados.** Cerca de 20 `error_log()` em texto livre, quase sempre **sem o id
-   da conversa**. Legíveis por humano, não consultáveis por máquina.
-3. **Latência por etapa.** Sabe-se o total, não onde foi gasto. Aqui vale plugar o módulo
-   `Observability` do Neuron: um `EventBus` com ~30 eventos (`InferenceStart/Stop`,
-   `ToolCalling`, `Retrieved`, `AgentError`) que enxerga de dentro da chamada, onde nosso
-   código não alcança. **Este é o caso em que adotar o do framework faz sentido**, ao
-   contrário do RAG.
-4. **Custo.** Os tokens são gravados, mas não há preço por modelo — `provedores.custo_*` foi
-   removido em 2026-08-27 justamente por nunca ter sido preenchido. Sem ele não se responde
-   "quanto custou este cliente no mês".
+**Um turno = um trace.** O id nasce na borda — quem conhece o canal, ou seja `api/chat.php`,
+`api/publico.php` e o `Worker` — e acompanha tudo: a linha em `mensagens`, as linhas em
+`ferramenta_execucoes`, cada evento de log e a linha de resumo em `turnos`.
+
+A tabela **`turnos`** guarda uma linha por resposta, com o **caminho** tomado
+(`roteador` | `faq` | `rag`) e o tempo quebrado em `ms_embedding`, `ms_busca`,
+`ms_inferencia` e `ms_ferramentas`. Separar o caminho é o que permite ver quanto do
+atendimento sai **sem custo de inferência** — roteador e FAQ não chamam o modelo.
+
+`status` distingue três desfechos, e o terceiro importa: `ok`, `erro` e **`degradado`** — o
+modelo falhou, mas a pessoa saiu com um caminho pelo menu. É a diferença entre o atendimento
+cair e o atendimento se defender.
+
+### De onde vem cada medida
+
+- **Busca e embedding**: do `Retriever`, que já media e cujo resultado o `ChatService`
+  guardava em `$tempoBusca` sem ninguém ler. Era campo morto; agora serve.
+- **Ferramentas**: do `Executor`, que mede o trabalho de verdade — HTTP, banco, e-mail. O
+  Neuron sabe quando o modelo *pediu* a ferramenta; só nós sabemos quanto ela levou.
+- **Inferência**: do `EventBus` do Neuron, via `ObservadorNeuron`. Acumula, porque um turno
+  com ferramenta tem **mais de uma** inferência: o modelo é chamado, pede a ferramenta, e é
+  chamado de novo com o resultado.
+
+> **Por que `setDefaultObserver` e não `observe`.** Os nós do agente emitem com um
+> `workflowId` próprio, tirado do estado da execução (`Workflow\Node::emit()`), então um
+> observer de escopo nulo nunca receberia esses eventos. Mas ao emitir num escopo não
+> inicializado o `EventBus` registra ali o observer padrão — definir o padrão uma vez alcança
+> todo escopo novo sem saber o id de nenhum.
+
+### As duas armadilhas do estado global
+
+Ambas tratadas no `finally` de `Worker::processar()`, e ambas só aparecem no worker CLI, que
+é um processo longo atendendo vários jobs em sequência:
+
+1. **Turno vazado.** Turno que morre por exceção antes do `finalizar()` deixaria o id
+   pendurado, e o job seguinte gravaria tudo sob o trace do anterior — investigação apontando
+   para a conversa errada é pior que investigação sem pista.
+2. **Observers acumulados.** O `EventBus` guarda observers por escopo em propriedade
+   estática, e cada execução do agente cria um escopo. Numa requisição web isso morre com o
+   processo; no worker o mapa só cresce.
+
+### Privacidade
+
+**Conteúdo não entra em log nem em `turnos`.** Nem pergunta, nem resposta, nem trecho
+recuperado. O texto vive em `mensagens`, sob a anonimização e o expurgo configurados em
+`config`; duplicá-lo criaria uma segunda cópia fora do alcance dessas regras, que ninguém
+lembraria de apagar. Só metadado: duração, contagem, id, status, causa. O corte por campo em
+`Log::MAX_TEXTO` é rede de segurança para quando alguém esquecer disso, não permissão.
+
+Pela mesma razão a linha de `turnos` **sobrevive ao expurgo**, como `metricas`: não tem dado
+pessoal e tem valor longo. Mas cai junto com a conversa quando a conversa é apagada de fato.
+
+### O que ainda falta
+
+1. **Custo.** Os tokens são gravados, mas não há preço por modelo — `provedores.custo_*` foi
+   removido em 2026-08-27 justamente por nunca ter sido preenchido. Reintroduzir sem a tela
+   que multiplica e exibe seria recriar o mesmo campo que mente: os dois andam juntos ou
+   nenhum.
+2. **Tela de diagnóstico.** A tabela `turnos` existe e ninguém a lê pelo painel ainda. Turno
+   mais lento, distribuição de latência, proporção FAQ direta × RAG, falhas por causa.
+3. **Tokens no streaming.** No caminho de stream o consumo vem no evento final do handler, e
+   não há gancho confiável — `tokens_in`/`out` ficam nulos ali.
 
 > Exemplo do que a falta de observabilidade custou: até 2026-09-09, `vetorDaPergunta()`
 > embutia a pergunta com o provedor de **chat** do agente, enquanto os índices saíam do de
 > **embedding**. A comparação entre espaços vetoriais diferentes não dá erro — dá nota sem
 > sentido. E quando a chamada falhava de vez, o `catch` escrevia num `error_log` sem id de
-> conversa e devolvia `null`: a FAQ curada simplesmente parava de responder, calada.
+> conversa e devolvia `null`: a FAQ curada simplesmente parava de responder, calada. Hoje
+> essa falha sai como `{"ev":"embedding_pergunta_falhou","trace":...,"conversa_id":...}`.

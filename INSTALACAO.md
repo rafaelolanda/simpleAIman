@@ -203,6 +203,33 @@ Teste antes de entregar.
 
 ## 10. Quando algo não funciona
 
+### Onde olhar primeiro
+
+Cada resposta do assistente deixa duas trilhas ligadas pelo mesmo `trace_id`:
+
+- **A tabela `turnos`**, uma linha por resposta, com o caminho tomado e o tempo gasto em cada
+  etapa. É o que responde *"por que essa conversa demorou 9 segundos"* — se foi o embedding,
+  a busca, o modelo ou a ferramenta.
+- **O log de erros do PHP**, uma linha de JSON por evento, prefixada com `[simpleAIman]`.
+
+Para achar tudo de um atendimento, pegue o `trace_id` na coluna `mensagens.trace_id` da
+resposta e procure por ele nos dois lugares:
+
+```bash
+grep '"trace":"<o id>"' /caminho/do/error_log
+```
+
+Os turnos mais lentos do dia, direto no banco:
+
+```bash
+sqlite3 database/simpleaiman.sqlite "SELECT trace_id, caminho, ms_total, ms_embedding, ms_busca, ms_inferencia, ms_ferramentas FROM turnos ORDER BY ms_total DESC LIMIT 10;"
+```
+
+Nem log nem `turnos` guardam o texto da pergunta ou da resposta — só metadado. O conteúdo
+está em `mensagens`, sob a retenção configurada em Configurações.
+
+### Sintomas
+
 **A busca traz trecho sem relação com a pergunta.** Antes de mexer no limiar, confira em
 Provedores se as bases estão indexadas pelo **mesmo** provedor de embedding definido como
 padrão. A tela avisa quando divergem. Vetor de modelo diferente não é comparável e a
@@ -210,7 +237,14 @@ comparação não dá erro — devolve nota sem sentido. A correção é reindex
 
 **A FAQ parou de responder direto, mas o resto funciona.** O índice da FAQ e a pergunta
 precisam sair do provedor padrão de embedding. Se ele estiver sem chave, inativo ou
-apontando para um provedor de chat, a FAQ falha em silêncio e o turno segue pelo RAG.
+apontando para um provedor de chat, a FAQ falha em silêncio e o turno segue pelo RAG. No log
+isso aparece como `embedding_pergunta_falhou` ou `faq_busca_falhou`.
+
+**As respostas ficaram lentas e ninguém sabe por quê.** Compare `ms_inferencia` com
+`ms_embedding` e `ms_ferramentas` na tabela `turnos`. Inferência alta é o modelo ou a rede
+até o fornecedor; ferramentas altas é um endpoint externo lento, e aí `ferramenta_execucoes`
+diz qual. Se `n_ferramentas` estiver no teto em muitos turnos, o agente está chamando
+ferramenta em círculo — reveja as descrições delas.
 
 **O assistente responde "atendimento indisponível".** Provedor sem chave, chave
 inválida ou cota estourada. O Dashboard aponta, e o botão Testar do provedor
