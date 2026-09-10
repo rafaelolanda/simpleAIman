@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace SimpleAIman\Jobs;
 
 use Database;
+use PDO;
 use PDOException;
 use SimpleAIman\Atendimento\Fila;
 use SimpleAIman\Canais\Anexos;
@@ -350,8 +351,42 @@ final class Worker
         // Isto é o caminho rápido, não a garantia: dois webhooks simultâneos
         // passam os dois por aqui. Quem desempata é o índice único da coluna
         // `mensagens.externo_id`, no `catch` lá embaixo.
-        if ($wamid !== '' && self::jaProcessada($wamid)) {
+        $estado = $wamid !== '' ? self::estadoDoWamid($wamid) : 'nova';
+
+        if ($estado === 'duplicada') {
             $log('whatsapp: ' . $wamid . ' já tratada; reenvio ignorado.');
+            Queue::concluir((int) $job['id']);
+
+            return 'concluidos';
+        }
+
+        // Mensagem gravada que nunca foi respondida: o turno anterior morreu
+        // no meio. Descartar em silêncio, como se fazia antes, deixa a pessoa
+        // esperando para sempre.
+        //
+        // Avisamos em vez de responder por conta própria. Responder exigiria
+        // regravar a fala do visitante, e o índice único de `externo_id`
+        // recusa — o caminho limpo é o reenvio dela, que gera `wamid` novo.
+        // É a mesma escolha que o `catch (ErroAgente)` mais abaixo já faz.
+        if ($estado === 'interrompida') {
+            \Log::erro('whatsapp_turno_interrompido', [
+                'wamid' => $wamid,
+                'canal_id' => $canalId,
+            ]);
+
+            $aviso = 'Tive um problema para responder sua última mensagem e ela acabou se '
+                . 'perdendo. Pode enviar de novo, por favor?';
+
+            try {
+                $svcAviso = ChatService::paraAgente($canal->agenteId());
+                $conversaAviso = $svcAviso->conversa($canalId, $de, null);
+                $svcAviso->gravarMensagem($conversaAviso, 'bot', $aviso);
+                $canal->enviar($de, $aviso);
+            } catch (Throwable $e) {
+                \Log::erro('whatsapp_aviso_de_interrupcao_nao_saiu', ['erro' => $e->getMessage()]);
+            }
+
+            $log('whatsapp: ' . $wamid . ' ficou sem resposta; visitante convidado a reenviar.');
             Queue::concluir((int) $job['id']);
 
             return 'concluidos';
@@ -569,14 +604,64 @@ final class Worker
     }
 
     /** Esta mensagem do canal já virou linha em `mensagens`? */
-    private static function jaProcessada(string $externoId): bool
+    /**
+     * O que aconteceu com uma mensagem que já chegou antes.
+     *
+     * "Já gravada" não é a mesma coisa que "já respondida", e tratar as duas
+     * como reenvio foi o que engoliu uma mensagem em produção em 10/09/2026:
+     * o processo morreu no meio do turno (o kick roda sob o limite de tempo do
+     * PHP-FPM, e a chamada ao modelo estourou), o job voltou para a fila pelo
+     * `liberarPresos()`, e aqui o `wamid` já constava. A segunda passada
+     * descartou como duplicata e fechou o job com sucesso. A pessoa nunca
+     * recebeu resposta e nada em lugar nenhum registrou isso.
+     *
+     * O sintoma ficou visível porque a mensagem tinha `trace_id` e não havia
+     * linha correspondente em `turnos` — turno aberto que nunca fechou.
+     *
+     * Três estados, e a diferença entre os dois últimos é TEMPO:
+     *
+     *  - `nova`          nunca vista; segue o fluxo normal.
+     *  - `duplicada`     já respondida, ou recém-chegada e provavelmente ainda
+     *                    sendo processada por outra passada. Descartar é certo.
+     *  - `interrompida`  gravada, sem resposta, e velha o bastante para não
+     *                    haver ninguém trabalhando nela. Mensagem perdida.
+     *
+     * A carência existe por causa de webhooks simultâneos: sem ela, a segunda
+     * passada de um reenvio concorrente veria "sem resposta ainda" e avisaria
+     * o visitante de um problema que não houve.
+     */
+    private static function estadoDoWamid(string $externoId): string
     {
-        $stmt = Database::connection()->prepare(
-            'SELECT 1 FROM mensagens WHERE externo_id = :e LIMIT 1'
+        $pdo = Database::connection();
+
+        $stmt = $pdo->prepare(
+            'SELECT id, conversa_id, criado_em FROM mensagens WHERE externo_id = :e LIMIT 1'
         );
         $stmt->execute(['e' => $externoId]);
+        $msg = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        return $stmt->fetchColumn() !== false;
+        if (!$msg) {
+            return 'nova';
+        }
+
+        // Alguém falou DEPOIS dela nesta conversa? Então o turno andou — seja
+        // o bot, seja um atendente que assumiu.
+        $stmt = $pdo->prepare(
+            "SELECT 1 FROM mensagens
+              WHERE conversa_id = :c AND id > :id AND autor_tipo IN ('bot', 'atendente')
+              LIMIT 1"
+        );
+        $stmt->execute(['c' => (int) $msg['conversa_id'], 'id' => (int) $msg['id']]);
+
+        if ($stmt->fetchColumn() !== false) {
+            return 'duplicada';
+        }
+
+        // Sem resposta. Ainda pode haver outra passada em curso: o dobro do
+        // orçamento do worker é folga suficiente para ela ter terminado.
+        $idade = time() - strtotime((string) $msg['criado_em']);
+
+        return $idade > (WORKER_TEMPO_MAX_S * 2) ? 'interrompida' : 'duplicada';
     }
 
     private function marcarArtefatoComErro(array $job, string $erro): void

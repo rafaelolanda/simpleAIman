@@ -94,6 +94,11 @@ Usuário admin criado:
 Anote mesmo. A senha é aleatória, não fica gravada em lugar nenhum legível, e
 recuperá-la depois exige rodar `bin/redefinir-senha.php` no servidor.
 
+Se o comando não imprimir **nada**, algo falhou antes da primeira linha de
+saída — mas você vai ver o motivo: em linha de comando o `bootstrap.php`
+força os erros para a saída padrão de erro, independentemente do `php.ini` do
+host. A causa mais comum é `.env` ausente ou com caminho de banco inválido.
+
 Se aparecer `could not find driver`, o PHP de linha de comando não achou o
 `php.ini` e subiu sem extensão nenhuma. Rode `php --ini` para ver qual arquivo
 ele carregou. A solução é chamar com `php -c /caminho/php.ini` ou exportar
@@ -131,6 +136,115 @@ O agendamento não é só para a fila. Ele também fecha o que depende de tempo:
 conversa presa com um atendente que fechou o navegador, espera longa na fila e
 encerramento por inatividade. Nada disso tem evento que dispare, e é justamente
 quando ninguém está olhando que precisam acontecer.
+
+---
+
+## 6.1 Hospedagem compartilhada com várias versões de PHP
+
+Escrito depois da instalação na Hostinger em 10/09/2026. O padrão vale para
+qualquer host CloudLinux, que é o que a maioria da hospedagem compartilhada usa.
+
+### O PHP do SSH não é o PHP do site
+
+São dois. O seletor do painel (na Hostinger: *Avançado → Configuração PHP*)
+define a versão que **serve o site**; o shell do SSH tem o próprio padrão, que
+pode ser mais antigo. Como o projeto exige 8.4, é comum o site funcionar e a
+linha de comando recusar:
+
+```
+simpleAIman exige PHP 8.4 ou superior. Em uso: 8.3.33 (/opt/alt/php83/usr/bin/php)
+```
+
+Repare que a mensagem entrega o binário em uso — não é preciso adivinhar qual
+`php` o shell pegou.
+
+As versões instaladas ficam em `/opt/alt`:
+
+```bash
+ls -d /opt/alt/php8*
+```
+
+Use o caminho completo da que você quer:
+
+```bash
+/opt/alt/php84/usr/bin/php database/migrate.php
+```
+
+Um apelido ajuda no dia a dia, mas **não serve para o cron**, que roda em shell
+não interativo:
+
+```bash
+echo "alias php=/opt/alt/php84/usr/bin/php" >> ~/.bashrc
+```
+
+### Alinhe a versão do site com a do cron
+
+Site numa versão e worker em outra é assimetria que produz bug difícil: algo
+falha na indexação e não reproduz no chat, ou o contrário. Escolha uma e use nos
+dois lugares.
+
+### A linha do cron
+
+A tela de Configurações monta a linha com o `PHP_BINARY` do processo web. Sob
+PHP-FPM isso costuma apontar para um `php-fpm`, que **não funciona como CLI** —
+use o caminho de `/opt/alt` que você validou.
+
+O jeito mais seguro de montar sem errar caminho é pedir ao shell:
+
+```bash
+echo "/opt/alt/php84/usr/bin/php $HOME/domains/SEU-DOMINIO/bin/worker.php --silencioso 2>> $HOME/domains/SEU-DOMINIO/storage/worker-cron.log"
+```
+
+Copie a saída e cole no agendador. Duas escolhas dessa linha:
+
+`--silencioso` porque sem ele o painel manda um e-mail a cada cinco minutos.
+
+`2>>` em vez de `>/dev/null 2>&1` porque erro engolido é como o worker morre sem
+ninguém saber. Assim a saída normal já é silenciosa e só a falha é gravada.
+**Confirme que a pasta `storage` existe** — se não existir, o shell não consegue
+abrir o arquivo e o comando inteiro morre antes de chamar o PHP:
+
+```bash
+mkdir -p ~/domains/SEU-DOMINIO/storage
+```
+
+### A pegadinha do agendador da Hostinger
+
+Os seletores de Hora, Mês e Dia da semana são obrigatórios e **só oferecem
+valores concretos** — não há opção de `*`. O curinga aparece depois que você
+escolhe qualquer preset em *Opções Comuns*.
+
+Então: escolha "Uma vez por hora (0 \* \* \* \*)" para liberar os curingas, e
+depois troque o **Minuto** para "Cada 5 minutos (\*/5)". O resultado é
+`*/5 * * * *`. Os presets sozinhos não servem — o mais fino deles é de meia em
+meia hora, e os prazos de `ESPERA_MAX_MIN` e `INATIVIDADE_AVISO_MIN` são
+menores que isso.
+
+### Como confirmar que o worker está rodando
+
+O log só nasce se houver erro, então arquivo ausente não prova nada. Duas
+verificações que provam:
+
+```bash
+/opt/alt/php84/usr/bin/php ~/domains/SEU-DOMINIO/bin/worker.php --status
+```
+
+Isso lê a fila e imprime a contagem por estado, sem processar nada — prova
+binário, extensões e banco de uma vez.
+
+Para provar que o **agendador** dispara, consulte a tabela `jobs`: toda execução
+do worker agenda a rotina de manutenção, uma vez a cada 24 h. Uma linha
+`retencao` com horário posterior ao cadastro do cron é a evidência.
+
+### Os relógios não batem
+
+O sistema de arquivos e o `date` do shell saem em **UTC**; tudo que vem do banco
+(conversas, jobs, turnos) e o conteúdo do log do worker saem no fuso da
+aplicação. Confirme a diferença antes de comparar horários:
+
+```bash
+date; /opt/alt/php84/usr/bin/php -r 'require "$HOME/domains/SEU-DOMINIO/app/bootstrap.php"; echo now(), PHP_EOL;'
+```
 
 ## 7. Configurar o mínimo para o assistente responder
 

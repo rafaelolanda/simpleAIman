@@ -1124,8 +1124,26 @@ WhatsApp: o atendente vê a própria mensagem na tela e acha que respondeu. Por 
 - **Janela de 24h.** Fora dela a Meta recusa texto livre; só template aprovado. `Saida`
   verifica antes de tentar e registra o motivo, em vez de receber um erro que ninguém liga à
   causa.
-- **Sem deduplicação por `wamid`.** A Meta reenvia eventos, e hoje nada impede que um reenvio
-  vire segunda resposta. Precisa de uma coluna para guardar o id da mensagem recebida.
+- **Deduplicação por `wamid`, em três estados.** A Meta reenvia eventos quando não recebe 200
+  depressa. `mensagens.externo_id` guarda o id recebido, sob índice único parcial, e o worker
+  classifica o reenvio antes de agir:
+
+  | Estado | Quando | O que faz |
+  |---|---|---|
+  | `nova` | nunca vista | responde |
+  | `duplicada` | já respondida, **ou** recém-chegada | descarta em silêncio |
+  | `interrompida` | gravada, sem resposta, e velha | avisa o visitante e registra |
+
+  O terceiro estado existe por um incidente real (10/09/2026): o turno morreu no meio — o
+  *kick* roda sob o limite de tempo do PHP-FPM e a chamada ao modelo estourou —, o job voltou
+  à fila pelo `liberarPresos()`, e o dedup de então tratou como duplicata. A pessoa nunca
+  recebeu resposta e **nada registrou isso**; o job fechou com sucesso. Só ficou visível
+  porque a mensagem tinha `trace_id` e não havia linha correspondente em `turnos`.
+
+  A carência antes de declarar `interrompida` (o dobro de `WORKER_TEMPO_MAX_S`) separa turno
+  morto de webhook simultâneo ainda em processamento. E avisamos em vez de responder por
+  conta própria porque regravar a fala do visitante esbarraria no índice único — o caminho
+  limpo é o reenvio dela, que gera `wamid` novo.
 
 ---
 
@@ -1166,6 +1184,11 @@ Antes de inventar classe, procure no CSS herdado.
   obriga a reindexar tudo, mesmo quando o número de dimensões coincide.
 - **A Anthropic não tem API de embeddings.** Provedor com `driver = anthropic` só serve de
   papel `chat`; para a busca, cadastre um segundo provedor.
+- **Em CLI, `display_errors` desligado transforma erro fatal em silencio absoluto.** O
+  `bootstrap.php` força `stderr` quando `PHP_SAPI === 'cli'` — sem isso, `migrate.php`
+  com `.env` ausente não imprime uma linha sequer, embora a mensagem exista.
+- **"Já gravada" não é "já respondida".** Dedup que olha só a existência do id externo
+  engole mensagem cujo turno morreu no meio. Ver §10.3.
 - SQLite não permite ALTER de `CHECK`; enumerações validam no PHP.
 - Índice sobre coluna incremental não pode ficar no `schema.sql` (roda antes da migração).
 - Coluna nova depois de instância no ar precisa de `garantir_colunas()` no `migrate.php` —
