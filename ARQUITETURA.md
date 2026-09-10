@@ -1300,15 +1300,36 @@ lembraria de apagar. Só metadado: duração, contagem, id, status, causa. O cor
 Pela mesma razão a linha de `turnos` **sobrevive ao expurgo**, como `metricas`: não tem dado
 pessoal e tem valor longo. Mas cai junto com a conversa quando a conversa é apagada de fato.
 
+### A tela
+
+`admin/turnos.php`, em Sistema › Diagnóstico. Restrita a `admin`, como Logs.
+
+Responde três perguntas, nesta ordem de urgência:
+
+1. **O atendimento está saudável?** Mediana e p95 (a média não serve: uma única chamada que
+   bateu no timeout de 40s desloca o dia inteiro), taxa de erro, quantos degradaram, e a
+   proporção respondida **sem chamar o modelo** — subir esse número é a forma mais direta
+   de baixar a conta sem piorar o atendimento.
+2. **Onde o tempo está indo?** Média por etapa, em barras, separando rede até o fornecedor,
+   busca local e endpoint externo lento.
+3. **O que aconteceu neste atendimento?** A visão de um `trace_id` só: o resumo do turno, as
+   mensagens e as ferramentas chamadas, com link para a conversa. É a razão de a tabela
+   existir; as duas primeiras visões servem para chegar até aqui, porque ninguém abre um
+   diagnóstico já sabendo qual turno investigar.
+
+O percentil sai de `OFFSET` sobre o resultado ordenado — o SQLite embarcado no PHP de
+hospedagem compartilhada não traz `percentile()`, e ordenar em PHP exigiria carregar a
+coluna inteira na memória.
+
+O detalhe de um trace fica **fora** do filtro de período: quem chega por um link não deveria
+precisar acertar o período antes de ver o que procurava.
+
 ### O que ainda falta
 
 1. **Custo.** Os tokens são gravados, mas não há preço por modelo — `provedores.custo_*` foi
-   removido em 2026-08-27 justamente por nunca ter sido preenchido. Reintroduzir sem a tela
-   que multiplica e exibe seria recriar o mesmo campo que mente: os dois andam juntos ou
-   nenhum.
-2. **Tela de diagnóstico.** A tabela `turnos` existe e ninguém a lê pelo painel ainda. Turno
-   mais lento, distribuição de latência, proporção FAQ direta × RAG, falhas por causa.
-3. **Tokens no streaming.** No caminho de stream o consumo vem no evento final do handler, e
+   removido em 2026-08-27 justamente por nunca ter sido preenchido. Com a tela de diagnóstico
+   já no ar, agora há onde exibir: a coluna e a multiplicação passam a fazer sentido juntas.
+2. **Tokens no streaming.** No caminho de stream o consumo vem no evento final do handler, e
    não há gancho confiável — `tokens_in`/`out` ficam nulos ali.
 
 > Exemplo do que a falta de observabilidade custou: até 2026-09-09, `vetorDaPergunta()`

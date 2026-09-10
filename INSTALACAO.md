@@ -205,28 +205,26 @@ Teste antes de entregar.
 
 ### Onde olhar primeiro
 
-Cada resposta do assistente deixa duas trilhas ligadas pelo mesmo `trace_id`:
+**Sistema › Diagnóstico.** É a primeira parada. A tela mostra a latência típica (mediana e
+p95), a taxa de erro, quanto do atendimento sai sem chamar o modelo, para onde o tempo está
+indo por etapa, e as falhas agrupadas por causa. Os quinze turnos mais lentos ficam listados
+— é por onde começar quando alguém reclama de lentidão.
 
-- **A tabela `turnos`**, uma linha por resposta, com o caminho tomado e o tempo gasto em cada
-  etapa. É o que responde *"por que essa conversa demorou 9 segundos"* — se foi o embedding,
-  a busca, o modelo ou a ferramenta.
-- **O log de erros do PHP**, uma linha de JSON por evento, prefixada com `[simpleAIman]`.
+Clicando em **Abrir** num turno você vê aquele atendimento inteiro: o tempo de cada etapa,
+as mensagens, as ferramentas chamadas e o link para a conversa.
 
-Para achar tudo de um atendimento, pegue o `trace_id` na coluna `mensagens.trace_id` da
-resposta e procure por ele nos dois lugares:
+Cada resposta deixa uma segunda trilha, no **log de erros do PHP**: uma linha de JSON por
+evento, prefixada com `[simpleAIman]`. Elas se ligam pelo mesmo `trace_id`, que a tela exibe.
+Para ver o que a tela não mostra:
 
 ```bash
 grep '"trace":"<o id>"' /caminho/do/error_log
 ```
 
-Os turnos mais lentos do dia, direto no banco:
-
-```bash
-sqlite3 database/simpleaiman.sqlite "SELECT trace_id, caminho, ms_total, ms_embedding, ms_busca, ms_inferencia, ms_ferramentas FROM turnos ORDER BY ms_total DESC LIMIT 10;"
-```
-
-Nem log nem `turnos` guardam o texto da pergunta ou da resposta — só metadado. O conteúdo
-está em `mensagens`, sob a retenção configurada em Configurações.
+Nem a tela, nem o log, nem a tabela `turnos` guardam o texto da pergunta ou da resposta — só
+metadado. A única exceção é o detalhe de um turno, que lê as mensagens direto de
+`mensagens`, respeitando a retenção configurada em Configurações: o que foi expurgado
+desaparece de lá também.
 
 ### Sintomas
 
@@ -240,11 +238,11 @@ precisam sair do provedor padrão de embedding. Se ele estiver sem chave, inativ
 apontando para um provedor de chat, a FAQ falha em silêncio e o turno segue pelo RAG. No log
 isso aparece como `embedding_pergunta_falhou` ou `faq_busca_falhou`.
 
-**As respostas ficaram lentas e ninguém sabe por quê.** Compare `ms_inferencia` com
-`ms_embedding` e `ms_ferramentas` na tabela `turnos`. Inferência alta é o modelo ou a rede
-até o fornecedor; ferramentas altas é um endpoint externo lento, e aí `ferramenta_execucoes`
-diz qual. Se `n_ferramentas` estiver no teto em muitos turnos, o agente está chamando
-ferramenta em círculo — reveja as descrições delas.
+**As respostas ficaram lentas e ninguém sabe por quê.** Abra Sistema › Diagnóstico e olhe
+"Para onde vai o tempo". Inferência alta é o modelo ou a rede até o fornecedor; ferramentas
+altas é um endpoint externo lento, e aí o detalhe do turno diz qual. Se a coluna Ferr.
+estiver no teto em muitos turnos, o agente está chamando ferramenta em círculo — reveja as
+descrições delas.
 
 **O assistente responde "atendimento indisponível".** Provedor sem chave, chave
 inválida ou cota estourada. O Dashboard aponta, e o botão Testar do provedor
