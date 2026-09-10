@@ -61,6 +61,14 @@ Gemini pelo driver nativo, e o caminho compatível com OpenAI abre Groq,
 DeepSeek e OpenRouter sem escrever código novo. Trocar de fornecedor é editar um
 cadastro, não refazer a integração.
 
+**Chat e embedding são escolhas separadas.** Nunca é o mesmo modelo — um gera
+texto, o outro transforma texto em vetor para a busca — e nem precisa ser o
+mesmo fornecedor: dá para usar Anthropic no chat e OpenAI nos embeddings,
+cadastrando **dois provedores**, um marcado "somente chat" e outro "somente
+embedding". Cada provedor guarda uma única chave, então é assim que se
+combinam fornecedores. A Anthropic, aliás, não tem API de embeddings: a tela
+recusa a combinação em vez de deixar o erro aparecer na primeira indexação.
+
 ### Modo roteador: atendimento sem IA nenhuma
 
 Um agente pode rodar **sem chamar modelo algum**. Ele apresenta um menu numerado

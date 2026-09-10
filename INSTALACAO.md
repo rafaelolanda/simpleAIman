@@ -143,6 +143,18 @@ endereço: driver nativo com endereço do caminho compatível com OpenAI devolve
 404 em toda pergunta, e o erro não diz que a causa é essa. Na dúvida, deixe o
 endereço vazio.
 
+No topo da tela há dois campos que valem para a instância inteira: **provedor
+padrão de chat** e **provedor padrão de embedding**. São universos diferentes.
+Chat gera a resposta; embedding transforma texto em vetor para a busca da FAQ e
+das bases. Nunca é o mesmo modelo, e não precisa ser o mesmo fornecedor — para
+usar dois, cadastre **dois provedores** e marque o papel de cada um.
+
+O padrão de embedding governa a busca inteira: a pergunta do visitante, o
+índice da FAQ e o das bases precisam sair todos do mesmo modelo. Vetor de modelo
+diferente não é comparável, e a comparação **não dá erro** — devolve nota sem
+sentido e trecho errado. Pela mesma razão, trocar o modelo de embedding depois
+de indexar obriga a **reindexar tudo**; trocar o de chat não exige nada.
+
 **Agentes.** Crie um agente, escolha o provedor e escreva o prompt. É aqui que
 você define quem ele é e como fala.
 
@@ -190,6 +202,15 @@ Esse último falha com frequência em hospedagem compartilhada, e falha calado.
 Teste antes de entregar.
 
 ## 10. Quando algo não funciona
+
+**A busca traz trecho sem relação com a pergunta.** Antes de mexer no limiar, confira em
+Provedores se as bases estão indexadas pelo **mesmo** provedor de embedding definido como
+padrão. A tela avisa quando divergem. Vetor de modelo diferente não é comparável e a
+comparação não dá erro — devolve nota sem sentido. A correção é reindexar a base.
+
+**A FAQ parou de responder direto, mas o resto funciona.** O índice da FAQ e a pergunta
+precisam sair do provedor padrão de embedding. Se ele estiver sem chave, inativo ou
+apontando para um provedor de chat, a FAQ falha em silêncio e o turno segue pelo RAG.
 
 **O assistente responde "atendimento indisponível".** Provedor sem chave, chave
 inválida ou cota estourada. O Dashboard aponta, e o botão Testar do provedor

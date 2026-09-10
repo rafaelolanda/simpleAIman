@@ -52,6 +52,35 @@ pacote está fora de sincronia com o código (usa `NeuronAI\Agent`, a classe é
 é o `smalot/pdfparser`, em PHP puro; o de DOCX, `phpoffice/phpword`. Ambos entram como
 dependência direta.
 
+### A fronteira: o que e do Neuron e o que e nosso
+
+O framework aparece em **4 dos 43 arquivos PHP**: `Llm/ChatService.php`,
+`Llm/ProviderFactory.php`, `Llm/DiagnosticoProvedor.php` e `Tools/ToolRegistry.php`. Fora
+dai, nao ha `use NeuronAI\` em lugar nenhum — e essa e a regra pratica para se localizar.
+
+**Do Neuron** vem: os providers de chat, o loop de tool-calling (mandar a mensagem, receber
+o pedido de ferramenta, executar o callable, devolver o resultado, repetir), o streaming, os
+tipos de mensagem e de ferramenta, e o modulo **Embeddings**.
+
+**Nosso** e todo o resto, inclusive coisas que o Neuron tambem oferece e que decidimos nao
+usar:
+
+| Modulo do Neuron | Usamos? | Por que |
+|---|---|---|
+| `Providers`, `Chat`, `Tools` | sim | e a razao de o pacote existir aqui |
+| `RAG\Embeddings` | sim | so a chamada que devolve o vetor |
+| `RAG` (o resto) | **nao** | sem vector store de SQLite, busca so vetorial (a nossa e hibrida com FTS lexical), sem leitor de DOCX |
+| `Observability` | **nao** | ver a secao 12 — e o candidato mais forte a ser adotado |
+| `Workflow`, `MCP`, `StructuredOutput`, `Evaluation` | **nao** | nao ha caso de uso |
+
+Consequencia pratica, e o motivo de isto estar escrito aqui: **problema de qualidade de
+busca, de contexto ou de guardrail e codigo nosso** (`app/Rag/`, `app/Tools/`,
+`app/Llm/PromptBuilder.php`) e a documentacao do Neuron nao ajuda. Problema de "o modelo nao
+chamou a ferramenta" ou de streaming cortado e territorio do Neuron.
+
+O Neuron **nao** oferece nada de guardrail que usemos: nao ha modulo para isso, e
+`StructuredOutput` nao e importado em lugar nenhum. Todo controle real e nosso — ver secao 7.
+
 ---
 
 ## 2. As quatro camadas
@@ -129,7 +158,9 @@ simpleAIman/
 
 ```sql
 config              id=1 singleton — nome da instância, agente padrão, tema
+                    provedor_chat_padrao_id, provedor_embedding_padrao_id
 provedores          slug, driver(openai|anthropic|ollama|gemini), base_url,
+                    papel(chat|embedding|ambos),            -- a que universo a linha serve
                     auth_ref,                 -- nome da var no .env, NUNCA a chave
                     modelo_chat,
                     base_url_embedding, driver_embedding,   -- embeddings por outro caminho
@@ -137,14 +168,36 @@ provedores          slug, driver(openai|anthropic|ollama|gemini), base_url,
                     suporta_tools, suporta_stream, ativo
 ```
 
+> **Chat e embedding sao universos distintos.** Nunca e o mesmo modelo — um gera texto, o
+> outro transforma texto em vetor — e nao precisa ser o mesmo fornecedor. Como `auth_ref`
+> guarda **uma** chave por linha, combinar fornecedores se faz com **duas linhas**, uma de
+> papel `chat` e outra de papel `embedding`, e nao com duas chaves na mesma linha. E assim
+> que se usa Anthropic no chat e OpenAI (ou Gemini, ou Ollama) nos embeddings.
+
+> A **Anthropic nao tem API de embeddings**. A tela recusa a combinacao na entrada e
+> `ProviderFactory::embeddings()` recusa de novo, para o caso de banco editado a mao. Antes
+> disso o codigo caia no `default` e montava um provider da OpenAI com a chave da Anthropic:
+> o erro que chegava era um 401 do lado errado, que nao dizia nada sobre a causa.
+
+> **Quem escolhe o provedor:** `agentes.provedor_id` para o chat, `bases.provedor_embedding_id`
+> para o embedding daquela base. Vazio em qualquer um dos dois cai no padrao gravado em
+> `config`. Ate 2026-09-09 o padrao era `WHERE ativo = 1 ORDER BY id LIMIT 1` — ou seja,
+> **quem foi cadastrado primeiro**, o que ninguem escolheu e ninguem via.
+
 > `driver` + `base_url` + `modelo` cobre Gemini, Groq, DeepSeek e OpenRouter pelo caminho
 > OpenAI-compatible, sem classe nova por fornecedor.
 
 > **Embeddings têm endpoint próprio.** Medido em 2026-08-24: a camada OpenAI-compatible do
 > Gemini **recusa `task_type`** (HTTP 400, "Unknown name"), enquanto o endpoint nativo aceita
 > e de fato aplica — `RETRIEVAL_DOCUMENT` e `RETRIEVAL_QUERY` produzem vetores diferentes.
-> Como usar o tipo certo de cada lado é recall de graça, o chat vai pelo compat e o embedding
-> pelo nativo. Provedor que faça tudo por um caminho só deixa as duas colunas em branco.
+> Como usar o tipo certo de cada lado é recall de graça, o embedding vai pelo **nativo**.
+> Provedor que faça tudo por um caminho só deixa as duas colunas em branco.
+>
+> Historicamente o chat ia pelo compat e só o embedding pelo nativo — dai as duas colunas.
+> Hoje o chat do Gemini também usa o nativo (por causa do `thoughtSignature`, seção 1), e o
+> provedor semeado pelo `migrate.php` configura os dois lados no caminho nativo. As colunas
+> continuam existindo porque provedor em que chat e embedding moram em caminhos diferentes
+> ainda e um caso real.
 
 ### Agentes
 
@@ -533,6 +586,17 @@ texto que o visitante está lendo confunde mais que o erro.
 
 ### Agente
 
+- **Guardrails persuasivos x estruturais.** Ver seção 12: o que está no prompt é pedido, o
+  que está no `Executor`/`UrlGuard` é recusa. A régua para decidir onde pôr um guardrail
+  novo é: *e se o modelo ignorar?* Se a resposta envolve dinheiro, dado pessoal, chamada
+  externa ou promessa ao cliente, é código — não texto.
+- **Injeção indireta pelo material do RAG.** Cada trecho entra no prompt entre
+  `<<<TRECHO n>>>` e `<<<FIM DO TRECHO n>>>`, com o conteúdo sanitizado para não forjar a
+  marca de fechamento (`<<<` vira `< <<`) nem abrir seção markdown (`##` vira `\##`), mais
+  uma regra dizendo que ordem encontrada lá dentro é texto citado, não comando. Sem isso, um
+  PDF contendo "ignore as instruções anteriores" chegava ao modelo com o mesmo peso das
+  regras da casa. Não é filtro de conteúdo malicioso: o texto continua chegando, o que muda
+  é que ele chega reconhecível como dado.
 - Teto de iterações, de tokens e de tempo por turno.
 - Nunca afirmar valor, prazo ou edital sem ferramenta ou citação.
 - **Nunca inventar contato** — telefone e e-mail só saem de `contato_setor`; setor não
@@ -1094,9 +1158,108 @@ Antes de inventar classe, procure no CSS herdado.
   só valem sob **Apache com `mod_rewrite`**. Testar essas rotas exige servidor real — e se
   o ambiente local for nginx, as regras do `.htaccess` precisam de equivalente próprio, ou
   o que funciona na sua máquina não é o que roda em produção.
+- **Vetor de modelo diferente não é comparável, e a comparação não falha.** Ela devolve
+  nota sem sentido e trecho errado, em silêncio. O vetor da pergunta, o índice da FAQ e o
+  das bases precisam sair do **mesmo** provedor de embedding. Trocar o modelo de embedding
+  obriga a reindexar tudo, mesmo quando o número de dimensões coincide.
+- **A Anthropic não tem API de embeddings.** Provedor com `driver = anthropic` só serve de
+  papel `chat`; para a busca, cadastre um segundo provedor.
 - SQLite não permite ALTER de `CHECK`; enumerações validam no PHP.
 - Índice sobre coluna incremental não pode ficar no `schema.sql` (roda antes da migração).
 - Coluna nova depois de instância no ar precisa de `garantir_colunas()` no `migrate.php` —
   `CREATE TABLE IF NOT EXISTS` não altera tabela existente.
 - `$_FILES` de upload múltiplo vem transposto; remontar arquivo a arquivo.
 - Curto-circuito na ordem certa: `empty()` ou `(!$x || $x['k'])`, nunca `$x['k'] !== null && $x`.
+
+---
+
+## 12. Guardrails e observabilidade
+
+Dois termos que circulam muito e significam coisas bem diferentes por aqui.
+
+### Guardrails: existe padrão?
+
+A **implementação** é livre — não há norma dizendo "use allowlist de host" ou "limite
+iterações". O que existe:
+
+- **Normas regulatórias** dizem o *quê*, nunca o *como*: ISO/IEC 42001 e 23894, NIST AI RMF,
+  EU AI Act (um bot de atendimento cai tipicamente em "risco limitado", cuja obrigação
+  principal é transparência — deixar claro que se fala com uma máquina) e a **LGPD**, que já
+  se aplica aqui por causa da captura de leads, independentemente de IA.
+- **Convenção prática de mercado**: o **OWASP Top 10 for LLM Applications**. É a lista
+  contra a qual vale auditar. As categorias que nos tocam: *Prompt Injection* (inclusive a
+  indireta), *Insecure Output Handling*, *Excessive Agency* e *Sensitive Information
+  Disclosure*.
+- **Ferramentas dedicadas** existem no ecossistema (NeMo Guardrails, Guardrails AI, Llama
+  Guard, Bedrock Guardrails, Azure AI Content Safety), mas quase todas são Python. Em PHP não
+  há equivalente maduro, e o Neuron não oferece nada nessa linha — daí tudo aqui ser escrito
+  à mão.
+
+### As duas famílias
+
+O código já documenta a distinção em `Tools/Executor.php`: a trava de ordem "é a única que
+não depende de o modelo obedecer — as outras três (descrição, parâmetro obrigatório, prompt)
+são pedidos; esta é uma recusa."
+
+**Persuasivos** (texto, em `Llm/PromptBuilder.php::guardrails()`): idioma, proibição de
+inventar número e contato, proibição de prometer encaminhamento inexistente, aviso de busca
+fraca, regra contra injeção indireta. O Neuron apenas transporta. Se o modelo desobedecer,
+nada acontece.
+
+> Caso especial: a **frase de recusa é fixa**, não gerada. Era a sentença mais produzida do
+> sistema e escorregou em produção ("encarecesse" no lugar de "encaminhasse"). É um guardrail
+> que funciona *removendo o modelo da equação* — texto que não passa pelo modelo não erra.
+
+**Estruturais** (código que recusa, independente do que o modelo queira):
+
+| Guardrail | Onde | O que faz |
+|---|---|---|
+| `UrlGuard` | `Tools/UrlGuard.php` | Allowlist de host + bloqueio de faixa de IP interna, checando o IP **resolvido**. Proteção contra SSRF. |
+| Trava de ordem | `Tools/Executor.php` | Ferramenta com pré-requisito não roda se ele não rodou nesta conversa. |
+| Teto de iterações | `Tools/Executor.php` | `agentes.max_iteracoes_tool` por turno. Antes o laço era do Neuron, com o limite dele — o campo da tela era um botão que mentia. |
+| Validação de parâmetro | `Tools/Executor.php` | Obrigatoriedade, tipo, conversão. |
+| Corte por limiar | `Rag/Retriever.php` | Trecho fraco nem entra no prompt — o guardrail age **antes** de o modelo ver. |
+| Cerca do material | `Llm/PromptBuilder.php` | Trecho do RAG delimitado e sanitizado; ver seção 7. |
+| Verificação de fontes | `Llm/PromptBuilder.php` | Citação de trecho inexistente é descartada em vez de exibida quebrada. |
+
+Vários rodam **sem o Neuron ser chamado**: o corte por limiar acontece antes, e o modo
+roteador e a FAQ curada devolvem resposta sem tocar no modelo. Resposta que não passa por
+geração não tem o que alucinar.
+
+### Observabilidade: aqui existe padrão de verdade
+
+Diferente de guardrails, há um padrão consolidado: **OpenTelemetry (OTel)**, da CNCF, neutro
+de fornecedor. Para IA existem convenções semânticas de GenAI (atributos `gen_ai.*`) e um
+ecossistema dedicado (Langfuse, LangSmith, Helicone, Arize Phoenix).
+
+A distinção que importa: **monitoramento** responde perguntas que você já sabia fazer;
+**observabilidade** é responder perguntas *novas* sem publicar código novo. Os três pilares
+são logs, métricas e traces — e o *trace* é o pilar que separa os dois conceitos.
+
+**Onde estamos: monitoramento de negócio decente, observabilidade técnica fraca.**
+
+Já existe: contadores diários (`metricas` + `Metrics.php`), tokens in/out e latência por
+mensagem (`mensagens`), auditoria de tool call (`ferramenta_execucoes`), `admin_logs`, fontes
+citadas (`mensagem_fontes`) e falha do agente gravada como mensagem `sistema` via
+`ErroAgente::paraLog()`.
+
+Falta, em ordem de prioridade:
+
+1. **Correlação.** Não há `trace_id` por turno. Cada peça grava em lugar diferente e
+   reconstruir um turno lento é garimpo manual. É o item mais barato e o de maior ganho.
+2. **Logs estruturados.** Cerca de 20 `error_log()` em texto livre, quase sempre **sem o id
+   da conversa**. Legíveis por humano, não consultáveis por máquina.
+3. **Latência por etapa.** Sabe-se o total, não onde foi gasto. Aqui vale plugar o módulo
+   `Observability` do Neuron: um `EventBus` com ~30 eventos (`InferenceStart/Stop`,
+   `ToolCalling`, `Retrieved`, `AgentError`) que enxerga de dentro da chamada, onde nosso
+   código não alcança. **Este é o caso em que adotar o do framework faz sentido**, ao
+   contrário do RAG.
+4. **Custo.** Os tokens são gravados, mas não há preço por modelo — `provedores.custo_*` foi
+   removido em 2026-08-27 justamente por nunca ter sido preenchido. Sem ele não se responde
+   "quanto custou este cliente no mês".
+
+> Exemplo do que a falta de observabilidade custou: até 2026-09-09, `vetorDaPergunta()`
+> embutia a pergunta com o provedor de **chat** do agente, enquanto os índices saíam do de
+> **embedding**. A comparação entre espaços vetoriais diferentes não dá erro — dá nota sem
+> sentido. E quando a chamada falhava de vez, o `catch` escrevia num `error_log` sem id de
+> conversa e devolvia `null`: a FAQ curada simplesmente parava de responder, calada.
