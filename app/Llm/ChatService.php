@@ -80,7 +80,7 @@ final class ChatService
         if ($this->fabrica === null) {
             $this->fabrica = $this->agente['provedor_id']
                 ? ProviderFactory::porId((int) $this->agente['provedor_id'])
-                : ProviderFactory::ativo();
+                : ProviderFactory::padraoChat();
         }
 
         return $this->fabrica;
@@ -471,7 +471,19 @@ final class ChatService
         }
 
         try {
-            $this->vetorPergunta = $this->fabrica()
+            // Provedor de EMBEDDING, não o do agente.
+            //
+            // Aqui morava um erro silencioso: este vetor é comparado com o
+            // índice da FAQ e com o das bases, que são gerados pelo provedor
+            // de embedding — enquanto ele saía do provedor de CHAT do agente.
+            // Enquanto os dois eram a mesma linha da tabela ninguém percebeu.
+            // Bastava o agente apontar para outro provedor para a comparação
+            // passar a ser entre espaços vetoriais diferentes: não dá erro,
+            // dá nota sem sentido e trecho errado.
+            //
+            // Com chat na Anthropic o mesmo caminho deixava de ser silencioso
+            // e virava falha seca — a Anthropic não tem API de embeddings.
+            $this->vetorPergunta = ProviderFactory::padraoEmbedding()
                 ->embeddings(ProviderFactory::TAREFA_CONSULTAR)
                 ->embedText($pergunta);
         } catch (Throwable $e) {

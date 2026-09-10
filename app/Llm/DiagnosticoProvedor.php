@@ -30,13 +30,27 @@ final class DiagnosticoProvedor
      */
     public function executar(): array
     {
-        return [
-            $this->testarChat(),
-            $this->testarVelocidade(),
-            $this->testarFerramenta(),
-            $this->testarStreaming(),
-            $this->testarEmbeddings(),
-        ];
+        // O diagnóstico segue o PAPEL da linha.
+        //
+        // Testar chat num provedor de embedding (ou o contrário) produzia
+        // falha vermelha para uma capacidade que aquela linha nunca prometeu
+        // ter — e é justamente o tipo de alarme falso que ensina o
+        // administrador a ignorar a tela.
+        $papel = $this->fabrica->papel();
+        $testes = [];
+
+        if ($papel !== 'embedding') {
+            $testes[] = $this->testarChat();
+            $testes[] = $this->testarVelocidade();
+            $testes[] = $this->testarFerramenta();
+            $testes[] = $this->testarStreaming();
+        }
+
+        if ($papel !== 'chat') {
+            $testes[] = $this->testarEmbeddings();
+        }
+
+        return $testes;
     }
 
     /** @return array<string, mixed> */

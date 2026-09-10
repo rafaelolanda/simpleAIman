@@ -139,6 +139,34 @@
 .tag-erro   { color: var(--danger);  border-color: rgba(255, 84, 112, 0.4); }
 .tag-neutro { color: var(--text-muted); }
 
+/* Divisor de seção dentro de um formulário.
+   Existe para separar visualmente blocos que são universos DIFERENTES na
+   mesma tela — chat e embedding, por exemplo — em vez de deixá-los como uma
+   grade contínua de campos que aparenta ser um assunto só. */
+.form-secao {
+    grid-column: 1 / -1;
+    margin: 0.6rem 0 0;
+    padding-top: 0.9rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.form-secao:first-child {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+}
+
+.form-secao small {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.75rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
 /* formulários — só LAYOUT; a aparência do campo vem da base --- */
 
 .form-grid {

@@ -24,6 +24,21 @@ CREATE TABLE IF NOT EXISTS config (
     id                  INTEGER PRIMARY KEY CHECK (id = 1),
     nome_instancia      TEXT NOT NULL DEFAULT 'simpleAIman',
     agente_padrao_id    INTEGER,
+
+    -- Provedor padrao de cada universo, para quando o agente nao define o
+    -- dele e para quando a base nao define o dela.
+    --
+    -- Antes disto o padrao era `WHERE ativo = 1 ORDER BY id LIMIT 1`, ou seja,
+    -- quem foi cadastrado PRIMEIRO. Ninguem escolhia isso: bastava cadastrar
+    -- um provedor de chat com id menor para ele virar, por acidente de
+    -- ordenacao, a origem dos embeddings de todo o sistema.
+    --
+    -- O de embedding e o mais critico dos dois: o vetor da pergunta, o indice
+    -- da FAQ e o indice das bases precisam sair do MESMO modelo. Vetores de
+    -- modelos diferentes nao sao comparaveis, e a comparacao nao falha — ela
+    -- devolve nota sem sentido, e o sistema recupera o trecho errado calado.
+    provedor_chat_padrao_id      INTEGER REFERENCES provedores (id) ON DELETE SET NULL,
+    provedor_embedding_padrao_id INTEGER REFERENCES provedores (id) ON DELETE SET NULL,
     cor_primaria        TEXT NOT NULL DEFAULT '#2563eb',
     cor_secundaria      TEXT NOT NULL DEFAULT '#0f172a',
     logo                TEXT,
@@ -178,6 +193,21 @@ CREATE TABLE IF NOT EXISTS provedores (
     base_url            TEXT,
     auth_ref            TEXT,                             -- nome da var no .env
     modelo_chat         TEXT,
+
+    -- A que UNIVERSO esta linha serve: chat, embedding ou os dois.
+    --
+    -- Chat e embedding sao trabalhos diferentes, feitos por modelos
+    -- diferentes, e nem todo fornecedor faz os dois: a Anthropic nao tem API
+    -- de embeddings nenhuma. Antes desta coluna a tela deixava escolher a
+    -- Anthropic como origem de embedding, e a falha so aparecia na primeira
+    -- indexacao, em forma de erro do fornecedor que nao dizia a causa.
+    --
+    -- Como a chave e UMA por linha (auth_ref), misturar dois fornecedores se
+    -- faz com DUAS linhas — uma de papel 'chat', outra de papel 'embedding' —
+    -- e nao com duas chaves na mesma linha. E o desenho que ja existia em
+    -- `agentes.provedor_id` x `bases.provedor_embedding_id`; a coluna so torna
+    -- a intencao visivel para quem administra.
+    papel               TEXT NOT NULL DEFAULT 'ambos',    -- chat|embedding|ambos
 
     -- Embeddings têm endpoint e driver PRÓPRIOS, separados do chat.
     --

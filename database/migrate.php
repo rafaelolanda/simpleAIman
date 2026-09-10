@@ -91,6 +91,19 @@ garantir_colunas($pdo, 'conversas', ['anonimizada_em' => 'TEXT', 'expurgada_em' 
 garantir_colunas($pdo, 'mensagens', ['externo_id' => 'TEXT']);
 garantir_colunas($pdo, 'conversas', ['contato_nome' => 'TEXT', 'contato_valor' => 'TEXT']);
 
+// Papel do provedor e padroes por universo. Ver os comentarios no schema: a
+// migracao precisa CLASSIFICAR o que ja existe, nao so criar a coluna vazia.
+garantir_colunas($pdo, 'provedores', ['papel' => "TEXT NOT NULL DEFAULT 'ambos'"]);
+garantir_colunas($pdo, 'config', [
+    'provedor_chat_padrao_id' => 'INTEGER',
+    'provedor_embedding_padrao_id' => 'INTEGER',
+]);
+
+// Anthropic nao tem API de embeddings. Linha ja cadastrada com esse driver so
+// pode ser de chat — corrigir aqui evita que ela continue elegivel como origem
+// de embedding numa instalacao que ja estava no ar.
+$pdo->exec("UPDATE provedores SET papel = 'chat' WHERE driver = 'anthropic' AND papel = 'ambos'");
+
 // ---------------------------------------------------------------------
 // Remocoes
 //
@@ -260,6 +273,30 @@ if (!$pdo->query('SELECT 1 FROM provedores LIMIT 1')->fetchColumn()) {
     ]);
     echo "Provedor de exemplo criado (Gemini Flash, inativo — confira a chave e ative).\n";
 }
+
+// Semear os padroes com o que o codigo antigo teria escolhido: o primeiro
+// provedor ativo por id. Assim o comportamento nao muda no primeiro deploy —
+// a diferenca e que a escolha passa a estar GRAVADA e visivel na tela, em vez
+// de emergir da ordenacao.
+$semear = static function (PDO $pdo, string $coluna, string $filtroPapel): void {
+    $atual = $pdo->query("SELECT {$coluna} FROM config WHERE id = 1")->fetchColumn();
+
+    if ($atual) {
+        return;
+    }
+
+    $id = $pdo->query(
+        "SELECT id FROM provedores WHERE ativo = 1 AND papel IN ({$filtroPapel}) ORDER BY id LIMIT 1"
+    )->fetchColumn();
+
+    if ($id) {
+        $pdo->exec("UPDATE config SET {$coluna} = " . (int) $id . ' WHERE id = 1');
+        echo "  + config.{$coluna} = {$id}" . PHP_EOL;
+    }
+};
+
+$semear($pdo, 'provedor_chat_padrao_id', "'chat','ambos'");
+$semear($pdo, 'provedor_embedding_padrao_id', "'embedding','ambos'");
 
 if (!$pdo->query('SELECT 1 FROM bases LIMIT 1')->fetchColumn()) {
     $provedorId = (int) $pdo->query("SELECT id FROM provedores WHERE slug = 'gemini-flash'")->fetchColumn();

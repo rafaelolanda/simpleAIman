@@ -57,17 +57,79 @@ final class ProviderFactory
         return new self($linha);
     }
 
-    public static function ativo(): self
+    /**
+     * Provedor padrao de CHAT.
+     *
+     * Usado quando o agente nao define o dele (`agentes.provedor_id`).
+     */
+    public static function padraoChat(): self
     {
-        $linha = Database::connection()
-            ->query('SELECT * FROM provedores WHERE ativo = 1 ORDER BY id LIMIT 1')
+        return self::padrao('provedor_chat_padrao_id', ['chat', 'ambos'], 'de chat');
+    }
+
+    /**
+     * Provedor padrao de EMBEDDING.
+     *
+     * Usado pelo indice da FAQ, pelo vetor da pergunta e por base que nao
+     * define o proprio (`bases.provedor_embedding_id`).
+     *
+     * Este e o mais delicado dos dois. O vetor da pergunta e comparado tanto
+     * com o indice da FAQ quanto com o das bases, e vetor so e comparavel com
+     * vetor do MESMO modelo. Se cada ponta usar um provedor diferente, nada
+     * falha: a similaridade vira ruido e o sistema recupera o trecho errado em
+     * silencio. Por isso o padrao e explicito e unico, em vez de sair de um
+     * `ORDER BY id` como saia antes.
+     */
+    public static function padraoEmbedding(): self
+    {
+        return self::padrao('provedor_embedding_padrao_id', ['embedding', 'ambos'], 'de embedding');
+    }
+
+    /**
+     * O padrao gravado em `config`; se estiver vazio, o primeiro ativo com o
+     * papel certo.
+     *
+     * O fallback existe para a instalacao que ainda nao passou pela tela, e
+     * NAO e o caminho normal: a mensagem de erro manda para a tela justamente
+     * porque escolher isso e decisao de quem administra, nao do banco.
+     *
+     * @param list<string> $papeis
+     */
+    private static function padrao(string $coluna, array $papeis, string $rotulo): self
+    {
+        $pdo = Database::connection();
+        $lista = "'" . implode("','", $papeis) . "'";
+
+        $id = (int) ($pdo->query("SELECT {$coluna} FROM config WHERE id = 1")->fetchColumn() ?: 0);
+
+        if ($id > 0) {
+            $stmt = $pdo->prepare("SELECT * FROM provedores WHERE id = :id AND ativo = 1 AND papel IN ({$lista})");
+            $stmt->execute(['id' => $id]);
+            $linha = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if ($linha) {
+                return new self($linha);
+            }
+        }
+
+        $linha = $pdo
+            ->query("SELECT * FROM provedores WHERE ativo = 1 AND papel IN ({$lista}) ORDER BY id LIMIT 1")
             ->fetch(PDO::FETCH_ASSOC);
 
         if (!$linha) {
-            throw new ErroAgente('configuracao', 'Nenhum provedor ativo cadastrado.');
+            throw new ErroAgente(
+                'configuracao',
+                "Nenhum provedor {$rotulo} ativo. Defina o padrao em Provedores, no painel."
+            );
         }
 
         return new self($linha);
+    }
+
+    /** chat|embedding|ambos — a que universo esta linha serve. */
+    public function papel(): string
+    {
+        return (string) ($this->provedor['papel'] ?? 'ambos');
     }
 
     public function nome(): string
@@ -296,6 +358,22 @@ final class ProviderFactory
         $driver = (string) ($this->provedor['driver_embedding'] ?? $this->provedor['driver'] ?? 'openai');
         $modelo = $this->modeloEmbedding();
         $dim = $this->dimensoes();
+
+        // Recusa explícita em vez de erro do fornecedor.
+        //
+        // A Anthropic não tem API de embeddings — nenhuma. Sem esta guarda o
+        // `match` abaixo caía no `default` e montava um provider da OpenAI
+        // usando a CHAVE da Anthropic: o erro que chegava era um 401 do lado
+        // da OpenAI, que não diz nada sobre a causa real. A tela já impede a
+        // combinação; isto cobre o banco editado à mão e a instalação antiga.
+        if ($this->papel() === 'chat' || $driver === 'anthropic') {
+            throw new ErroAgente(
+                'configuracao',
+                "O provedor '{$this->nome()}' é de chat e não serve para embeddings"
+                . ($driver === 'anthropic' ? ' (a Anthropic não tem API de embeddings).' : '.')
+                . ' Cadastre um provedor de embedding e defina-o como padrão em Provedores.'
+            );
+        }
 
         if ($modelo === '') {
             throw new ErroAgente('configuracao', "Provedor '{$this->nome()}' não define modelo_embedding.");

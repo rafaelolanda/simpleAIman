@@ -189,7 +189,7 @@ final class Retriever
 
         $fabrica = $provedorId !== null
             ? ProviderFactory::porId($provedorId)
-            : ProviderFactory::ativo();
+            : ProviderFactory::padraoEmbedding();
 
         $marco = microtime(true);
         $vetor = $fabrica->embeddings(ProviderFactory::TAREFA_CONSULTAR)->embedText($pergunta);

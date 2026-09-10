@@ -50,7 +50,10 @@ final class FaqIndexador
             return 0;
         }
 
-        $fabrica = ProviderFactory::ativo();
+        // Padrão de EMBEDDING, nunca o do chat: o índice da FAQ é comparado
+        // com o vetor da pergunta, e vetor só é comparável com vetor do mesmo
+        // modelo. As duas pontas precisam sair da mesma origem.
+        $fabrica = ProviderFactory::padraoEmbedding();
 
         // RETRIEVAL_DOCUMENT: a FAQ é o lado "documento" da busca, mesmo
         // sendo uma pergunta. Quem usa RETRIEVAL_QUERY é a fala do visitante.

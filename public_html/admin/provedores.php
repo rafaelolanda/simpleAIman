@@ -29,6 +29,22 @@ $DRIVERS_EMBEDDING = [
     'ollama' => 'Ollama (local)',
 ];
 
+/**
+ * Papel: a que universo esta linha serve.
+ *
+ * Chat e embedding são trabalhos diferentes, feitos por modelos diferentes, e
+ * nem todo fornecedor faz os dois. Como a chave é UMA por linha, combinar dois
+ * fornecedores se faz com DUAS linhas — não com duas chaves na mesma linha.
+ */
+$PAPEIS = [
+    'ambos' => 'Chat e embedding (mesmo fornecedor)',
+    'chat' => 'Somente chat',
+    'embedding' => 'Somente embedding',
+];
+
+/** Drivers sem API de embeddings — a linha só pode ser de chat. */
+$SEM_EMBEDDING = ['anthropic'];
+
 $editando = null;
 $resultadoTeste = null;
 $provedorTestado = null;
@@ -57,8 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $provedorTestado = $fabrica->nome();
             $resultadoTeste = (new DiagnosticoProvedor($fabrica))->executar();
 
+            $total = count($resultadoTeste);
             $falhas = count(array_filter($resultadoTeste, static fn (array $r): bool => !$r['ok']));
-            Auth::log('provedor_testado', $fabrica->nome() . ': ' . (4 - $falhas) . '/4');
+            Auth::log('provedor_testado', $fabrica->nome() . ': ' . ($total - $falhas) . '/' . $total);
         } catch (ErroAgente $e) {
             $provedorTestado = 'Provedor #' . $id;
             $resultadoTeste = [[
@@ -69,6 +86,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'publica' => $e->mensagemPublica(),
             ]];
         }
+    }
+
+    // -----------------------------------------------------------------
+    // Padrões por universo.
+    //
+    // Ficam nesta tela, e não em Configurações, porque a decisão só faz
+    // sentido ao lado da lista de provedores: é aqui que se vê qual linha
+    // serve a quê.
+    // -----------------------------------------------------------------
+    if ($acao === 'padroes') {
+        $chat = ((int) ($_POST['provedor_chat_padrao_id'] ?? 0)) ?: null;
+        $embed = ((int) ($_POST['provedor_embedding_padrao_id'] ?? 0)) ?: null;
+
+        $pdo->prepare(
+            'UPDATE config SET provedor_chat_padrao_id = :chat,
+                    provedor_embedding_padrao_id = :embed, editado_em = :agora WHERE id = 1'
+        )->execute(['chat' => $chat, 'embed' => $embed, 'agora' => now()]);
+
+        Auth::log('provedores_padroes', 'chat=' . ($chat ?? 0) . ' embedding=' . ($embed ?? 0));
+        flash_set('sucesso', 'Padrões atualizados.');
+        redirect('provedores.php');
     }
 
     if ($acao === 'excluir') {
@@ -97,6 +135,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'nome' => $nome,
             'slug' => $slug,
             'driver' => valor_em($_POST['driver'] ?? '', array_keys($DRIVERS), 'openai'),
+            'papel' => valor_em($_POST['papel'] ?? '', array_keys($PAPEIS), 'ambos'),
             'base_url' => trim((string) ($_POST['base_url'] ?? '')),
             'auth_ref' => trim((string) ($_POST['auth_ref'] ?? '')),
             'modelo_chat' => trim((string) ($_POST['modelo_chat'] ?? '')),
@@ -109,8 +148,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'ativo' => isset($_POST['ativo']) ? 1 : 0,
         ];
 
-        if ($nome === '' || $dados['modelo_chat'] === '') {
+        $precisaChat = $dados['papel'] !== 'embedding';
+        $precisaEmbedding = $dados['papel'] !== 'chat';
+
+        if ($nome === '' || ($precisaChat && $dados['modelo_chat'] === '')) {
             flash_set('erro', 'Nome e modelo de chat são obrigatórios.');
+            redirect('provedores.php');
+        }
+
+        if ($precisaEmbedding && $dados['modelo_embedding'] === '') {
+            flash_set('erro', 'Este papel inclui embedding, então o modelo de embedding é obrigatório.');
+            redirect('provedores.php');
+        }
+
+        // Recusa na entrada em vez de erro na primeira indexação.
+        //
+        // A Anthropic não tem API de embeddings. Antes desta checagem dava
+        // para salvar a linha e escolhê-la como origem de embedding; a falha
+        // só aparecia depois, como erro de outro fornecedor, porque o código
+        // caía no provider da OpenAI usando a chave da Anthropic.
+        $driverEmbed = $dados['driver_embedding'] ?: $dados['driver'];
+
+        if ($precisaEmbedding && in_array($driverEmbed, $SEM_EMBEDDING, true)) {
+            flash_set(
+                'erro',
+                'A Anthropic não tem API de embeddings. Deixe este provedor como "Somente chat" e '
+                . 'cadastre um segundo provedor (OpenAI, Gemini ou Ollama) para os embeddings.'
+            );
             redirect('provedores.php');
         }
 
@@ -124,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $agora = now();
 
         if ($id > 0) {
-            $sql = 'UPDATE provedores SET nome=:nome, slug=:slug, driver=:driver, base_url=:base_url,
+            $sql = 'UPDATE provedores SET nome=:nome, slug=:slug, driver=:driver, papel=:papel, base_url=:base_url,
                     auth_ref=:auth_ref, modelo_chat=:modelo_chat, driver_embedding=:driver_embedding,
                     base_url_embedding=:base_url_embedding, modelo_embedding=:modelo_embedding,
                     dimensoes=:dimensoes, suporta_tools=:suporta_tools, suporta_stream=:suporta_stream,
@@ -135,10 +199,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             Auth::log('provedor_editado', $nome);
             flash_set('sucesso', 'Provedor atualizado.');
         } else {
-            $sql = 'INSERT INTO provedores (nome, slug, driver, base_url, auth_ref, modelo_chat,
+            $sql = 'INSERT INTO provedores (nome, slug, driver, papel, base_url, auth_ref, modelo_chat,
                     driver_embedding, base_url_embedding, modelo_embedding, dimensoes,
                     suporta_tools, suporta_stream, ativo, criado_em, editado_em)
-                    VALUES (:nome, :slug, :driver, :base_url, :auth_ref, :modelo_chat,
+                    VALUES (:nome, :slug, :driver, :papel, :base_url, :auth_ref, :modelo_chat,
                     :driver_embedding, :base_url_embedding, :modelo_embedding, :dimensoes,
                     :suporta_tools, :suporta_stream, :ativo, :criado_em, :editado_em)';
             $dados['criado_em'] = $agora;
@@ -161,6 +225,31 @@ if (isset($_GET['editar'])) {
 }
 
 $provedores = $pdo->query('SELECT * FROM provedores ORDER BY ativo DESC, nome ASC')->fetchAll();
+$config = $pdo->query('SELECT * FROM config WHERE id = 1')->fetch() ?: [];
+
+$paraChat = array_filter($provedores, static fn (array $p): bool => $p['papel'] !== 'embedding' && $p['ativo']);
+$paraEmbedding = array_filter($provedores, static fn (array $p): bool => $p['papel'] !== 'chat' && $p['ativo']);
+
+/**
+ * Bases indexadas por um provedor de embedding diferente do padrão.
+ *
+ * Isto NÃO é preferência de estilo: o vetor da pergunta sai do provedor
+ * padrão, e vetor só é comparável com vetor do mesmo modelo. Base indexada
+ * por outro modelo não devolve erro — devolve nota sem sentido e trecho
+ * errado, calada. O aviso existe porque o sintoma não aponta para a causa.
+ */
+$padraoEmbeddingId = (int) ($config['provedor_embedding_padrao_id'] ?? 0);
+$basesDivergentes = [];
+
+if ($padraoEmbeddingId > 0) {
+    $stmt = $pdo->prepare(
+        'SELECT b.nome, p.nome AS provedor FROM bases b
+         LEFT JOIN provedores p ON p.id = b.provedor_embedding_id
+         WHERE b.provedor_embedding_id IS NOT NULL AND b.provedor_embedding_id != :padrao'
+    );
+    $stmt->execute(['padrao' => $padraoEmbeddingId]);
+    $basesDivergentes = $stmt->fetchAll();
+}
 
 /** Situação da chave sem NUNCA exibir o valor. */
 $situacaoChave = static function (?string $ref): array {
@@ -184,6 +273,76 @@ include __DIR__ . '/partials/head.php';
         Onde o agente busca o modelo. A <strong>chave nunca fica aqui</strong> — o campo guarda o
         nome da variável do <code>.env</code>, e só o servidor resolve o valor.
     </p>
+</div>
+
+<div class="card" style="margin-bottom:1.25rem;">
+    <h2 class="card-title">Dois universos, duas escolhas</h2>
+    <p class="dica-painel">
+        <strong>Chat</strong> e <strong>embedding</strong> são trabalhos diferentes, feitos por
+        modelos diferentes: um gera texto, o outro transforma texto em vetor para a busca. Nunca é
+        o mesmo modelo, e não precisa ser o mesmo fornecedor.
+    </p>
+    <p class="dica-painel">
+        Como cada provedor guarda <strong>uma única chave</strong>, misturar fornecedores se faz
+        com <strong>dois provedores cadastrados</strong> — um marcado “somente chat”, outro
+        “somente embedding” — e não com dois campos na mesma linha. É assim que se usa, por
+        exemplo, Anthropic no chat e OpenAI nos embeddings.
+    </p>
+
+    <form method="post">
+        <?= csrf_field() ?>
+        <input type="hidden" name="acao" value="padroes">
+
+        <div class="form-grid">
+            <label>
+                Provedor padrão de chat
+                <select name="provedor_chat_padrao_id">
+                    <option value="0">— nenhum —</option>
+                    <?php foreach ($paraChat as $p): ?>
+                        <option value="<?= (int) $p['id'] ?>" <?= (int) ($config['provedor_chat_padrao_id'] ?? 0) === (int) $p['id'] ? 'selected' : '' ?>>
+                            <?= e($p['nome']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <small>Vale para o agente que não escolheu um provedor próprio.</small>
+            </label>
+
+            <label>
+                Provedor padrão de embedding
+                <select name="provedor_embedding_padrao_id">
+                    <option value="0">— nenhum —</option>
+                    <?php foreach ($paraEmbedding as $p): ?>
+                        <option value="<?= (int) $p['id'] ?>" <?= (int) ($config['provedor_embedding_padrao_id'] ?? 0) === (int) $p['id'] ? 'selected' : '' ?>>
+                            <?= e($p['nome']) ?>
+                        </option>
+                    <?php endforeach; ?>
+                </select>
+                <small>
+                    <strong>Governa a busca inteira.</strong> A pergunta do visitante, o índice da
+                    FAQ e o das bases precisam sair todos deste mesmo modelo — vetores de modelos
+                    diferentes não são comparáveis, e a comparação não dá erro: dá resposta errada.
+                </small>
+            </label>
+        </div>
+
+        <div class="form-acoes">
+            <button type="submit" class="btn btn-primary">Salvar padrões</button>
+        </div>
+    </form>
+
+    <?php if ($basesDivergentes): ?>
+        <ul class="lista-alertas" style="margin-top:1rem;">
+            <li class="alerta alerta-erro">
+                <strong>Bases indexadas por outro provedor de embedding.</strong>
+                A busca nelas compara vetores de modelos diferentes e devolve resultado sem sentido,
+                sem apresentar erro. Reindexe-as com o padrão acima ou ajuste o provedor da base:
+                <?= e(implode(', ', array_map(
+                    static fn (array $b): string => $b['nome'] . ' (' . ($b['provedor'] ?? 'sem provedor') . ')',
+                    $basesDivergentes
+                ))) ?>.
+            </li>
+        </ul>
+    <?php endif; ?>
 </div>
 
 <?php if ($resultadoTeste !== null): ?>
@@ -229,6 +388,25 @@ include __DIR__ . '/partials/head.php';
                 <input type="text" name="slug" value="<?= e($editando['slug'] ?? '') ?>" placeholder="gerado do nome se vazio">
             </label>
 
+            <label class="col-2">
+                Este provedor serve para
+                <select name="papel">
+                    <?php foreach ($PAPEIS as $k => $rotulo): ?>
+                        <option value="<?= e($k) ?>" <?= ($editando['papel'] ?? 'ambos') === $k ? 'selected' : '' ?>><?= e($rotulo) ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <small>
+                    Só os campos do papel escolhido são exigidos, e o teste só roda o que faz
+                    sentido. A <strong>Anthropic não tem API de embeddings</strong>: com ela, use
+                    “somente chat” e cadastre um segundo provedor para a busca.
+                </small>
+            </label>
+
+            <h3 class="form-secao">
+                Chat — gerar a resposta
+                <small>O modelo que conversa com o visitante.</small>
+            </h3>
+
             <label>
                 Driver de chat
                 <select name="driver">
@@ -246,7 +424,7 @@ include __DIR__ . '/partials/head.php';
 
             <label>
                 Modelo de chat
-                <input type="text" name="modelo_chat" required value="<?= e($editando['modelo_chat'] ?? '') ?>" placeholder="ex.: gemini-3.7-flash">
+                <input type="text" name="modelo_chat" value="<?= e($editando['modelo_chat'] ?? '') ?>" placeholder="ex.: gemini-3.7-flash">
                 <small>Fixe a versão. Aliases como <code>*-latest</code> mudam custo e comportamento sem aviso, e já responderam 503 enquanto as versões fixas funcionavam.</small>
             </label>
 
@@ -261,6 +439,16 @@ include __DIR__ . '/partials/head.php';
                 <input type="text" name="auth_ref" value="<?= e($editando['auth_ref'] ?? '') ?>" placeholder="GEMINI_API_KEY">
                 <small><strong>Não cole a chave aqui.</strong> Digite o nome da variável; o valor fica só no <code>.env</code>, fora do banco e fora do backup.</small>
             </label>
+
+            <h3 class="form-secao">
+                Embedding — encontrar o material
+                <small>
+                    Modelo diferente e trabalho diferente: transforma texto em vetor para a busca
+                    da FAQ e das bases. <strong>Trocar qualquer campo daqui obriga a reindexar
+                    tudo</strong> — os vetores antigos passam a viver num espaço matemático
+                    diferente e viram lixo, mesmo quando o número de dimensões coincide.
+                </small>
+            </h3>
 
             <label>
                 Driver de embedding
@@ -319,6 +507,7 @@ include __DIR__ . '/partials/head.php';
             <thead>
             <tr>
                 <th>Nome</th>
+                <th>Serve para</th>
                 <th>Driver</th>
                 <th>Modelo</th>
                 <th>Chave</th>
@@ -331,15 +520,28 @@ include __DIR__ . '/partials/head.php';
             <?php foreach ($provedores as $p): ?>
                 <?php [$rotuloChave, $estadoChave] = $situacaoChave($p['auth_ref']); ?>
                 <tr>
-                    <td><strong><?= e($p['nome']) ?></strong><br><small style="opacity:.6"><?= e($p['slug']) ?></small></td>
+                    <td>
+                        <strong><?= e($p['nome']) ?></strong><br><small style="opacity:.6"><?= e($p['slug']) ?></small>
+                        <?php if ((int) ($config['provedor_chat_padrao_id'] ?? 0) === (int) $p['id']): ?>
+                            <br><span class="tag tag-ok">padrão de chat</span>
+                        <?php endif; ?>
+                        <?php if ((int) ($config['provedor_embedding_padrao_id'] ?? 0) === (int) $p['id']): ?>
+                            <br><span class="tag tag-ok">padrão de embedding</span>
+                        <?php endif; ?>
+                    </td>
+                    <td><span class="tag"><?= e($PAPEIS[$p['papel']] ?? $p['papel']) ?></span></td>
                     <td><span class="tag"><?= e($p['driver']) ?></span></td>
                     <td><code><?= e((string) $p['modelo_chat']) ?></code></td>
                     <td>
                         <span class="tag tag-<?= $estadoChave ?>"><?= e($rotuloChave) ?></span>
                     </td>
                     <td>
-                        <code><?= e((string) $p['modelo_embedding']) ?></code>
-                        <br><small style="opacity:.6"><?= (int) $p['dimensoes'] ?> dim · <?= e($p['driver_embedding'] ?: $p['driver']) ?></small>
+                        <?php if ($p['papel'] === 'chat'): ?>
+                            <small style="opacity:.6">não se aplica</small>
+                        <?php else: ?>
+                            <code><?= e((string) $p['modelo_embedding']) ?></code>
+                            <br><small style="opacity:.6"><?= (int) $p['dimensoes'] ?> dim · <?= e($p['driver_embedding'] ?: $p['driver']) ?></small>
+                        <?php endif; ?>
                     </td>
                     <td><span class="tag tag-<?= $p['ativo'] ? 'ok' : 'neutro' ?>"><?= $p['ativo'] ? 'ativo' : 'inativo' ?></span></td>
                     <td class="acoes">

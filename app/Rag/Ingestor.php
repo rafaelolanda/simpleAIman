@@ -184,7 +184,7 @@ final class Ingestor
 
         $fabrica = $base['provedor_embedding_id']
             ? ProviderFactory::porId((int) $base['provedor_embedding_id'])
-            : ProviderFactory::ativo();
+            : ProviderFactory::padraoEmbedding();
 
         // RETRIEVAL_DOCUMENT ao indexar; a pergunta usa RETRIEVAL_QUERY. São
         // espaços otimizados diferentes, e usar o mesmo dos dois lados custa

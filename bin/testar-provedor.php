@@ -43,7 +43,9 @@ try {
 
         $fabrica = ProviderFactory::porId((int) $id);
     } else {
-        $fabrica = ProviderFactory::ativo();
+        // Sem argumento, testa o padrão de CHAT. Para o de embedding, passe
+        // o slug dele: os dois universos são linhas diferentes da tabela.
+        $fabrica = ProviderFactory::padraoChat();
     }
 } catch (ErroAgente $e) {
     fwrite(STDERR, "Não foi possível carregar o provedor.\n  " . $e->paraLog() . "\n  → " . $e->sugestaoAdmin() . "\n");
