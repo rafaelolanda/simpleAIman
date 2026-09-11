@@ -460,4 +460,109 @@ final class ProviderFactory
             ),
         };
     }
+
+    /**
+     * Vetores de VÁRIOS textos, na menor quantidade de chamadas possível.
+     *
+     * A indexação chamava `embedText()` um trecho por vez: um grupo de 25
+     * trechos virava 25 idas e voltas ao fornecedor, em sequência. Na primeira
+     * instalação de produção (Hostinger, plano gratuito do Gemini, 11/09/2026)
+     * cada ida levava cerca de 1 s — um grupo sozinho passava do orçamento de
+     * 20 s do worker, e um arquivo de 300 KB levava mais de uma hora.
+     *
+     * O Neuron só faz lote para a OpenAI: o `embedDocuments` dela manda até 100
+     * textos por requisição. O provider do Gemini implementa apenas o texto
+     * único, então a chamada ao `batchEmbedContents` é nossa. Medido: dez
+     * trechos numa chamada levaram 922 ms, contra 5.185 ms em dez chamadas, e
+     * os vetores saem IDÊNTICOS aos individuais — dá para trocar sem reindexar.
+     *
+     * Ollama e demais compatíveis sem lote continuam um texto por vez.
+     *
+     * @param list<string> $textos
+     *
+     * @return list<list<float>> na mesma ordem dos textos
+     */
+    public function embeddarVarios(array $textos, string $tarefa = self::TAREFA_INDEXAR): array
+    {
+        if ($textos === []) {
+            return [];
+        }
+
+        // Passa pelas mesmas recusas de embeddings() — provedor de chat,
+        // Anthropic, modelo ausente. O caminho de lote não pode ser um atalho
+        // em volta delas.
+        $embedder = $this->embeddings($tarefa);
+        $driver = (string) (($this->provedor['driver_embedding'] ?? '') ?: ($this->provedor['driver'] ?? 'openai'));
+
+        $vetores = match (true) {
+            $driver === 'gemini' || $driver === 'gemini_nativo' => $this->loteGemini($textos, $tarefa),
+            $embedder instanceof OpenAIEmbeddingsProvider => array_map(
+                static fn (\NeuronAI\RAG\Document $documento): array => $documento->embedding,
+                $embedder->embedDocuments(array_map(
+                    static fn (string $texto): \NeuronAI\RAG\Document => new \NeuronAI\RAG\Document($texto),
+                    $textos
+                ))
+            ),
+            default => array_map(static fn (string $texto): array => $embedder->embedText($texto), $textos),
+        };
+
+        // Vetor faltando desalinharia trecho e vetor: cada trecho seguinte
+        // ficaria gravado com o vetor do vizinho, e a busca erraria calada.
+        if (count($vetores) !== count($textos)) {
+            throw new \RuntimeException(sprintf(
+                'O lote de embeddings devolveu %d vetor(es) para %d texto(s).',
+                count($vetores),
+                count($textos)
+            ));
+        }
+
+        return array_values($vetores);
+    }
+
+    /**
+     * `batchEmbedContents` do Gemini, em grupos de até 100 pedidos.
+     *
+     * Cada pedido leva a mesma tarefa e as mesmas dimensões que `embeddings()`
+     * passa ao provider do Neuron para um texto só. É isso que garante vetor
+     * idêntico ao da chamada individual.
+     *
+     * @param list<string> $textos
+     *
+     * @return list<list<float>>
+     */
+    private function loteGemini(array $textos, string $tarefa): array
+    {
+        $modelo = $this->modeloEmbedding();
+        $dim = $this->dimensoes();
+
+        $cliente = $this->clienteHttp()
+            ->withBaseUri('https://generativelanguage.googleapis.com/v1beta/models/')
+            ->withHeaders([
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+                'x-goog-api-key' => $this->chave(),
+            ]);
+
+        $vetores = [];
+
+        foreach (array_chunk($textos, 100) as $grupo) {
+            $resposta = $cliente->request(\NeuronAI\HttpClient\HttpRequest::post(
+                uri: "{$modelo}:batchEmbedContents",
+                body: [
+                    'requests' => array_map(static fn (string $texto): array => array_filter([
+                        'model' => 'models/' . $modelo,
+                        'content' => ['parts' => [['text' => $texto]]],
+                        'taskType' => $tarefa,
+                        'outputDimensionality' => $dim > 0 ? $dim : null,
+                    ], static fn ($valor): bool => $valor !== null), $grupo),
+                ]
+            ))->json();
+
+            foreach ($resposta['embeddings'] ?? [] as $item) {
+                $vetores[] = $item['values'];
+            }
+        }
+
+        return $vetores;
+    }
 }

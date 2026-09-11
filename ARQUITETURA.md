@@ -1387,8 +1387,18 @@ lendo a mesma classe, `DiagnosticoInfra` — como o `DiagnosticoProvedor` já fa
 - **Verificações** de ambiente, banco, worker e rede, cada uma existindo para
   confirmar ou descartar uma hipótese — o OPcache do site, a latência de
   escrita **no diretório do banco** (não no temporário, que num host
-  compartilhado pode ser outro disco), e o custo de uma chamada de embedding,
-  que multiplicado pelo número de trechos dá o piso do tempo de indexação.
+  compartilhado pode ser outro disco), e o custo de um **lote real** de
+  embedding, do mesmo tamanho que a indexação usa (`WORKER_LOTE`) — é o que dá
+  quanto custa indexar cada grupo de trechos.
+
+> **O lote que o §6 prometia e o código não fazia.** O desenho da ingestão
+> sempre disse "embed em LOTE", mas o `Ingestor` chamava `embedText()` um trecho
+> por vez. Na Hostinger, com o plano gratuito do Gemini a ~1 s por chamada, um
+> grupo de 25 trechos passava do orçamento de 20 s do worker, e um arquivo de
+> 300 KB levava mais de uma hora. Desde 11/09/2026 cada grupo vai numa chamada:
+> `ProviderFactory::embeddarVarios()`, com `batchEmbedContents` no Gemini — o
+> Neuron só faz lote para a OpenAI. Os vetores saem idênticos aos individuais,
+> então a troca não exigiu reindexar nada.
 
 As duas faces não são redundantes: **o PHP da linha de comando não é o do
 site.** OPcache, liberação de conexão e o comportamento do servidor web só

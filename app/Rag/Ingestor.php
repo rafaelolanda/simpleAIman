@@ -189,23 +189,33 @@ final class Ingestor
         // RETRIEVAL_DOCUMENT ao indexar; a pergunta usa RETRIEVAL_QUERY. São
         // espaços otimizados diferentes, e usar o mesmo dos dois lados custa
         // recall de graça.
-        $embedder = $fabrica->embeddings(ProviderFactory::TAREFA_INDEXAR);
+        //
+        // O grupo inteiro vai numa chamada só — ver ProviderFactory::embeddarVarios().
+        // Antes eram 25 idas e voltas em sequência por grupo; na Hostinger, com
+        // o plano gratuito do Gemini, cada uma levava ~1 s, e um grupo sozinho
+        // estourava o orçamento de 20 s do worker.
+        //
+        // A rede acontece AQUI, fora de qualquer transação. Se o lote falhar,
+        // nada deste grupo é gravado: os grupos anteriores já estão salvos, e o
+        // job retoma exatamente deste ponto, porque só entra no próximo grupo o
+        // trecho que ainda não tem vetor.
+        try {
+            $lista = $fabrica->embeddarVarios(
+                array_map(static fn (array $chunk): string => (string) $chunk['conteudo'], $chunks),
+                ProviderFactory::TAREFA_INDEXAR,
+            );
+        } catch (ErroAgente $e) {
+            // Recusa de configuração (provedor de chat, modelo ausente) já vem
+            // traduzida; embrulhar de novo esconderia a causa.
+            throw $e;
+        } catch (Throwable $e) {
+            throw ErroAgente::deProvedor($e, 'embeddings');
+        }
 
         $vetores = [];
 
-        // A rede acontece AQUI, fora de qualquer transação.
-        foreach ($chunks as $chunk) {
-            try {
-                $vetores[(int) $chunk['id']] = $embedder->embedText((string) $chunk['conteudo']);
-            } catch (Throwable $e) {
-                // O que já veio antes do erro não se perde: grava o obtido e
-                // deixa o chamador decidir sobre o resto.
-                if ($vetores !== []) {
-                    $this->gravarVetores($vetores, (int) $base['id'], (string) $base['modelo_embedding']);
-                }
-
-                throw ErroAgente::deProvedor($e, 'embeddings');
-            }
+        foreach ($chunks as $i => $chunk) {
+            $vetores[(int) $chunk['id']] = $lista[$i];
         }
 
         $this->gravarVetores($vetores, (int) $base['id'], (string) $base['modelo_embedding']);

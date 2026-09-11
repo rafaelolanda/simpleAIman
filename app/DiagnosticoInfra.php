@@ -436,27 +436,37 @@ final class DiagnosticoInfra
                 );
             }
 
+            // A ingestão manda os trechos em lotes de WORKER_LOTE por chamada.
+            // Mede um lote real desse tamanho: é o custo que a indexação paga.
+            // Medir uma chamada de texto único, como a primeira versão fazia,
+            // mediria um caminho que a indexação já não usa.
+            $tamanho = max(1, WORKER_LOTE);
+            $lote = array_map(
+                static fn (int $n): string => "Trecho de diagnóstico número {$n}, sobre matrícula, mensalidade e prazos.",
+                range(1, $tamanho)
+            );
+
             $inicio = microtime(true);
-            $embedding->embeddings(ProviderFactory::TAREFA_CONSULTAR)->embedText('diagnóstico de latência');
+            $embedding->embeddarVarios($lote, ProviderFactory::TAREFA_INDEXAR);
             $ms = (microtime(true) - $inicio) * 1000;
 
-            // A ingestão faz UMA chamada por trecho, em sequência. O custo de uma
-            // chamada multiplicado pelo número de trechos é o piso do tempo de
-            // indexação — antes de o cron repartir o trabalho em fatias.
-            $segundosPor100 = $ms * 100 / 1000;
+            $lotesPor100 = (int) ceil(100 / $tamanho);
+            $segundosPor100 = $ms * $lotesPor100 / 1000;
             $ciclos = (int) ceil($segundosPor100 / max(1, WORKER_TEMPO_MAX_S));
 
             $itens[] = self::item(
                 'Rede',
-                'Chamada de embedding',
-                $ms < 800 ? 'ok' : 'alerta',
-                sprintf('%.0f ms · %s', $ms, $embedding->nome()),
+                'Lote de embedding',
+                $ms < 3000 ? 'ok' : 'alerta',
+                sprintf('%.0f ms para %d trechos · %s', $ms, $tamanho, $embedding->nome()),
                 sprintf(
-                    'Cada trecho indexado custa uma chamada destas, em sequência. 100 trechos ≈ %.0f s só de rede. '
+                    'A indexação manda %d trechos por chamada. 100 trechos ≈ %d chamada(s) ≈ %.0f s de rede. '
                         . 'Se só o cron processar — %d s de trabalho a cada 5 min —, isso vira cerca de %d min.',
+                    $tamanho,
+                    $lotesPor100,
                     $segundosPor100,
                     WORKER_TEMPO_MAX_S,
-                    $ciclos * 5
+                    max(5, $ciclos * 5)
                 )
             );
         } catch (Throwable $e) {
