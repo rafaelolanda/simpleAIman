@@ -513,9 +513,21 @@ final class DiagnosticoInfra
     // -----------------------------------------------------------------
 
     /**
-     * Dispara a sonda pelo mesmo caminho do kick e devolve o id, ou null.
+     * Dispara a sonda pelo mesmo caminho do kick.
+     *
+     * Devolve o id MESMO quando a instância não confirma o pedido. Sem a função
+     * de liberação, o LiteSpeed segura a resposta até o script terminar: a
+     * linha de status não chega nos 3 s de espera, mas a sonda roda do mesmo
+     * jeito, e o arquivo dela diz se sobreviveu. A primeira versão descartava o
+     * id nesse caso e deixou a tela sem resultado nenhum — justamente na
+     * comparação que interessava (11/09/2026).
+     *
+     * `aceito` falso é, por si, um achado: é o que acontecia com o kick antes
+     * da correção do LiteSpeed. Quem chamava desistia sem confirmação.
+     *
+     * @return array{id: string, aceito: bool}|null null só quando falta WORKER_TOKEN
      */
-    public static function dispararSonda(int $segundos, bool $liberar): ?string
+    public static function dispararSonda(int $segundos, bool $liberar): ?array
     {
         if (WORKER_TOKEN === '') {
             return null;
@@ -532,7 +544,7 @@ final class DiagnosticoInfra
             'liberar' => $liberar ? '1' : '0',
         ]));
 
-        return $aceito ? $id : null;
+        return ['id' => $id, 'aceito' => $aceito];
     }
 
     /**

@@ -98,12 +98,20 @@ if (array_key_exists('sonda', $opcoes)) {
     echo "\nSonda de processo em segundo plano\n----------------------------------\n";
     printf("  %d s, %s liberar a conexão. Disparando pelo mesmo caminho do kick...\n", $segundos, $liberar ? 'com' : 'SEM');
 
-    $id = DiagnosticoInfra::dispararSonda($segundos, $liberar);
+    $disparo = DiagnosticoInfra::dispararSonda($segundos, $liberar);
 
-    if ($id === null) {
-        echo "  [ ERRO ] A instância não aceitou o pedido. Confira APP_URL e WORKER_TOKEN no .env.\n";
+    if ($disparo === null) {
+        echo "  [ ERRO ] WORKER_TOKEN vazio no .env: a sonda usa o mesmo token do kick.\n";
         exit(1);
     }
+
+    if (!$disparo['aceito']) {
+        echo "  [ALERTA] O servidor não confirmou o pedido em 3 s. Sem a função de liberação, o\n"
+            . "           LiteSpeed segura a resposta até o fim do script — era o que acontecia com o\n"
+            . "           kick antes da correção. Acompanhando pelo arquivo mesmo assim...\n";
+    }
+
+    $id = $disparo['id'];
 
     $prazo = time() + $segundos + 15;
     $estado = ['estado' => 'aguardando'];

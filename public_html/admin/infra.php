@@ -37,15 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($acao === 'sonda') {
         $liberar = ($_POST['liberar'] ?? '1') !== '0';
-        $id = DiagnosticoInfra::dispararSonda(60, $liberar);
+        $disparo = DiagnosticoInfra::dispararSonda(60, $liberar);
 
-        if ($id === null) {
-            flash_set('erro', 'A instância não aceitou o pedido da sonda. Confira APP_URL e WORKER_TOKEN no .env.');
+        if ($disparo === null) {
+            flash_set('erro', 'WORKER_TOKEN está vazio no .env — a sonda usa o mesmo token do kick.');
             redirect('infra.php');
         }
 
+        // Vai para o resultado mesmo sem confirmação: a sonda roda do mesmo
+        // jeito, e o arquivo dela é que diz se sobreviveu.
         Auth::log('sonda_disparada', $liberar ? 'com liberação' : 'sem liberação');
-        redirect('infra.php?sonda=' . $id . '&t=' . time() . '#sonda');
+        redirect('infra.php?sonda=' . $disparo['id'] . '&t=' . time() . '&aceito=' . ($disparo['aceito'] ? '1' : '0') . '#sonda');
     }
 
     // Os testes completos escrevem em disco e fazem uma chamada real ao
@@ -186,6 +188,15 @@ include __DIR__ . '/partials/head.php';
     </p>
 
     <?php if ($sonda !== null): ?>
+        <?php if (($_GET['aceito'] ?? '1') === '0'): ?>
+            <p class="dica-painel" style="margin-bottom:0.75rem">
+                <span class="tag tag-alerta">sem confirmação</span>
+                O servidor não confirmou o pedido em 3 segundos. Sem a função de liberação, o LiteSpeed segura a
+                resposta até o script terminar — era o que acontecia com o kick antes da correção: quem chamava
+                desistia sem saber se o pedido tinha chegado. A sonda roda mesmo assim; o resultado abaixo vem do
+                arquivo dela.
+            </p>
+        <?php endif; ?>
         <?php if ($sonda['estado'] === 'aguardando' || $sonda['estado'] === 'rodando'): ?>
             <p>
                 <span class="tag tag-neutro">rodando</span>
@@ -216,8 +227,9 @@ include __DIR__ . '/partials/head.php';
         <?php else: ?>
             <ul class="lista-alertas">
                 <li class="alerta alerta-erro">
-                    <strong>A sonda não chegou a rodar.</strong> O pedido foi aceito, mas nada foi gravado em
-                    <code>storage/sondas</code>. Confira se a pasta <code>storage</code> é gravável pelo PHP do site.
+                    <strong>A sonda não chegou a rodar.</strong> Nada foi gravado em <code>storage/sondas</code>.
+                    Confira se a pasta <code>storage</code> é gravável pelo PHP do site e se <code>APP_URL</code>
+                    aponta para esta instância.
                 </li>
             </ul>
         <?php endif; ?>
