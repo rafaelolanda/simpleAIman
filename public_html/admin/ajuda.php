@@ -17,6 +17,11 @@ declare(strict_types=1);
  * criaria duas fontes, das quais esta seria a primeira a envelhecer. O que
  * entra aqui é o que a interface não consegue dizer: a ORDEM das coisas, o que
  * depende de quê, e o que fazer quando a resposta sai errada.
+ *
+ * Revisada em 11/09/2026 depois de a primeira pessoa a configurar em produção
+ * procurar o vínculo entre agente e base do lado da base — onde ele não fica —,
+ * e estranhar o agente "lembrar" de uma base já desativada. As duas dúvidas
+ * vêm de coisas que a interface não mostra, e por isso estão aqui.
  */
 
 require_once __DIR__ . '/_init.php';
@@ -31,6 +36,10 @@ $nome = trim((string) ($config['nome_instancia'] ?? '')) ?: 'o assistente';
 // que termina em "voce nao tem acesso" — o pior lugar possivel para isso
 // acontecer e justamente a pagina que deveria ensinar.
 $administra = in_array($meuPapel ?? 'atendente', ['admin', 'editor'], true);
+
+// Diagnostico e Infraestrutura sao so do administrador; o editor administra
+// conteudo, mas nao abre essas telas. Mesma razao do bloco acima.
+$ehAdmin = ($meuPapel ?? '') === 'admin';
 
 include __DIR__ . '/partials/head.php';
 ?>
@@ -50,8 +59,12 @@ include __DIR__ . '/partials/head.php';
         <li><a href="#palavras">As palavras que aparecem no painel</a></li>
         <li><a href="#responde">Como <?= e($nome) ?> monta uma resposta</a></li>
         <?php if ($administra): ?>
+            <li><a href="#escopo">O que cada assistente consegue ver</a></li>
             <li><a href="#melhorar">Como fazer ele responder melhor</a></li>
             <li><a href="#errado">A resposta saiu errada. E agora?</a></li>
+        <?php endif; ?>
+        <?php if ($ehAdmin): ?>
+            <li><a href="#ver">Onde ver o que aconteceu</a></li>
         <?php endif; ?>
         <li><a href="#nao-sabe">O que acontece quando ele não sabe</a></li>
         <?php if ($administra): ?>
@@ -67,9 +80,9 @@ include __DIR__ . '/partials/head.php';
 
     <p class="page-sub">
         Cinco palavras explicam quase tudo. Elas se encaixam em ordem: um <strong>agente</strong>
-        consulta <strong>bases</strong>, que contêm <strong>documentos</strong>, e atende por um
-        <strong>canal</strong>. As <strong>ferramentas</strong> são o que ele consegue fazer além
-        de responder.
+        consulta as <strong>bases</strong> marcadas para ele, que contêm <strong>documentos</strong>,
+        e atende por um <strong>canal</strong>. As <strong>ferramentas</strong> são o que ele consegue
+        fazer além de responder.
     </p>
 
     <table class="tabela">
@@ -82,7 +95,9 @@ include __DIR__ . '/partials/head.php';
         <tr>
             <td><strong>Base</strong></td>
             <td>Uma pasta de conhecimento. Serve para separar assuntos que não se misturam,
-                por exemplo regulamentos de um lado e tabela de preços do outro.</td>
+                por exemplo regulamentos de um lado e tabela de preços do outro. Quem decide qual
+                agente consulta qual base é o <strong>agente</strong>, na aba Conhecimento dele — a
+                base não escolhe agentes.</td>
         </tr>
         <tr>
             <td><strong>Documento</strong></td>
@@ -107,7 +122,14 @@ include __DIR__ . '/partials/head.php';
         <tr>
             <td><strong>FAQ</strong></td>
             <td>Perguntas e respostas escritas por você. Quando a pergunta casa com uma delas, a
-                sua resposta sai inteira, sem o assistente reescrever.</td>
+                sua resposta sai inteira, sem o assistente reescrever. Vale para
+                <strong>todos</strong> os agentes que estiverem com a FAQ ligada.</td>
+        </tr>
+        <tr>
+            <td><strong>Provedor</strong></td>
+            <td>O fornecedor de inteligência artificial. Um faz a <em>busca</em> nos documentos
+                (embedding) e outro <em>escreve</em> a resposta (chat). Podem ser fornecedores
+                diferentes.</td>
         </tr>
         </tbody>
     </table>
@@ -137,9 +159,64 @@ include __DIR__ . '/partials/head.php';
         informar contato do setor, chamar um sistema seu. Ele nunca inventa o endereço nem os dados
         da chamada; só preenche os campos que você declarou.
     </p>
+
+    <p class="page-sub">
+        Em todas elas, ele também lê <strong>o que já foi dito na mesma conversa</strong>. É o que
+        permite a pessoa perguntar "e o prazo?" sem repetir o assunto. A consequência menos óbvia:
+        se ele respondeu algo a partir de um documento e você desativar a base depois, aquela
+        resposta continua na conversa, e ele pode voltar a ela. Para testar uma mudança, comece uma
+        conversa nova.
+    </p>
+
+    <p class="page-sub">
+        Um agente em <strong>modo roteador</strong> não faz nada disso: ele só mostra o menu de
+        setores e entrega contatos, sem inteligência artificial nenhuma — no chat do site e no
+        WhatsApp.
+    </p>
 </div>
 
 <?php if ($administra): ?>
+<div class="card" id="escopo">
+    <h2 class="card-title">O que cada assistente consegue ver</h2>
+
+    <p class="page-sub">
+        O vínculo entre assistente e documentos fica <strong>na tela do agente</strong>, não na da
+        base: em <a href="agentes.php">Agentes</a>, abra o agente e vá na aba
+        <strong>Conhecimento</strong>. Ali você marca as bases que ele pode consultar e liga
+        "Consultar as bases". A tela da base só pede o provedor de embedding, porque ela decide
+        <em>como</em> os documentos são indexados, não <em>quem</em> os consulta. Em
+        <a href="bases.php">Bases</a>, a coluna <strong>Usada por</strong> mostra o caminho inverso.
+    </p>
+
+    <p class="page-sub">
+        Isso permite ter, por exemplo, um assistente para o público com a base pública e um
+        assistente interno com a base de documentos da equipe. O público nunca encontra um trecho
+        da base interna — nem pela busca por significado, nem por palavra exata.
+    </p>
+
+    <p class="page-sub">
+        Três coisas <strong>não</strong> seguem esse vínculo, e vale saber antes de separar
+        conteúdo sensível:
+    </p>
+
+    <ul class="lista-alertas">
+        <li class="alerta alerta-aviso">
+            <strong>A FAQ é de todos.</strong> Qualquer agente com a FAQ ligada pode responder com
+            qualquer pergunta cadastrada nela. Não coloque na FAQ nada que seja só para a equipe.
+        </li>
+        <li class="alerta alerta-aviso">
+            <strong>O que já foi dito fica na conversa.</strong> Desativar uma base tira ela da busca
+            na hora, mas não apaga o que o assistente já respondeu naquela conversa.
+        </li>
+        <li class="alerta alerta-aviso">
+            <strong>Separar assistentes não é controlar quem conversa.</strong> O chat do site e o
+            WhatsApp não pedem login de quem está do outro lado. Um assistente com documentos
+            internos não deve ficar num canal público; a equipe o usa por aqui, pelo painel, que
+            exige login.
+        </li>
+    </ul>
+</div>
+
 <div class="card" id="melhorar">
     <h2 class="card-title">Como fazer ele responder melhor</h2>
 
@@ -176,7 +253,7 @@ include __DIR__ . '/partials/head.php';
     <h2 class="card-title">A resposta saiu errada. E agora?</h2>
 
     <p class="page-sub">
-        Vá pelo sintoma. Quase sempre a causa é uma das quatro abaixo, e nenhuma exige mexer em
+        Vá pelo sintoma. Quase sempre a causa é uma das cinco abaixo, e nenhuma exige mexer em
         código.
     </p>
 
@@ -185,7 +262,7 @@ include __DIR__ . '/partials/head.php';
         Abra <a href="testar-busca.php">Testar busca</a> e faça a mesma pergunta. Se o trecho certo
         aparece na lista, o problema é o limiar do agente estar alto demais: ele achou e descartou.
         Se o trecho não aparece, o documento provavelmente está numa base que aquele agente não
-        consulta, ou o arquivo não tem texto legível.
+        consulta — confira a aba Conhecimento do agente —, ou o arquivo não tem texto legível.
     </p>
 
     <h3 class="secao-form">Ele respondeu com informação desatualizada</h3>
@@ -193,6 +270,14 @@ include __DIR__ . '/partials/head.php';
         O documento antigo continua indexado. Suba a versão nova e remova a antiga em
         <a href="artefatos.php">Artefatos</a>. Enquanto os dois existirem, os dois são consultados,
         e o assistente não tem como saber qual está valendo.
+    </p>
+
+    <h3 class="secao-form">Desativei uma base, mas ele continua respondendo sobre o assunto</h3>
+    <p class="page-sub">
+        A base sai da busca na hora; o que costuma sobrar é outra coisa. Ou a resposta já estava
+        naquela conversa e ele voltou a ela, ou o assunto também está na FAQ, que não depende de
+        base. Teste numa conversa nova. Se a resposta não trouxer "Fontes:", não houve busca em
+        documento nenhum.
     </p>
 
     <h3 class="secao-form">Ele inventou um telefone ou um e-mail</h3>
@@ -210,6 +295,33 @@ include __DIR__ . '/partials/head.php';
     </p>
 </div>
 
+<?php endif; ?>
+
+<?php if ($ehAdmin): ?>
+<div class="card" id="ver">
+    <h2 class="card-title">Onde ver o que aconteceu</h2>
+
+    <p class="page-sub">
+        Duas telas, em Sistema, respondem às duas perguntas que aparecem primeiro quando algo sai
+        do normal. Nenhuma guarda o texto das conversas — só o que aconteceu com cada resposta.
+    </p>
+
+    <p class="page-sub">
+        <strong><a href="turnos.php">Diagnóstico</a></strong> responde <em>"o que aconteceu nesta
+        resposta?"</em>. Mostra o tempo típico de resposta, quantas falharam e por qual motivo, e
+        quanto do atendimento saiu sem chamar a inteligência artificial. Clicando em
+        <strong>Abrir</strong> num atendimento, você vê por onde a resposta veio — FAQ, documentos
+        ou menu —, quantos trechos foram usados, as ferramentas chamadas e onde o tempo foi gasto.
+        É a primeira parada quando alguém reclama de lentidão ou de uma resposta estranha.
+    </p>
+
+    <p class="page-sub">
+        <strong><a href="infra.php">Infraestrutura</a></strong> responde <em>"o servidor está
+        saudável?"</em>. Mostra se a rotina que processa documentos e mensagens está rodando, e
+        confere o servidor, o banco e a conexão com o fornecedor de inteligência artificial. Se um
+        documento ficar parado em "pendente" ou o WhatsApp parar de responder, comece por ela.
+    </p>
+</div>
 <?php endif; ?>
 
 <div class="card" id="nao-sabe">
@@ -254,7 +366,8 @@ include __DIR__ . '/partials/head.php';
 
     <p class="page-sub">
         Vale criar outro quando o público é outro, por exemplo um para clientes e outro para uso
-        interno, ou quando o canal é outro e o tom precisa mudar.
+        interno, ou quando o canal é outro e o tom precisa mudar. Cada um consulta só as bases
+        marcadas para ele — veja <a href="#escopo">o que cada assistente consegue ver</a>.
     </p>
 </div>
 
@@ -273,9 +386,9 @@ include __DIR__ . '/partials/head.php';
     </p>
 
     <p class="page-sub">
-        Batendo o limite do dia, a conversa não morre. Ela passa a funcionar sem inteligência
-        artificial, apresentando um menu de setores e entregando contatos. A pessoa continua
-        chegando a quem resolve, e você não paga mais nada naquele dia.
+        No chat do site, batendo o limite do dia, a conversa não morre. Ela passa a funcionar sem
+        inteligência artificial, apresentando um menu de setores e entregando contatos. A pessoa
+        continua chegando a quem resolve, e você não paga mais nada naquele dia.
     </p>
 </div>
 

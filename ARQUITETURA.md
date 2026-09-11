@@ -204,17 +204,41 @@ provedores          slug, driver(openai|anthropic|ollama|gemini), base_url,
 ### Agentes
 
 ```sql
-agentes             slug, nome, descricao, provedor_id, modelo,
+agentes             slug, nome, descricao, provedor_id, modelo, modo(ia|roteador), idioma,
                     system_prompt, temperatura, max_tokens, reasoning_effort,
                     top_k, limiar_similaridade, max_iteracoes_tool,
                     usa_rag, usa_faq, captura_lead, lead_destino_id,
-                    publico, token_publico, ativo
+                    token_publico, ativo
 agente_bases        agente_id, base_id
 agente_ferramentas  agente_id, ferramenta_id, config_override(JSON)
 ```
 
 > `top_k` e `limiar_similaridade` ficam **no agente**, não globais: suporte quer recall alto,
 > política interna quer precisão. É o botão que mais move qualidade na prática.
+
+> `provedor_id` e `modelo` em branco **herdam**: o agente usa o provedor padrão de chat e o
+> modelo desse provedor. Preencher é para quando este agente precisa de outro fornecedor ou de
+> outro modelo — um de FAQ num modelo barato, outro que encadeia ferramentas num mais capaz.
+
+### Escopo do conhecimento: o que cada agente enxerga
+
+`agente_bases` é a única ligação entre agente e conteúdo, e ela mora **no agente** (aba
+Conhecimento). A base não escolhe agentes; só decide com que provedor de embedding seus
+documentos viram vetores. A tela de Bases mostra a relação ao contrário, na coluna "Usada por",
+porque a primeira pessoa a configurar em produção procurou o vínculo do lado da base.
+
+- **As duas buscas filtram** pela lista de bases do agente: a vetorial (`embeddings.base_id
+  IN (...)`) e a lexical (`chunks.base_id IN (...)`). Se só uma filtrasse, um trecho privado
+  vazaria por palavra-chave.
+- **Base inativa** sai da lista de todos os agentes na hora (`b.ativo = 1` em `recuperar()`).
+- **A FAQ é global.** `FaqBusca` procura em todas as perguntas ativas, e a resposta sai
+  literal. Decisão de 11/09/2026: fica assim, com um aviso fixo na tela de FAQ.
+- **O histórico da conversa não obedece às bases.** O modelo recebe as mensagens anteriores, e
+  o que ele já respondeu a partir de uma base continua na conversa depois que ela é desativada.
+  Para testar um corte de escopo, use uma conversa nova.
+- **Escopo de agente não é controle de acesso.** Os canais não autenticam quem conversa — o
+  token do widget é público por desenho (§10.2), e o WhatsApp aceita qualquer número. Agente
+  com base interna não deve ficar em canal público; a equipe o usa pelo painel, que exige login.
 
 ### Conhecimento
 
@@ -359,13 +383,20 @@ mensagem do usuário
   │
   ├─ conversa em modo humano? → grava e PARA (o bot não fala por cima do atendente)
   │
-  ├─ RECUPERAÇÃO
-  │    embed da pergunta (task_type = RETRIEVAL_QUERY)
-  │    FTS5/BM25 + cosseno → fusão RRF → top_k → corte por limiar
-  │    match de FAQ acima do limiar alto? → responde a resposta curada e encerra
+  ├─ agente em modo roteador? → menu de setores, sem provedor, e encerra
+  │    (vale no widget e no WhatsApp; até 11/09/2026 só valia no widget)
+  │
+  ├─ comando de navegação ("menu", número de setor)? → roteador, e encerra
+  │
+  ├─ FAQ  (global: não depende das bases do agente)
+  │    embed da pergunta (RETRIEVAL_QUERY, provedor PADRÃO de embedding)
+  │    casou acima do limiar alto? → resposta curada, sem modelo, e encerra
+  │
+  ├─ RECUPERAÇÃO  (só nas bases ATIVAS ligadas ao agente em agente_bases)
+  │    FTS5/BM25 + cosseno, reaproveitando o vetor da FAQ → fusão → top_k → corte por limiar
   │
   ├─ PROMPT
-  │    system do agente + guardrails + trechos citados + histórico + schema das ferramentas
+  │    system do agente + trechos CERCADOS + guardrails + histórico + schema das ferramentas
   │
   ├─ LOOP DE FERRAMENTAS  (máx. max_iteracoes_tool, orçamento de tokens, timeout total)
   │    modelo pede ferramenta → valida params → checa depende_de → executa → devolve
@@ -373,8 +404,9 @@ mensagem do usuário
   │
   ├─ RESPOSTA
   │    stream (web) ou completa (WhatsApp) — mesmo pipeline, transportes diferentes
+  │    provedor falhou? no stream degrada para o menu; no WhatsApp, mensagem de erro
   │
-  └─ grava mensagem + fontes + execuções + tokens/custo/latência
+  └─ grava mensagem + fontes + execuções + tokens + turno (caminho e tempo por etapa)
 ```
 
 **Modelo pensante falha em silêncio.** Os Gemini 3.x gastam o orçamento de saída pensando
@@ -576,6 +608,12 @@ recebe os contatos. É a regra de sempre: não se promete o que não se pode cum
 
 A degradação não acontece se **parte da resposta já saiu** — emendar um menu no meio de um
 texto que o visitante está lendo confunde mais que o erro.
+
+**Dois limites de alcance, registrados em 11/09/2026.** O modo roteador em si passou a valer
+também no WhatsApp: até então a checagem só existia no `stream()`, e o `responder()` — o caminho
+do WhatsApp — seguia para FAQ, RAG e modelo mesmo com o agente em `roteador`. Já a
+**degradação** do item 2 continua só no `stream()`: no WhatsApp, quando o provedor falha, a
+pessoa recebe a mensagem pública do `ErroAgente` pedindo para tentar de novo, não o menu.
 
 ---
 

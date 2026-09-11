@@ -289,12 +289,27 @@ sentido e trecho errado. Pela mesma razão, trocar o modelo de embedding depois
 de indexar obriga a **reindexar tudo**; trocar o de chat não exige nada.
 
 **Agentes.** Crie um agente, escolha o provedor e escreva o prompt. É aqui que
-você define quem ele é e como fala.
+você define quem ele é e como fala. Provedor e modelo podem ficar em branco: o
+agente herda o padrão de chat do sistema e o modelo desse provedor.
 
 **Bases e Artefatos.** Crie uma base de conhecimento e suba os documentos. A
 indexação roda em segundo plano; a tela mostra o progresso. Depois use Testar
 busca com perguntas reais para calibrar o limiar antes de gastar chamada de
 modelo.
+
+**Ligue as bases ao agente.** É o passo que mais se esquece, porque a tela da
+base não o pede: ela só escolhe o provedor de embedding. Quem decide o que o
+agente consulta é o próprio agente, na aba **Conhecimento**, marcando as bases e
+mantendo ligado "Consultar as bases (RAG)". Base inativa sai da busca de todos os
+agentes na hora. A tela de Bases mostra, na coluna **Usada por**, quais agentes
+consultam cada uma.
+
+Dois cuidados de escopo. A **FAQ vale para todos os agentes** com ela ligada —
+não tem vínculo por agente —, então nada que seja só para a equipe deve ir para
+lá. E separar agentes separa o que cada um enxerga, **não quem conversa com
+ele**: os canais não pedem login de quem está do outro lado. Um agente com
+documentos internos não deve ficar num canal público; a equipe o usa pelo
+painel.
 
 **Setores.** Cadastre ao menos um setor com contato válido, e marque um como
 padrão. É ele que impede o assistente de inventar telefone quando nenhum setor
@@ -412,7 +427,21 @@ não, o que confunde bastante.
 
 **A busca não encontra o que está no documento.** Use Testar busca. Ela mostra a
 nota de cada trecho e por qual caminho ele foi achado, e normalmente o problema
-é limiar alto demais ou o documento na base errada.
+é limiar alto demais ou o documento numa base que o agente não consulta — confira
+a aba Conhecimento do agente, ou a coluna Usada por, em Bases.
+
+**Desativei uma base, mas o agente continua respondendo sobre o assunto.** A base
+sai da busca na hora. O que sobra costuma ser o histórico: o modelo recebe as
+mensagens anteriores da conversa, e o que ele já respondeu a partir da base
+continua lá. Ou o assunto também está na FAQ, que não depende de base. Teste
+numa conversa nova; em Sistema › Diagnóstico, o turno mostra *busca · 0
+trechos* quando nada foi recuperado.
+
+**No WhatsApp a resposta é só "estou com dificuldade para responder".** O
+fornecedor falhou — no plano gratuito do Gemini, quase sempre um 503 de
+sobrecarga ("high demand"). O chat do site troca para o menu de setores nesse
+caso; o WhatsApp ainda não, e devolve a mensagem pedindo para tentar de novo. O
+código da falha aparece em Sistema › Diagnóstico, em "Falhas por causa".
 
 **O WhatsApp não recebe nada.** Confira a inscrição do app na conta, no painel
 da Meta, e depois se as quatro variáveis do `.env` estão preenchidas. A tela do
