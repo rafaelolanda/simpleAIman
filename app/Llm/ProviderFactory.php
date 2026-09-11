@@ -160,14 +160,31 @@ final class ProviderFactory
 
         $id = (int) ($pdo->query("SELECT {$coluna} FROM config WHERE id = 1")->fetchColumn() ?: 0);
 
+        // Padrão escolhido e indisponível é ERRO, não motivo para trocar.
+        //
+        // Até 11/09/2026 caía no "primeiro ativo" também aqui. Com embedding
+        // isso é silencioso e grave: outro modelo gera vetores que não se
+        // comparam com os já indexados, e a busca passa a devolver ruído sem
+        // erro nenhum. Com chat, contraria a escolha de quem inativou. O
+        // fallback abaixo fica só para instalação que nunca escolheu padrão.
         if ($id > 0) {
-            $stmt = $pdo->prepare("SELECT * FROM provedores WHERE id = :id AND ativo = 1 AND papel IN ({$lista})");
+            $stmt = $pdo->prepare('SELECT * FROM provedores WHERE id = :id');
             $stmt->execute(['id' => $id]);
             $linha = $stmt->fetch(PDO::FETCH_ASSOC);
 
-            if ($linha) {
-                return new self($linha);
+            if (!$linha) {
+                throw new ErroAgente('configuracao', "O provedor padrao {$rotulo} (id={$id}) nao existe mais. Escolha outro em Provedores, no painel.");
             }
+
+            if ((int) $linha['ativo'] !== 1) {
+                throw new ErroAgente('configuracao', "O provedor padrao {$rotulo} \"{$linha['nome']}\" esta inativo. Reative-o ou escolha outro padrao em Provedores.");
+            }
+
+            if (!in_array((string) $linha['papel'], $papeis, true)) {
+                throw new ErroAgente('configuracao', "O provedor padrao {$rotulo} \"{$linha['nome']}\" nao serve para esse uso (papel: {$linha['papel']}). Escolha outro em Provedores.");
+            }
+
+            return new self($linha);
         }
 
         $linha = $pdo
