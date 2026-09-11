@@ -540,7 +540,7 @@ final class ChatService
      *
      * @return list<array<string, mixed>>
      */
-    private function recuperar(string $pergunta): array
+    private function recuperar(string $pergunta, ?int $conversaId = null): array
     {
         if (empty($this->agente['usa_rag'])) {
             return [];
@@ -559,15 +559,19 @@ final class ChatService
         try {
             $retriever = new Retriever();
 
+            $consulta = $conversaId !== null ? $this->consultaDeBusca($conversaId, $pergunta) : $pergunta;
+
             $trechos = $retriever->buscar(
-                $pergunta,
+                $consulta,
                 $bases,
                 (int) $this->agente['top_k'],
                 (float) $this->agente['limiar_similaridade'],
                 true,
                 true,
-                // Reaproveita o vetor já calculado para a FAQ.
-                $this->vetorDaPergunta($pergunta),
+                // Reaproveita o vetor já calculado para a FAQ quando a busca é
+                // pela mesma frase. Consulta combinada tem vetor próprio, que o
+                // Retriever calcula.
+                $consulta === $pergunta ? $this->vetorDaPergunta($pergunta) : null,
             );
 
             // `tempoBusca` era gravado aqui e nunca lido por ninguem — campo
@@ -595,6 +599,93 @@ final class ChatService
 
             return [];
         }
+    }
+
+    /** Quantas falas anteriores do visitante a busca pode juntar. */
+    private const FALAS_DE_CONTEXTO = 5;
+
+    /**
+     * Palavras que, abrindo a frase, dizem que ela continua a anterior.
+     *
+     * Ficam de fora as que também abrem pergunta completa: "como faço para
+     * usar os labs" e "não consigo acessar o wifi" se sustentam sozinhas.
+     */
+    private const CONECTIVOS = [
+        'mas', 'e', 'sim', 'entao', 'ok', 'certo', 'ta', 'isso', 'dai', 'ai',
+        'resumindo', 'resuma', 'resume', 'porque', 'pq', 'tipo',
+    ];
+
+    /**
+     * O texto que vai para a busca: a pergunta, e a conversa quando ela depende disso.
+     *
+     * A busca olhava só a última frase. Em uso real, depois de o agente
+     * explicar os laboratórios, "Mas em resumo", "Sim, mas para agendar" e
+     * "Mas o ato de agendar, faz como?" trouxeram trechos do Calendário
+     * Acadêmico, e o agente disse "não encontrei" sobre o que tinha
+     * respondido dois minutos antes. O histórico ia para o modelo, mas a busca
+     * não sabia do que se falava.
+     *
+     * Volta pelas falas do visitante até achar uma que se sustente sozinha,
+     * até FALAS_DE_CONTEXTO. Sem chamada extra ao modelo: reescrever a
+     * pergunta com a LLM custaria uma volta de rede e cota por turno.
+     */
+    private function consultaDeBusca(int $conversaId, string $pergunta): string
+    {
+        if (!self::ehContinuacao($pergunta)) {
+            return $pergunta;
+        }
+
+        $stmt = Database::connection()->prepare(
+            "SELECT conteudo FROM mensagens
+              WHERE conversa_id = :c AND autor_tipo = 'usuario'
+              ORDER BY id DESC LIMIT :l"
+        );
+        $stmt->bindValue('c', $conversaId, PDO::PARAM_INT);
+        $stmt->bindValue('l', self::FALAS_DE_CONTEXTO + 1, PDO::PARAM_INT);
+        $stmt->execute();
+
+        // A primeira é a própria pergunta, gravada antes da busca.
+        $anteriores = array_slice($stmt->fetchAll(PDO::FETCH_COLUMN), 1);
+        $partes = [];
+
+        foreach ($anteriores as $fala) {
+            // Colaram um código de 3 mil caracteres? Ele não pode afogar a busca.
+            array_unshift($partes, mb_substr(trim((string) $fala), 0, 300));
+
+            if (!self::ehContinuacao((string) $fala)) {
+                break;
+            }
+        }
+
+        return $partes === [] ? $pergunta : implode("\n", [...$partes, $pergunta]);
+    }
+
+    /**
+     * A frase depende da anterior para fazer sentido?
+     *
+     * Abre com conectivo ("mas...", "e...", "sim, mas...") ou é curta demais
+     * para carregar assunto, sem ser pergunta ("em resumo", "gente").
+     */
+    private static function ehContinuacao(string $frase): bool
+    {
+        $texto = mb_strtolower(trim($frase));
+
+        if (class_exists('Normalizer')) {
+            $n = \Normalizer::normalize($texto, \Normalizer::FORM_D);
+            $texto = $n !== false ? (preg_replace('/\p{Mn}/u', '', $n) ?? $texto) : $texto;
+        }
+
+        $palavras = preg_split('/[^\p{L}\p{N}]+/u', $texto, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if ($palavras === []) {
+            return false;
+        }
+
+        if (in_array($palavras[0], self::CONECTIVOS, true)) {
+            return true;
+        }
+
+        return count($palavras) <= 2 && !str_contains($frase, '?');
     }
 
     /**
@@ -719,24 +810,30 @@ final class ChatService
             return $curada;
         }
 
-        $trechos = $this->recuperar($pergunta);
+        $trechos = $this->recuperar($pergunta, $conversaId);
 
         try {
             $mensagens = [...$this->historico($conversaId)];
 
             $resposta = $this->montarAgente($trechos, $conversaId)->chat($mensagens)->getMessage();
-            $texto = trim((string) $resposta->getContent());
+            $texto = PromptBuilder::normalizarCitacoes(trim((string) $resposta->getContent()));
 
             if ($texto === '') {
                 throw new ErroAgente('resposta_vazia', 'Provedor respondeu 200 com conteúdo vazio.');
             }
-        } catch (ErroAgente $e) {
-            $this->registrarFalha($conversaId, $e);
-            \Turno::finalizar('erro');
-            throw $e;
         } catch (Throwable $e) {
-            $erro = ErroAgente::deProvedor($e, 'chat');
+            $erro = $e instanceof ErroAgente ? $e : ErroAgente::deProvedor($e, 'chat');
             $this->registrarFalha($conversaId, $erro);
+
+            // A ferramenta pode ter transferido a conversa antes de o provedor
+            // cair. Aí a mensagem de erro ("quer que eu registre sua dúvida?")
+            // oferece o que já foi feito.
+            if (($espera = $this->avisoDeHandoff($conversaId)) !== null) {
+                \Turno::finalizar('degradado');
+
+                return $espera;
+            }
+
             \Turno::finalizar('erro');
             throw $erro;
         }
@@ -837,7 +934,7 @@ final class ChatService
                 ->setAiProvider($provider)
                 ->setInstructions((new PromptBuilder())->montar($config, $trechos));
 
-            $texto = trim((string) $agent->chat($mensagens)->getMessage()->getContent());
+            $texto = PromptBuilder::normalizarCitacoes(trim((string) $agent->chat($mensagens)->getMessage()->getContent()));
 
             if ($texto === '') {
                 throw new ErroAgente('resposta_vazia', 'Provedor respondeu 200 com conteúdo vazio.');
@@ -989,7 +1086,7 @@ _" . implode(' ', $avisos) . '_';
             return;
         }
 
-        $trechos = $this->recuperar($pergunta);
+        $trechos = $this->recuperar($pergunta, $conversaId);
         $texto = '';
 
         try {
@@ -1007,6 +1104,7 @@ _" . implode(' ', $avisos) . '_';
                     continue;
                 }
 
+                $pedaco = PromptBuilder::normalizarCitacoes($pedaco);
                 $texto .= $pedaco;
                 yield $pedaco;
             }
@@ -1096,7 +1194,18 @@ _" . implode(' ', $avisos) . '_';
      */
     private function degradarParaMenu(int $conversaId, string $pergunta, string $jaEnviado): ?string
     {
-        if (trim($jaEnviado) !== '' || !Roteador::temMenu()) {
+        if (trim($jaEnviado) !== '') {
+            return null;
+        }
+
+        // Transferência feita neste turno, e o provedor caiu depois dela.
+        // Em uso real: "Transferência solicitada", e no mesmo segundo o menu
+        // com "digite ATENDENTE" — enquanto o atendente entrava na conversa.
+        if (($espera = $this->avisoDeHandoff($conversaId)) !== null) {
+            return $espera;
+        }
+
+        if (!Roteador::temMenu()) {
             return null;
         }
 
@@ -1108,6 +1217,30 @@ _" . implode(' ', $avisos) . '_';
         );
 
         $this->gravarMensagem($conversaId, 'bot', $texto);
+
+        return $texto;
+    }
+
+    /**
+     * Frase de espera para conversa que já está com um atendente, ou a caminho.
+     *
+     * Grava e devolve a frase; `null` quando a conversa segue com o bot. Frase
+     * fixa: o provedor acabou de falhar, não há quem compor outra.
+     */
+    private function avisoDeHandoff(int $conversaId): ?string
+    {
+        $stmt = Database::connection()->prepare('SELECT modo FROM conversas WHERE id = :id');
+        $stmt->execute(['id' => $conversaId]);
+
+        $texto = match ((string) $stmt->fetchColumn()) {
+            'aguardando' => 'Já chamei um atendente para você. Assim que ele entrar na conversa, responde por aqui.',
+            'humano' => 'Um atendente já está com a sua conversa e responde por aqui.',
+            default => null,
+        };
+
+        if ($texto !== null) {
+            $this->gravarMensagem($conversaId, 'bot', $texto);
+        }
 
         return $texto;
     }

@@ -37,6 +37,20 @@ final class Roteador
     private const PALAVRAS_MENU = ['menu', 'voltar', 'opcoes', 'inicio', 'ajuda'];
 
     /**
+     * Pedidos de gente que só valem como mensagem INTEIRA.
+     *
+     * Ficam fora de PALAVRAS_ATENDENTE porque lá a comparação é por trecho:
+     * "gente" casaria com "urgente" e "agente". Em uso real, "Conversar com
+     * gente" recebeu do modelo "não tenho como conectar você a outra pessoa"
+     * — com atendente disponível e ferramenta ligada.
+     */
+    private const PEDIDOS_DE_GENTE = [
+        'gente', 'falar com gente', 'conversar com gente', 'quero gente',
+        'falar com uma pessoa', 'conversar com uma pessoa', 'falar com atendente',
+        'quero atendente', 'quero um atendente', 'atendimento humano', 'falar com humano',
+    ];
+
+    /**
      * A mensagem é uma palavra de navegação, e nada além disso?
      *
      * Existe porque `menu` era palavra reservada só no modo roteador e não
@@ -65,7 +79,7 @@ final class Roteador
             return 'menu';
         }
 
-        return in_array($chave, self::PALAVRAS_ATENDENTE, true) ? 'atendente' : null;
+        return in_array($chave, [...self::PALAVRAS_ATENDENTE, ...self::PEDIDOS_DE_GENTE], true) ? 'atendente' : null;
     }
 
     /**
@@ -119,7 +133,7 @@ final class Roteador
 
         // Pedido explícito de gente vem antes de tudo: quem digitou
         // "atendente" não quer ver menu.
-        if (self::contem($chave, self::PALAVRAS_ATENDENTE)) {
+        if (self::contem($chave, self::PALAVRAS_ATENDENTE) || in_array(trim((string) preg_replace('/[^\p{L}\s]+/u', '', $chave)), self::PEDIDOS_DE_GENTE, true)) {
             return self::transferir($conversaId, $setores);
         }
 
