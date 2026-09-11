@@ -88,6 +88,34 @@ final class ProviderFactory
     }
 
     /**
+     * O provedor de embedding que uma BASE escolheu — só se estiver ativo.
+     *
+     * Mesmo raciocínio de `doAgente()`: até 11/09/2026 a indexação e a busca
+     * pegavam o provedor da base por `porId()`, e inativá-lo não desligava
+     * nada. Só a base que herdava o padrão respeitava o `ativo`.
+     */
+    public static function embeddingAtivo(int $id): self
+    {
+        $stmt = Database::connection()->prepare('SELECT * FROM provedores WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $linha = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$linha) {
+            throw new ErroAgente('configuracao', "Provedor id={$id} não encontrado.");
+        }
+
+        if ((int) $linha['ativo'] !== 1) {
+            throw new ErroAgente('configuracao', "O provedor de embedding \"{$linha['nome']}\" da base está inativo.");
+        }
+
+        if (($linha['papel'] ?? 'ambos') === 'chat') {
+            throw new ErroAgente('configuracao', "O provedor \"{$linha['nome']}\" da base é somente de chat e não gera vetores.");
+        }
+
+        return new self($linha);
+    }
+
+    /**
      * Provedor padrao de CHAT.
      *
      * Usado quando o agente nao define o dele (`agentes.provedor_id`).
@@ -210,6 +238,11 @@ final class ProviderFactory
     }
 
     /** chat|embedding|ambos — a que universo esta linha serve. */
+    public function id(): int
+    {
+        return (int) ($this->provedor['id'] ?? 0);
+    }
+
     public function papel(): string
     {
         return (string) ($this->provedor['papel'] ?? 'ambos');

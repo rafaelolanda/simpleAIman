@@ -175,21 +175,35 @@ final class Retriever
      */
     private function vetorial(string $pergunta, array $bases, int $quantos, ?array $vetorPronto = null): array
     {
+        $provedorId = $this->provedorDaBase($bases);
+
+        // Provedor inativo desliga a metade semântica, e só ela: a lexical não
+        // depende de provedor e segue respondendo. Derrubar a busca inteira
+        // porque o vetor não sai deixaria o agente sem documento nenhum.
+        try {
+            $fabrica = $provedorId !== null
+                ? ProviderFactory::embeddingAtivo($provedorId)
+                : ProviderFactory::padraoEmbedding();
+        } catch (\SimpleAIman\Llm\ErroAgente $e) {
+            \Log::erro('busca_vetorial_desligada', ['detalhe' => $e->detalhe]);
+
+            return [];
+        }
+
         // Vetor reaproveitado quando o chamador já embeddou a pergunta.
         //
         // Sem isso, um turno com FAQ e RAG ligados embedda a MESMA frase duas
         // vezes — medido: 589 ms jogados fora em cada turno, mais que o dobro
         // do custo somado de toda a busca. A chamada de rede é a parte cara;
         // repeti-la é o erro mais fácil de cometer aqui.
-        if ($vetorPronto !== null && $vetorPronto !== []) {
+        //
+        // Mas só vale se o vetor for do MESMO modelo que indexou a base. O
+        // chamador embedda com o padrão; base com provedor próprio recebia
+        // esse vetor e comparava espaços diferentes — sem erro, com resultado
+        // ruim. Corrigido em 11/09/2026.
+        if ($vetorPronto !== null && $vetorPronto !== [] && $this->podeReaproveitar($provedorId, $fabrica)) {
             return $this->store->similares($vetorPronto, $bases, $quantos);
         }
-
-        $provedorId = $this->provedorDaBase($bases);
-
-        $fabrica = $provedorId !== null
-            ? ProviderFactory::porId($provedorId)
-            : ProviderFactory::padraoEmbedding();
 
         $marco = microtime(true);
         $vetor = $fabrica->embeddings(ProviderFactory::TAREFA_CONSULTAR)->embedText($pergunta);
@@ -353,6 +367,25 @@ final class Retriever
         }
 
         return $saida;
+    }
+
+    /**
+     * O vetor que o chamador trouxe (sempre do padrão) serve para esta base?
+     *
+     * Base que herda o padrão: sim. Base com provedor próprio: só se ele for
+     * o próprio padrão.
+     */
+    private function podeReaproveitar(?int $provedorId, ProviderFactory $fabrica): bool
+    {
+        if ($provedorId === null) {
+            return true;
+        }
+
+        try {
+            return ProviderFactory::padraoEmbedding()->id() === $fabrica->id();
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /** @param list<int> $bases */

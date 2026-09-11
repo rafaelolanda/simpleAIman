@@ -183,7 +183,9 @@ final class Ingestor
         }
 
         $fabrica = $base['provedor_embedding_id']
-            ? ProviderFactory::porId((int) $base['provedor_embedding_id'])
+            // Inativo recusa aqui, com a causa, e a política de falhas desiste:
+            // configuração não volta sozinha. Reativado o provedor, reindexe.
+            ? ProviderFactory::embeddingAtivo((int) $base['provedor_embedding_id'])
             : ProviderFactory::padraoEmbedding();
 
         // RETRIEVAL_DOCUMENT ao indexar; a pergunta usa RETRIEVAL_QUERY. São
