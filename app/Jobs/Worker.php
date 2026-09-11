@@ -167,13 +167,15 @@ final class Worker
                 default => throw new \RuntimeException("Tipo de job desconhecido: {$job['tipo']}"),
             };
         } catch (ErroAgente $e) {
-            // Cota estourada NÃO é falha do artefato: é situação normal numa
-            // ingestão grande no free tier. Vira pausa, e o job volta sozinho
-            // quando a janela virar. Marcar como erro faria o admin ver um
-            // documento "quebrado" que só precisava esperar.
-            if ($e->codigo === 'provedor_cota') {
-                Queue::pausar($id, 90, 'Limite de requisições do provedor. Retomando automaticamente.');
-                $log("job #{$id}: cota do provedor — pausado por 90s.");
+            // Falha que costuma passar sozinha não é falha do artefato: vira
+            // pausa, e o job volta quando a janela virar. Marcar como erro faria
+            // o admin ver um documento "quebrado" que só precisava esperar.
+            // Quais falhas pausam, e por quanto tempo, está em PoliticaDeFalha.
+            $politica = PoliticaDeFalha::aplicar($job, $e);
+
+            if ($politica['acao'] === 'pausar') {
+                Queue::pausar($id, $politica['segundos'], $politica['motivo']);
+                $log("job #{$id}: {$e->codigo} — pausado por {$politica['segundos']} s.");
 
                 return 'pausas';
             }

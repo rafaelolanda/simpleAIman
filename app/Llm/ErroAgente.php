@@ -93,7 +93,14 @@ final class ErroAgente extends RuntimeException
             $status === 401 || $status === 403 => 'provedor_autenticacao',
             $status === 404 => 'configuracao',
             $status !== null && $status >= 500 => 'provedor_indisponivel',
-            str_contains(strtolower($texto), 'timeout') => 'provedor_timeout',
+            // "timed out" é como o cURL escreve ("cURL error 28: Operation timed
+            // out after 40003 milliseconds"). Sem esta variante, o timeout caía
+            // adiante em "Network error" e virava `provedor_indisponivel`: o
+            // visitante lia "estou com dificuldade" quando o certo era "está
+            // demorando mais que o normal". Os jobs com erro de 27 e 29/08
+            // mostram o código errado gravado.
+            str_contains(strtolower($texto), 'timeout'),
+            str_contains(strtolower($texto), 'timed out') => 'provedor_timeout',
             str_contains(strtolower($texto), 'could not resolve host') => 'provedor_indisponivel',
             // "Error creating resource" e "Network error" vêm do cliente HTTP,
             // não do fornecedor: é falha de transporte, e o visitante deve

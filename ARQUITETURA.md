@@ -412,7 +412,13 @@ worker (cron 1–5min + kick após upload)
 
 - **Retomável em lotes.** Processa N chunks, grava progresso, sai limpo antes do
   `max_execution_time`. Um PDF de 300 páginas atravessa várias execuções sem reprocessar nada.
-- **`429` pausa o job**, não marca erro. Backoff respeitando `Retry-After`.
+- **Falha passageira pausa o job, não marca erro.** Cota (`429`) pausa por 90 s,
+  sem teto — o `Retry-After` **não** é lido, apesar do que este documento dizia até
+  11/09/2026. Na indexação, `503` e timeout também pausam, com espera crescente e
+  teto de seis falhas **seguidas**; o contador zera a cada grupo que dá certo, porque
+  a indexação regrava o progresso sem ele. No WhatsApp não há retentativa: a pessoa
+  já foi avisada, e o dedup descartaria a segunda passada (§10.3). Ver
+  `Jobs/PoliticaDeFalha`.
 - **Nunca segurar transação durante chamada HTTP.** Chama a API fora, grava dentro,
   transação curta. É o bug nº 1 desse tipo de app.
 - **Leitura de PDF página a página** e teto de upload configurável — parser guloso derruba
@@ -1188,6 +1194,10 @@ Antes de inventar classe, procure no CSS herdado.
   `litespeed_finish_request()`. Código que só conhece o primeiro deixa a conexão
   aberta até o cliente desistir. Use `liberar_conexao()`, que tenta os dois e
   registra qual usou.
+- **O cURL escreve "timed out", não "timeout".** Classificar erro pela palavra
+  `timeout` deixava passar `cURL error 28: Operation timed out`, que caía adiante
+  em "Network error" e virava indisponibilidade: o visitante lia a mensagem errada.
+  Procure as duas grafias.
 - **Coluna gravada como string vazia escapa do `??`.** A tela de provedores grava
   `''` para "(mesmo do chat)", e `$a ?? $b` só troca nulo: o driver de embedding
   resolvia vazio e caía no `default` do `match`, montando o embedder da OpenAI
