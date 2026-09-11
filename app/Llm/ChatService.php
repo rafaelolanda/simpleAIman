@@ -816,7 +816,7 @@ final class ChatService
             $mensagens = [...$this->historico($conversaId)];
 
             $resposta = $this->montarAgente($trechos, $conversaId)->chat($mensagens)->getMessage();
-            $texto = PromptBuilder::normalizarCitacoes(trim((string) $resposta->getContent()));
+            $texto = FiltroDeSaida::texto(PromptBuilder::normalizarCitacoes((string) $resposta->getContent()));
 
             if ($texto === '') {
                 throw new ErroAgente('resposta_vazia', 'Provedor respondeu 200 com conteúdo vazio.');
@@ -934,7 +934,7 @@ final class ChatService
                 ->setAiProvider($provider)
                 ->setInstructions((new PromptBuilder())->montar($config, $trechos));
 
-            $texto = PromptBuilder::normalizarCitacoes(trim((string) $agent->chat($mensagens)->getMessage()->getContent()));
+            $texto = FiltroDeSaida::texto(PromptBuilder::normalizarCitacoes((string) $agent->chat($mensagens)->getMessage()->getContent()));
 
             if ($texto === '') {
                 throw new ErroAgente('resposta_vazia', 'Provedor respondeu 200 com conteúdo vazio.');
@@ -1089,6 +1089,9 @@ _" . implode(' ', $avisos) . '_';
         $trechos = $this->recuperar($pergunta, $conversaId);
         $texto = '';
 
+        // Raciocinio do modelo nao vai para a tela. Ver FiltroDeSaida.
+        $filtro = new FiltroDeSaida();
+
         try {
             $mensagens = [...$this->historico($conversaId)];
             $handler = $this->montarAgente($trechos, $conversaId)->stream($mensagens);
@@ -1104,9 +1107,22 @@ _" . implode(' ', $avisos) . '_';
                     continue;
                 }
 
-                $pedaco = PromptBuilder::normalizarCitacoes($pedaco);
+                $pedaco = $filtro->pedaco(PromptBuilder::normalizarCitacoes($pedaco));
+
+                if ($pedaco === '') {
+                    continue;
+                }
+
                 $texto .= $pedaco;
                 yield $pedaco;
+            }
+
+            // O que o filtro segurou a espera de um marcador completo.
+            $resto = $filtro->fim();
+
+            if ($resto !== '') {
+                $texto .= $resto;
+                yield $resto;
             }
 
             if (trim($texto) === '') {

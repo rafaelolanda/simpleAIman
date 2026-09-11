@@ -472,6 +472,17 @@ final class ProviderFactory
             $p['reasoning_effort'] = (string) $opcoes['reasoning_effort'];
         }
 
+        // Groq: o raciocinio NAO vem no texto da resposta.
+        //
+        // Sem isto, o gpt-oss devolve o pensamento junto do conteudo — em
+        // 11/09/2026 uma resposta de WhatsApp saiu com o raciocinio em ingles
+        // no meio. `reasoning_format` e parametro da Groq; manda-lo a outro
+        // fornecedor OpenAI-compatible arriscaria HTTP 400 por campo
+        // desconhecido, entao so vai quando o endereco e o dela.
+        if (stripos((string) ($this->provedor['base_url'] ?? ''), 'groq.com') !== false) {
+            $p['reasoning_format'] = 'hidden';
+        }
+
         return $p;
     }
 
