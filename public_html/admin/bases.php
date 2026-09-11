@@ -60,6 +60,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             redirect('bases.php');
         }
 
+        // Provedor "somente chat" não gera vetor. Recusar na entrada, e não na
+        // primeira indexação: a tela esconde esses provedores do seletor, mas
+        // quem envia o formulário à mão não passa por ela.
+        if ($dados['provedor_embedding_id'] !== null) {
+            $papel = $pdo->prepare('SELECT papel, nome FROM provedores WHERE id = :id');
+            $papel->execute(['id' => $dados['provedor_embedding_id']]);
+            $escolhido = $papel->fetch();
+
+            if ($escolhido && $escolhido['papel'] === 'chat') {
+                flash_set('erro', "O provedor \"{$escolhido['nome']}\" é somente de chat e não gera vetores. Escolha um provedor de embedding, ou deixe herdar o padrão.");
+                redirect('bases.php');
+            }
+        }
+
         $agora = now();
 
         if ($id > 0) {
@@ -141,7 +155,7 @@ $bases = $pdo->query(
      ORDER BY b.nome'
 )->fetchAll();
 
-$provedores = $pdo->query('SELECT id, nome, modelo_embedding, dimensoes FROM provedores ORDER BY nome')->fetchAll();
+$provedores = $pdo->query('SELECT id, nome, modelo_embedding, dimensoes, papel FROM provedores ORDER BY nome')->fetchAll();
 $setores = $pdo->query('SELECT id, nome FROM setores WHERE ativo = 1 ORDER BY ordem, nome')->fetchAll();
 
 include __DIR__ . '/partials/head.php';
@@ -186,12 +200,6 @@ include __DIR__ . '/partials/head.php';
                         <option value="<?= (int) $s['id'] ?>" <?= (int) ($editando['setor_id'] ?? 0) === (int) $s['id'] ? 'selected' : '' ?>><?= e($s['nome']) ?></option>
                     <?php endforeach; ?>
                 </select>
-                <small>
-                    Quem transforma o texto em vetor. <strong>Trocar depois de indexar invalida
-                    tudo o que já está nesta base</strong> — os vetores antigos e os novos deixam de
-                    ser comparáveis, e a busca passa a devolver resultado ruim sem erro nenhum.
-                    Mudou o modelo, reindexe a base.
-                </small>
             </label>
 
             <label>
@@ -209,12 +217,26 @@ include __DIR__ . '/partials/head.php';
                         }
                         echo $nomePadrao !== '' ? ' — ' . e($nomePadrao) : ' — nenhum definido ainda';
                     ?></option>
-                    <?php foreach ($provedores as $p): ?>
-                        <option value="<?= (int) $p['id'] ?>" <?= (int) ($editando['provedor_embedding_id'] ?? 0) === (int) $p['id'] ? 'selected' : '' ?>>
-                            <?= e($p['nome']) ?> · <?= e((string) $p['modelo_embedding']) ?>
+                    <?php foreach ($provedores as $p):
+                        $selecionado = (int) ($editando['provedor_embedding_id'] ?? 0) === (int) $p['id'];
+                        // "Somente chat" não gera vetor: fica fora da lista. Exceção: a
+                        // base que já aponta para um deles, senão salvar trocaria o
+                        // provedor em silêncio. Aparece marcado, e o salvar recusa.
+                        if ($p['papel'] === 'chat' && !$selecionado) {
+                            continue;
+                        }
+                    ?>
+                        <option value="<?= (int) $p['id'] ?>" <?= $selecionado ? 'selected' : '' ?>>
+                            <?= e($p['nome']) ?> · <?= $p['papel'] === 'chat' ? 'somente chat — não indexa' : e((string) $p['modelo_embedding']) ?>
                         </option>
                     <?php endforeach; ?>
                 </select>
+                <small>
+                    Quem transforma o texto em vetor. Provedores "somente chat" não aparecem aqui.
+                    <strong>Trocar depois de indexar invalida tudo o que já está nesta base</strong> —
+                    os vetores antigos e os novos deixam de ser comparáveis, e a busca passa a
+                    devolver resultado ruim sem erro nenhum. Mudou o modelo, reindexe a base.
+                </small>
             </label>
 
             <label>
