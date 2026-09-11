@@ -674,6 +674,23 @@ final class ChatService
         $this->abrirTurno($conversaId);
         $this->gravarMensagem($conversaId, 'usuario', $pergunta, null, null, $externoId);
 
+        // Agente em modo roteador não toca no provedor — a mesma regra do
+        // `stream()`, que até 11/09/2026 só existia lá.
+        //
+        // Este é o caminho do WhatsApp. Sem a checagem, um agente em modo
+        // roteador respondia pelo modelo como qualquer outro: pagava LLM que o
+        // cliente escolheu não pagar e, pior, deixava de ser o caminho de
+        // degradação justamente no canal em que o provedor fora do ar mais
+        // pesa — a pessoa no WhatsApp ficava sem menu nenhum.
+        if (($this->agente['modo'] ?? 'ia') === 'roteador') {
+            $texto = Roteador::responder($conversaId, $pergunta);
+            $id = $this->gravarMensagem($conversaId, 'bot', $texto, null, (int) ((microtime(true) - $inicio) * 1000));
+
+            \Turno::definir(['caminho' => 'roteador']);
+            \Turno::finalizar('ok', $id);
+
+            return $texto;
+        }
 
         // Palavra de navegação: atalho determinístico, antes de qualquer busca.
         //
