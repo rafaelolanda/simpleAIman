@@ -1254,6 +1254,14 @@ _" . implode(' ', $avisos) . '_';
      */
     private function registrarFalha(int $conversaId, ErroAgente $e): void
     {
+        // Toda falha que chega ao visitante passa por aqui: é o ponto de tirar
+        // da mensagem a oferta de registrar dúvida que o agente não cumpre.
+        try {
+            $e->ajustarOferta(ToolRegistry::temChamado((int) $this->agente['id']), Roteador::temMenu());
+        } catch (Throwable) {
+            // Sem banco para conferir, fica a mensagem padrão.
+        }
+
         try {
             Database::connection()->prepare(
                 'INSERT INTO mensagens (conversa_id, autor_tipo, conteudo, trace_id, criado_em)

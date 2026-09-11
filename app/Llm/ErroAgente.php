@@ -66,9 +66,48 @@ final class ErroAgente extends RuntimeException
         $this->publica = $mensagemPublica
             ?? self::MENSAGENS[$codigo]
             ?? self::MENSAGENS['desconhecido'];
+        $this->personalizada = $mensagemPublica !== null;
     }
 
     private string $publica;
+
+    /** Mensagem escolhida por quem lançou: `ajustarOferta()` não mexe nela. */
+    private bool $personalizada = false;
+
+    /**
+     * As mesmas mensagens, sem a oferta de registrar a dúvida.
+     *
+     * Para agente sem a ferramenta de chamado. Em uso real (11/09/2026), o
+     * convite saiu, a pessoa disse "sim", e o modelo — que não tinha como
+     * registrar nada — pediu transferência de novo.
+     */
+    private const SEM_REGISTRO = [
+        'provedor_cota' => 'Estou com um volume alto de atendimentos agora e não consegui responder. '
+            . 'Tente de novo em alguns instantes.',
+        'provedor_autenticacao' => 'Não consegui responder agora. Tente de novo mais tarde.',
+        'provedor_indisponivel' => 'Estou com dificuldade para responder neste momento. Tente de novo em instantes.',
+        'provedor_timeout' => 'A resposta está demorando mais que o normal. Tente de novo em instantes.',
+        'ferramenta_falhou' => 'Não consegui consultar essa informação agora. Tente de novo em instantes.',
+        'desconhecido' => 'Não consegui responder agora. Tente de novo em instantes.',
+    ];
+
+    /**
+     * Tira a oferta de registro quando o agente não tem como cumpri-la.
+     *
+     * No lugar dela, aponta o menu de setores, se houver: contato de setor é
+     * dado nosso e não depende de ferramenta nem de provedor.
+     */
+    public function ajustarOferta(bool $podeRegistrar, bool $temMenu): self
+    {
+        if ($podeRegistrar || $this->personalizada || !isset(self::SEM_REGISTRO[$this->codigo])) {
+            return $this;
+        }
+
+        $this->publica = self::SEM_REGISTRO[$this->codigo]
+            . ($temMenu ? ' Se preferir, digite *MENU* para ver os contatos dos setores.' : '');
+
+        return $this;
+    }
 
     /** O que pode aparecer no chat. */
     public function mensagemPublica(): string

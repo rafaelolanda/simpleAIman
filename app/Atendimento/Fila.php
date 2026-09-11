@@ -8,6 +8,7 @@ use Database;
 use Mailer;
 use Metrics;
 use PDO;
+use SimpleAIman\Tools\ToolRegistry;
 use Throwable;
 
 /**
@@ -166,8 +167,7 @@ final class Fila
                 self::registrarBot(
                     $id,
                     'O atendente precisou sair e não encontrei outra pessoa disponível agora. '
-                        . 'Quer que eu registre sua dúvida para alguém retornar? '
-                        . 'Se preferir, é só tentar de novo mais tarde.'
+                        . self::ofertaDeRetorno((int) $id)
                 );
 
                 continue;
@@ -513,8 +513,7 @@ final class Fila
             self::registrarBot(
                 (int) $id,
                 'Desculpe a espera! Não encontrei nenhum atendente disponível agora. '
-                    . 'Quer que eu registre sua dúvida para alguém retornar? '
-                    . 'Se preferir, é só tentar de novo mais tarde.'
+                    . self::ofertaDeRetorno((int) $id)
             );
         }
 
@@ -791,8 +790,7 @@ final class Fila
             self::registrarBot(
                 $id,
                 'Desculpe a demora. Não consegui falar com um atendente agora. '
-                    . 'Quer que eu registre sua dúvida para alguém retornar? '
-                    . 'Se preferir, é só tentar de novo mais tarde.'
+                    . self::ofertaDeRetorno((int) $id)
             );
             $placar['encerradas']++;
         }
@@ -1026,6 +1024,29 @@ final class Fila
         self::gravar($conversaId, 'bot', $texto, null);
 
         \SimpleAIman\Canais\Saida::entregar($conversaId, $texto);
+    }
+
+    /**
+     * O que oferecer a quem ficou sem atendente.
+     *
+     * "Quer que eu registre sua dúvida?" só pode ser dito por agente que tem
+     * como registrar. Em uso real (11/09/2026), o agente sem a ferramenta de
+     * chamado ofereceu, a pessoa disse "sim", e o modelo — que só tinha a
+     * transferência — pediu transferência de novo: o mesmo beco de antes.
+     */
+    private static function ofertaDeRetorno(int $conversaId): string
+    {
+        $stmt = Database::connection()->prepare('SELECT agente_id FROM conversas WHERE id = :id');
+        $stmt->execute(['id' => $conversaId]);
+        $agenteId = (int) $stmt->fetchColumn();
+
+        if ($agenteId > 0 && ToolRegistry::temChamado($agenteId)) {
+            return 'Quer que eu registre sua dúvida para alguém retornar? Se preferir, é só tentar de novo mais tarde.';
+        }
+
+        return Roteador::temMenu()
+            ? 'Digite *MENU* para ver os contatos dos setores, ou tente de novo mais tarde.'
+            : 'Se preferir, é só tentar de novo mais tarde.';
     }
 
     public static function registrarAviso(int $conversaId, string $texto): void

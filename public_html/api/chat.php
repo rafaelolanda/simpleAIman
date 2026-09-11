@@ -132,5 +132,6 @@ try {
     sse('erro', ['mensagem' => $e->mensagemPublica()]);
 } catch (Throwable $e) {
     \Log::erro('chat_inesperado', ['erro' => $e->getMessage()]);
-    sse('erro', ['mensagem' => 'Não consegui responder agora. Quer que eu registre sua dúvida para alguém retornar?']);
+    // Frase neutra: aqui não se sabe se o agente tem como registrar dúvida.
+    sse('erro', ['mensagem' => 'Não consegui responder agora. Tente de novo em instantes.']);
 }

@@ -195,4 +195,23 @@ final class ToolRegistry
 
         return (int) $stmt->fetchColumn() > 0;
     }
+
+    /**
+     * O agente consegue registrar uma dúvida para retorno?
+     *
+     * É o que decide se "quer que eu registre sua dúvida?" pode ser dito.
+     * `handoff` entra porque o Executor o trata como chamado.
+     */
+    public static function temChamado(int $agenteId): bool
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT COUNT(*) FROM ferramentas f
+             JOIN agente_ferramentas af ON af.ferramenta_id = f.id
+             WHERE af.agente_id = :a AND f.ativo = 1
+               AND f.tipo IN (\'abrir_chamado\', \'handoff\')'
+        );
+        $stmt->execute(['a' => $agenteId]);
+
+        return (int) $stmt->fetchColumn() > 0;
+    }
 }

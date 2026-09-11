@@ -291,5 +291,6 @@ try {
     Sse::evento('erro', ['mensagem' => $e->mensagemPublica()]);
 } catch (Throwable $e) {
     \Log::erro('publico_inesperado', ['erro' => $e->getMessage()]);
-    Sse::evento('erro', ['mensagem' => 'Não consegui responder agora. Quer que eu registre sua dúvida para alguém retornar?']);
+    // Frase neutra: aqui não se sabe se o agente tem como registrar dúvida.
+    Sse::evento('erro', ['mensagem' => 'Não consegui responder agora. Tente de novo em instantes.']);
 }
