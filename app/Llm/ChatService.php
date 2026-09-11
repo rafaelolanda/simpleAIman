@@ -79,7 +79,7 @@ final class ChatService
     {
         if ($this->fabrica === null) {
             $this->fabrica = $this->agente['provedor_id']
-                ? ProviderFactory::porId((int) $this->agente['provedor_id'])
+                ? ProviderFactory::doAgente((int) $this->agente['provedor_id'])
                 : ProviderFactory::padraoChat();
         }
 

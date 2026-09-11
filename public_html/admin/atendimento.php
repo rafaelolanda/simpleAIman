@@ -182,6 +182,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             \SimpleAIman\Llm\ChatService::paraAgente((int) $conversa['agente_id'])
                 ->consultar($conversaId, mb_substr(texto_utf8($pergunta), 0, 1000), $eu);
+        } catch (\SimpleAIman\Llm\ErroAgente $e) {
+            \Log::erro('copiloto_falhou', ['erro' => $e->paraLog()]);
+
+            // Configuração é escolha de quem administra (provedor inativo,
+            // agente desligado), não falha: quem atende precisa saber que o
+            // assistente está desligado de propósito, e não tentar de novo.
+            flash_set('erro', $e->codigo === 'configuracao'
+                ? 'Assistente indisponível: ' . $e->detalhe
+                : 'Não consegui consultar o assistente agora.');
         } catch (Throwable $e) {
             \Log::erro('copiloto_falhou', ['erro' => $e->getMessage()]);
             flash_set('erro', 'Não consegui consultar o assistente agora.');

@@ -58,6 +58,36 @@ final class ProviderFactory
     }
 
     /**
+     * O provedor de chat que um AGENTE escolheu — só se estiver ativo.
+     *
+     * `porId()` não olha `ativo` de propósito: o teste de provedor no painel e
+     * o bin/testar-provedor.php precisam exercitar um provedor antes de ligá-lo.
+     * Atender é outra coisa. Até 11/09/2026 o agente usava o provedor dele
+     * pelo `porId()`, e inativar o provedor não desligava nada: o copiloto do
+     * painel seguiu respondendo com todos os provedores inativos.
+     */
+    public static function doAgente(int $id): self
+    {
+        $stmt = Database::connection()->prepare('SELECT * FROM provedores WHERE id = :id');
+        $stmt->execute(['id' => $id]);
+        $linha = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$linha) {
+            throw new ErroAgente('configuracao', "Provedor id={$id} não encontrado.");
+        }
+
+        if ((int) $linha['ativo'] !== 1) {
+            throw new ErroAgente('configuracao', "O provedor \"{$linha['nome']}\" do agente está inativo.");
+        }
+
+        if (($linha['papel'] ?? 'ambos') === 'embedding') {
+            throw new ErroAgente('configuracao', "O provedor \"{$linha['nome']}\" do agente é somente de embedding.");
+        }
+
+        return new self($linha);
+    }
+
+    /**
      * Provedor padrao de CHAT.
      *
      * Usado quando o agente nao define o dele (`agentes.provedor_id`).
