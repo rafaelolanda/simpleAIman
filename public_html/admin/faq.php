@@ -138,6 +138,18 @@ include __DIR__ . '/partials/head.php';
         parecido o bastante com uma delas, <strong>a resposta sai exatamente como está aqui</strong> —
         sem passar pelo modelo. É mais barato, mais rápido, e a palavra final é sua.
     </p>
+    <?php /* A FAQ não tem escopo por agente, ao contrário das bases, que cada agente
+             só consulta se estiverem marcadas na aba Conhecimento dele. Decisão de
+             11/09/2026: a FAQ continua global, e o aviso é o que impede alguém de
+             cadastrar aqui algo que só colaboradores deveriam ver. */ ?>
+    <ul class="lista-alertas" style="margin-top:0.9rem;">
+        <li class="alerta alerta-aviso">
+            <strong>A FAQ vale para todos os agentes</strong> que estiverem com ela ligada — ela não tem
+            escopo por agente, como os documentos das bases têm. Qualquer resposta cadastrada aqui pode ser
+            entregue, palavra por palavra, a qualquer visitante de qualquer canal.
+            <strong>Não cadastre nada que seja só para colaboradores.</strong>
+        </li>
+    </ul>
 </div>
 
 <?php if ($pendentes > 0): ?>
