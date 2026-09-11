@@ -5,7 +5,7 @@ declare(strict_types=1);
 /**
  * Exercita um provedor de ponta a ponta e diz o que funciona.
  *
- *   php bin/testar-provedor.php            # o provedor ativo
+ *   php bin/testar-provedor.php            # o padrão de chat
  *   php bin/testar-provedor.php gemini-flash
  *
  * Existe porque diagnosticar isso na mão custa caro: uma chave sem permissão

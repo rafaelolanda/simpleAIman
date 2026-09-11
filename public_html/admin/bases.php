@@ -120,9 +120,19 @@ if (isset($_GET['editar'])) {
     $editando = $stmt->fetch() ?: null;
 }
 
+// `usada_por`: quem consulta esta base. O vínculo mora no AGENTE (aba
+// Conhecimento), e a primeira pessoa a configurar em produção o procurou aqui,
+// do lado da base, em 11/09/2026. Mostrar a relação ao contrário evita a busca
+// no lugar errado — e deixa ver de relance uma base interna marcada por engano
+// num agente público.
 $bases = $pdo->query(
     'SELECT b.*, p.nome AS provedor, s.nome AS setor,
             (SELECT COUNT(*) FROM artefatos a WHERE a.base_id = b.id) AS artefatos,
+            (SELECT GROUP_CONCAT(ag.nome || CASE WHEN ag.ativo = 0 THEN \' (inativo)\'
+                                                 WHEN ag.usa_rag = 0 THEN \' (RAG desligado)\'
+                                                 ELSE \'\' END, \', \')
+               FROM agente_bases ab JOIN agentes ag ON ag.id = ab.agente_id
+              WHERE ab.base_id = b.id) AS usada_por,
             (SELECT COUNT(*) FROM chunks c WHERE c.base_id = b.id) AS chunks,
             (SELECT COUNT(*) FROM embeddings e WHERE e.base_id = b.id) AS vetores
      FROM bases b
@@ -187,7 +197,18 @@ include __DIR__ . '/partials/head.php';
             <label>
                 Provedor de embedding
                 <select name="provedor_embedding_id">
-                    <option value="0">(provedor ativo)</option>
+                    <?php /* Nomeia o padrão em vez de só dizer "padrão": a pergunta seguinte
+                             seria "padrão é qual?". "(provedor ativo)" era o nome do
+                             conceito removido em 09/09/2026. */ ?>
+                    <option value="0">Herdar o padrão de embedding<?php
+                        $nomePadrao = '';
+                        foreach ($provedores as $pp) {
+                            if ((int) $pp['id'] === (int) ($config['provedor_embedding_padrao_id'] ?? 0)) {
+                                $nomePadrao = (string) $pp['nome'];
+                            }
+                        }
+                        echo $nomePadrao !== '' ? ' — ' . e($nomePadrao) : ' — nenhum definido ainda';
+                    ?></option>
                     <?php foreach ($provedores as $p): ?>
                         <option value="<?= (int) $p['id'] ?>" <?= (int) ($editando['provedor_embedding_id'] ?? 0) === (int) $p['id'] ? 'selected' : '' ?>>
                             <?= e($p['nome']) ?> · <?= e((string) $p['modelo_embedding']) ?>
@@ -244,6 +265,7 @@ include __DIR__ . '/partials/head.php';
                 <th>Embedding</th>
                 <th>Chunk</th>
                 <th>Conteúdo</th>
+                <th>Usada por</th>
                 <th></th>
             </tr>
             </thead>
@@ -258,13 +280,28 @@ include __DIR__ . '/partials/head.php';
                     </td>
                     <td>
                         <code><?= e((string) $b['modelo_embedding']) ?></code>
-                        <br><small style="opacity:.6"><?= (int) $b['dimensoes'] ?> dim · <?= e((string) ($b['provedor'] ?? 'provedor ativo')) ?></small>
+                        <?php /* Sem provedor próprio, a base usa o padrão de embedding do sistema.
+                                 "provedor ativo" era o nome do conceito removido em 09/09/2026. */ ?>
+                        <br><small style="opacity:.6"><?= (int) $b['dimensoes'] ?> dim · <?= e((string) ($b['provedor'] ?? 'padrão de embedding')) ?></small>
                     </td>
                     <td><small><?= (int) $b['chunk_tamanho'] ?> / <?= (int) $b['chunk_sobreposicao'] ?></small></td>
                     <td>
                         <?= (int) $b['artefatos'] ?> artefato(s) · <?= (int) $b['chunks'] ?> chunks
                         <?php if ($pendentes > 0): ?>
                             <br><span class="tag tag-erro"><?= $pendentes ?> sem vetor</span>
+                        <?php endif; ?>
+                    </td>
+                    <td>
+                        <?php if (!$b['ativo']): ?>
+                            <?php /* Base inativa sai da busca de todos os agentes, mesmo marcada. */ ?>
+                            <span class="tag tag-neutro" title="Base inativa sai da busca de todos os agentes">ninguém — base inativa</span>
+                            <?php if ($b['usada_por']): ?>
+                                <br><small style="opacity:.6">marcada em: <?= e((string) $b['usada_por']) ?></small>
+                            <?php endif; ?>
+                        <?php elseif ($b['usada_por']): ?>
+                            <small><?= e((string) $b['usada_por']) ?></small>
+                        <?php else: ?>
+                            <span class="tag tag-alerta" title="Nenhum agente marca esta base na aba Conhecimento">nenhum agente</span>
                         <?php endif; ?>
                     </td>
                     <td class="acoes">
