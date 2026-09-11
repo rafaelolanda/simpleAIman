@@ -1184,6 +1184,18 @@ Antes de inventar classe, procure no CSS herdado.
   obriga a reindexar tudo, mesmo quando o número de dimensões coincide.
 - **A Anthropic não tem API de embeddings.** Provedor com `driver = anthropic` só serve de
   papel `chat`; para a busca, cadastre um segundo provedor.
+- **`fastcgi_finish_request()` não existe no LiteSpeed.** Lá o equivalente é
+  `litespeed_finish_request()`. Código que só conhece o primeiro deixa a conexão
+  aberta até o cliente desistir. Use `liberar_conexao()`, que tenta os dois e
+  registra qual usou.
+- **Coluna gravada como string vazia escapa do `??`.** A tela de provedores grava
+  `''` para "(mesmo do chat)", e `$a ?? $b` só troca nulo: o driver de embedding
+  resolvia vazio e caía no `default` do `match`, montando o embedder da OpenAI
+  com a chave do Gemini. Para "vazio ou nulo", `?:`.
+- **Variável de tela definida antes do `head.php` pode ser sobrescrita.** O
+  `sidebar.php` usa `$grupos`, `$titulo`, `$itens`, `$arquivo` e `$menuItem` no
+  escopo global. A tela de Infraestrutura quebrou com erro fatal por guardar os
+  próprios grupos em `$grupos`. Nome específico da tela resolve.
 - **Em CLI, `display_errors` desligado transforma erro fatal em silencio absoluto.** O
   `bootstrap.php` força `stderr` quando `PHP_SAPI === 'cli'` — sem isso, `migrate.php`
   com `.env` ausente não imprime uma linha sequer, embora a mensagem exista.
@@ -1346,6 +1358,49 @@ coluna inteira na memória.
 
 O detalhe de um trace fica **fora** do filtro de período: quem chega por um link não deveria
 precisar acertar o período antes de ver o que procurava.
+
+### Infraestrutura: o chão em que o sistema pisa
+
+A observabilidade de turno diz onde o tempo de UM atendimento foi gasto. Ela
+não responde se o worker está vivo, se falta extensão ou se o servidor web
+encerra processos — e foi isso que a primeira instalação de produção, na
+Hostinger, precisou saber em 11/09/2026: o WhatsApp só devolvia o aviso de turno
+interrompido, o playground ficou bem mais lento que no ambiente local e uma
+indexação de 300 KB demorou demais.
+
+Três peças, com duas faces (`bin/diagnostico.php` e Sistema › Infraestrutura)
+lendo a mesma classe, `DiagnosticoInfra` — como o `DiagnosticoProvedor` já fazia:
+
+- **Batimento do worker** (`Jobs/Batimento`). Cada execução abre um registro
+  ao começar e fecha ao terminar, num JSON com as últimas 50 em `storage/` —
+  arquivo e não tabela, porque o worker roda a cada cinco minutos mesmo com a
+  fila vazia e isso seria escrita constante no mesmo SQLite do chat. O
+  desfecho diz o que houve: fechado pelo worker é `ok` ou `com falhas`;
+  fechado pela função de desligamento é `fatal` ou `abortada`; **nunca
+  fechado é processo morto de fora**, porque `register_shutdown_function` roda
+  em erro fatal mas não quando o servidor mata o PHP.
+- **Sonda** (`api/sonda.php`). Faz o caminho do kick — responde 202, libera a
+  conexão e segue —, mas em vez de chamar o modelo marca "ainda vivo" a cada
+  segundo. Mede em que segundo o servidor web encerra um processo em segundo
+  plano. `liberar=0` reproduz o comportamento antigo, para comparar os dois no
+  mesmo servidor.
+- **Verificações** de ambiente, banco, worker e rede, cada uma existindo para
+  confirmar ou descartar uma hipótese — o OPcache do site, a latência de
+  escrita **no diretório do banco** (não no temporário, que num host
+  compartilhado pode ser outro disco), e o custo de uma chamada de embedding,
+  que multiplicado pelo número de trechos dá o piso do tempo de indexação.
+
+As duas faces não são redundantes: **o PHP da linha de comando não é o do
+site.** OPcache, liberação de conexão e o comportamento do servidor web só
+existem no processo web; a CLI diz, nesses itens, para olhar no painel.
+
+> **A correção que veio junto.** O webhook e o kick liberavam a conexão só com
+> `fastcgi_finish_request()`, que não existe no LiteSpeed — o servidor da
+> Hostinger, onde o equivalente é `litespeed_finish_request()`. As duas
+> chamadas passaram a usar `liberar_conexao()`, que tenta as duas e registra
+> qual usou. Se isso resolve o WhatsApp é o que a sonda responde: se ela
+> morrer mesmo com a conexão liberada, o limite é do servidor, e o caminho é
+> tirar o trabalho longo do processo web.
 
 ### O que ainda falta
 

@@ -88,6 +88,31 @@ if ($parados > 0) {
     ];
 }
 
+// Sinal de vida do worker, lido do batimento que cada execução deixa.
+//
+// Os dois alertas acima são indiretos: só aparecem depois que um job travou ou
+// um arquivo ficou parado. Este diz direto se alguém está consumindo a fila —
+// antes de algo dar errado. Ver SimpleAIman\Jobs\Batimento.
+$batimento = \SimpleAIman\Jobs\Batimento::resumo();
+$verInfra = $meuPapel === 'admin' ? ' Veja em <a href="infra.php">Infraestrutura</a>.' : '';
+
+if ($batimento['ultima'] === null) {
+    $alertas[] = ['erro', 'O worker nunca registrou uma execução. Confira o <code>cron</code> do <code>bin/worker.php</code>.' . $verInfra];
+} elseif (time() - (int) $batimento['ultima'] > 600) {
+    $alertas[] = [
+        'erro',
+        'O worker está calado há ' . intdiv(time() - (int) $batimento['ultima'], 60) . ' min — ninguém está processando a fila.' . $verInfra,
+    ];
+}
+
+if ($batimento['interrompidas_kick'] > 0) {
+    $alertas[] = [
+        'aviso',
+        $batimento['interrompidas_kick'] . ' execução(ões) do worker disparada(s) pela web morreram no meio do trabalho. '
+            . 'É o servidor encerrando o processo — a causa do turno interrompido no WhatsApp.' . $verInfra,
+    ];
+}
+
 // Setor com contato nunca revisado: contato errado é pior que contato nenhum,
 // porque o agente entrega o número errado com toda a confiança do mundo.
 $setoresSemRevisao = $contar(

@@ -220,10 +220,29 @@ depois troque o **Minuto** para "Cada 5 minutos (\*/5)". O resultado é
 meia hora, e os prazos de `ESPERA_MAX_MIN` e `INATIVIDADE_AVISO_MIN` são
 menores que isso.
 
+### Servidor LiteSpeed
+
+A Hostinger serve o site com LiteSpeed. Isso importa para o webhook do WhatsApp
+e para o kick do worker, que respondem primeiro e trabalham depois: no LiteSpeed
+a função que libera a conexão é outra, e o servidor pode encerrar o processo
+antes de o trabalho terminar.
+
+Depois de instalar, rode a **sonda** em Sistema › Infraestrutura. Se ela
+sobreviver os 60 s, o trabalho em segundo plano funciona neste servidor. Se
+morrer antes, uma resposta do modelo mais longa que esse tempo morre junto — é o
+turno interrompido do WhatsApp —, e o caminho é não depender do kick para o
+trabalho longo.
+
 ### Como confirmar que o worker está rodando
 
-O log só nasce se houver erro, então arquivo ausente não prova nada. Duas
-verificações que provam:
+O jeito direto é o cartão **Worker** em Sistema › Infraestrutura, ou
+`php bin/diagnostico.php`: cada execução deixa um batimento com horário, origem
+(cron ou kick) e desfecho. Com o cron a cada cinco minutos, o esperado é perto de
+12 execuções por hora pela linha de comando.
+
+As verificações abaixo continuam valendo quando o painel não abre. O log só
+nasce se houver erro, então arquivo ausente não prova nada. Duas verificações
+que provam:
 
 ```bash
 /opt/alt/php84/usr/bin/php ~/domains/SEU-DOMINIO/bin/worker.php --status
@@ -319,7 +338,29 @@ Teste antes de entregar.
 
 ### Onde olhar primeiro
 
-**Sistema › Diagnóstico.** É a primeira parada. A tela mostra a latência típica (mediana e
+**Sistema › Infraestrutura.** Se a dúvida é o chão em que o sistema pisa — o
+worker está rodando? falta extensão? o SQLite está lento? o servidor encerra o
+processo no meio? —, comece por aqui. A tela mostra se o worker está vivo, as
+últimas execuções dele com a origem de cada uma (cron ou kick) e como
+terminaram, e as verificações de PHP, banco e rede. Tudo medido **pelo PHP do
+site**, que pode não ser o da linha de comando.
+
+Uma execução marcada como **interrompida** começou e nunca terminou, sem erro
+registrado: o processo foi encerrado de fora. Se isso aparece nas execuções do
+kick, rode a **sonda** na mesma tela — ela mede em que segundo o servidor web
+mata um processo em segundo plano. Uma resposta do modelo que demore mais que
+isso é o turno interrompido do WhatsApp.
+
+O mesmo pela linha de comando, útil quando o painel não abre:
+
+```bash
+php bin/diagnostico.php
+```
+
+`--rapido` pula os testes de disco e rede (que fazem uma chamada real de
+embedding); `--sonda` dispara a sonda daqui e espera o resultado.
+
+**Sistema › Diagnóstico.** Com a infraestrutura em ordem, é a próxima parada. A tela mostra a latência típica (mediana e
 p95), a taxa de erro, quanto do atendimento sai sem chamar o modelo, para onde o tempo está
 indo por etapa, e as falhas agrupadas por causa. Os quinze turnos mais lentos ficam listados
 — é por onde começar quando alguém reclama de lentidão.

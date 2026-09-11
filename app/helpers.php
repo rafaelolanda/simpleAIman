@@ -152,6 +152,53 @@ function caminho_uploads(string $subpasta = ''): string
  * fora da raiz, o `.htaccess` é redundante — e é essa a intenção: se um dia
  * alguém apontar um vhost para o diretório errado, o segundo cadeado segura.
  */
+/**
+ * Entrega a resposta ao cliente e deixa o PHP seguir trabalhando.
+ *
+ * O webhook do WhatsApp e o kick do worker respondem primeiro e trabalham
+ * depois: a Meta tolera poucos segundos antes de reenviar o evento, e quem
+ * cutuca o worker não pode esperar a chamada ao modelo terminar.
+ *
+ * Até 11/09/2026 isso só funcionava sob PHP-FPM. O código chamava apenas
+ * `fastcgi_finish_request()`, que não existe no LiteSpeed — o servidor da
+ * Hostinger, onde o equivalente é `litespeed_finish_request()`. Lá a conexão
+ * ficava aberta até quem chamou desistir, e o processo podia ser encerrado no
+ * meio do turno. O sintoma em produção foi o WhatsApp devolvendo só o aviso de
+ * turno interrompido.
+ *
+ * Devolve o mecanismo usado, e o guarda em `$GLOBALS['__liberacao']` para o
+ * batimento do worker registrar em que condição cada execução rodou — é o que
+ * permite ver na tela de Infraestrutura se o servidor oferece algum.
+ *
+ * @return 'fastcgi'|'litespeed'|'nenhum'
+ */
+function liberar_conexao(): string
+{
+    // Antes do flush: se o cliente fechar enquanto o buffer desce, o PHP não
+    // pode tomar isso como sinal para parar.
+    ignore_user_abort(true);
+
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+
+    flush();
+
+    $mecanismo = 'nenhum';
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        $mecanismo = 'fastcgi';
+    } elseif (function_exists('litespeed_finish_request')) {
+        litespeed_finish_request();
+        $mecanismo = 'litespeed';
+    }
+
+    $GLOBALS['__liberacao'] = $mecanismo;
+
+    return $mecanismo;
+}
+
 function caminho_storage(string $subpasta = ''): string
 {
     $base = __DIR__ . '/../storage';

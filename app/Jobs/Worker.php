@@ -53,6 +53,10 @@ final class Worker
     {
         $log ??= static fn (string $m): null => null;
 
+        // Sinal de vida. Aberto antes de qualquer trabalho, para que um
+        // processo morto no meio deixe rastro. Ver Batimento.
+        $batimento = Batimento::iniciar();
+
         // Rotinas de manutencao entram aqui, no maximo uma vez por dia. Nao ha
         // agendador proprio nesta arquitetura: o cron so chama o worker, entao
         // e o worker que decide o que ja passou da hora.
@@ -115,6 +119,8 @@ final class Worker
             $resultado = $this->processar($job, $log);
             $placar[$resultado] = ($placar[$resultado] ?? 0) + 1;
         }
+
+        Batimento::concluir($batimento, $placar);
 
         return $placar;
     }

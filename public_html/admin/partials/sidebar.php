@@ -46,6 +46,7 @@ $grupos = [
         'configuracoes.php' => ['icone' => 'engrenagem', 'label' => 'Configurações'],
         'privacidade.php' => ['icone' => 'chave', 'label' => 'Privacidade'],
         'turnos.php' => ['icone' => 'grafico', 'label' => 'Diagnóstico'],
+        'infra.php' => ['icone' => 'engrenagem', 'label' => 'Infraestrutura'],
         'logs.php' => ['icone' => 'log', 'label' => 'Logs'],
     ],
 ];

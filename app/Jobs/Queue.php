@@ -228,15 +228,33 @@ final class Queue
      */
     public static function cutucarWorker(): void
     {
-        if (WORKER_TOKEN === '' || APP_URL === '') {
+        if (WORKER_TOKEN === '') {
             return;
         }
 
-        $url = APP_URL . '/api/worker-kick.php?token=' . rawurlencode(WORKER_TOKEN);
+        self::dispararInterno('/api/worker-kick.php?token=' . rawurlencode(WORKER_TOKEN));
+    }
+
+    /**
+     * Faz uma requisição à própria instância e desiste assim que ela é aceita.
+     *
+     * Extraído de `cutucarWorker()` para a sonda da tela de Infraestrutura usar
+     * EXATAMENTE o mesmo disparo: medir a sobrevida de um processo em segundo
+     * plano com um cliente diferente do real mediria outra coisa.
+     *
+     * @return bool true quando a instância respondeu com status 2xx
+     */
+    public static function dispararInterno(string $caminho): bool
+    {
+        if (APP_URL === '') {
+            return false;
+        }
+
+        $url = APP_URL . $caminho;
         $partes = parse_url($url);
 
         if (!is_array($partes) || !isset($partes['host'])) {
-            return;
+            return false;
         }
 
         $seguro = ($partes['scheme'] ?? 'http') === 'https';
@@ -259,12 +277,12 @@ final class Queue
         );
 
         if ($socket === false) {
-            return;
+            return false;
         }
 
-        $caminho = ($partes['path'] ?? '/') . (isset($partes['query']) ? '?' . $partes['query'] : '');
+        $alvo = ($partes['path'] ?? '/') . (isset($partes['query']) ? '?' . $partes['query'] : '');
 
-        fwrite($socket, "GET {$caminho} HTTP/1.1\r\nHost: {$partes['host']}\r\nConnection: Close\r\n\r\n");
+        fwrite($socket, "GET {$alvo} HTTP/1.1\r\nHost: {$partes['host']}\r\nConnection: Close\r\n\r\n");
 
         // Lê APENAS a linha de status antes de fechar.
         //
@@ -277,8 +295,13 @@ final class Queue
         // depois começa a trabalhar. Não é esperar a ingestão — é confirmar
         // que o pedido foi entregue.
         stream_set_timeout($socket, 3);
-        fgets($socket, 128);
+        $status = fgets($socket, 128);
         fclose($socket);
+
+        // "HTTP/1.1 202 Accepted": o segundo campo é o código.
+        $codigo = is_string($status) ? (explode(' ', trim($status))[1] ?? '') : '';
+
+        return str_starts_with($codigo, '2');
     }
 
     /** @return array<string, int> */

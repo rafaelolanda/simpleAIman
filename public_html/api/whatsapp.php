@@ -162,17 +162,8 @@ echo 'ok';
 // status antes de fechar — são milissegundos, mas somados ao resto podem
 // encostar no limite de poucos segundos que a Meta tolera antes de reenviar
 // o evento. Com a resposta já entregue, o tempo daqui não conta mais.
-while (ob_get_level() > 0) {
-    ob_end_flush();
-}
-
-flush();
-
-if (function_exists('fastcgi_finish_request')) {
-    fastcgi_finish_request();
-}
+liberar_conexao();
 
 if ($enfileirados > 0) {
-    ignore_user_abort(true);
     Queue::cutucarWorker();
 }

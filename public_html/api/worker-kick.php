@@ -35,15 +35,9 @@ header('Content-Length: 3');
 header('Connection: close');
 echo 'ok';
 
-while (ob_get_level() > 0) {
-    ob_end_flush();
-}
-
-flush();
-
-if (function_exists('fastcgi_finish_request')) {
-    fastcgi_finish_request();
-}
+// Ver liberar_conexao(): sem ela, no LiteSpeed a conexão ficava aberta e o
+// processo podia ser encerrado no meio da chamada ao modelo.
+liberar_conexao();
 
 // Trava por arquivo: o cron pode estar rodando neste exato momento, e dois
 // workers no mesmo lote só desperdiçam cota.

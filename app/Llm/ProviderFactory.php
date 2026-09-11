@@ -126,6 +126,59 @@ final class ProviderFactory
         return new self($linha);
     }
 
+    /**
+     * Para onde a rede vai, em cada universo.
+     *
+     * Serve ao diagnóstico de infraestrutura, que mede a conexão até o
+     * fornecedor separada do tempo da API. Espelha a resolução real de
+     * `chat()` e `embeddings()`, inclusive onde elas ignoram o endereço
+     * cadastrado: se as duas divergirem, o diagnóstico mede um lugar e o
+     * sistema conversa com outro.
+     *
+     * @return array{host: string, porta: int, tls: bool}|null
+     */
+    public function destino(string $universo = 'chat'): ?array
+    {
+        if ($universo === 'embedding') {
+            $driver = (string) (($this->provedor['driver_embedding'] ?? '') ?: ($this->provedor['driver'] ?? 'openai'));
+
+            // Só o Ollama recebe o endereço de embedding em `embeddings()`;
+            // Gemini e OpenAI usam o padrão do provider do Neuron.
+            $base = $driver === 'ollama'
+                ? (trim((string) ($this->provedor['base_url_embedding'] ?? '')) ?: 'http://localhost:11434')
+                : match ($driver) {
+                    'gemini', 'gemini_nativo' => 'https://generativelanguage.googleapis.com',
+                    default => 'https://api.openai.com',
+                };
+        } else {
+            $driver = (string) ($this->provedor['driver'] ?? 'openai');
+            $cadastrado = trim((string) ($this->provedor['base_url'] ?? ''));
+
+            // A Anthropic não recebe endereço em `chat()`; os demais recebem.
+            $base = match (true) {
+                $driver === 'anthropic' => 'https://api.anthropic.com',
+                $cadastrado !== '' => $cadastrado,
+                $driver === 'gemini' => 'https://generativelanguage.googleapis.com',
+                $driver === 'ollama' => 'http://localhost:11434',
+                default => 'https://api.openai.com',
+            };
+        }
+
+        $partes = parse_url($base);
+
+        if (!is_array($partes) || empty($partes['host'])) {
+            return null;
+        }
+
+        $tls = ($partes['scheme'] ?? 'https') === 'https';
+
+        return [
+            'host' => (string) $partes['host'],
+            'porta' => (int) ($partes['port'] ?? ($tls ? 443 : 80)),
+            'tls' => $tls,
+        ];
+    }
+
     /** chat|embedding|ambos — a que universo esta linha serve. */
     public function papel(): string
     {
@@ -355,7 +408,13 @@ final class ProviderFactory
      */
     public function embeddings(string $tarefa = self::TAREFA_INDEXAR): EmbeddingsProviderInterface
     {
-        $driver = (string) ($this->provedor['driver_embedding'] ?? $this->provedor['driver'] ?? 'openai');
+        // `?:` e não `??`. A tela de provedores grava STRING VAZIA quando se
+        // escolhe "(mesmo do chat)", e `??` só cobre nulo: um provedor Gemini
+        // nessa opção caía no `default` do `match` abaixo e montava o embedder
+        // da OpenAI com a chave do Gemini — 401 do lado errado, na primeira
+        // indexação. A listagem da própria tela já exibia `driver_embedding ?:
+        // driver`, ou seja, mostrava uma coisa e o código fazia outra.
+        $driver = (string) (($this->provedor['driver_embedding'] ?? '') ?: ($this->provedor['driver'] ?? 'openai'));
         $modelo = $this->modeloEmbedding();
         $dim = $this->dimensoes();
 
