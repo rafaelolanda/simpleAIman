@@ -89,6 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'auth_ref' => trim((string) ($_POST['auth_ref'] ?? '')),
             'auth_nome' => trim((string) ($_POST['auth_nome'] ?? '')),
             'aviso_resposta' => trim(texto_utf8($_POST['aviso_resposta'] ?? '')),
+            'instrucao_resposta' => trim(texto_utf8($_POST['instrucao_resposta'] ?? '')),
             'timeout_ms' => ((int) ($_POST['timeout_ms'] ?? 0)) ?: null,
             'retentativas' => max(0, min(3, (int) ($_POST['retentativas'] ?? 0))),
             'resposta_caminho' => trim((string) ($_POST['resposta_caminho'] ?? '')),
@@ -129,7 +130,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         efeito=:efeito, setor_id=:setor_id, depende_de=:depende_de, metodo=:metodo,
                         url_template=:url_template, headers=:headers, corpo_template=:corpo_template,
                         auth_tipo=:auth_tipo, auth_ref=:auth_ref, auth_nome=:auth_nome,
-                        aviso_resposta=:aviso_resposta, timeout_ms=:timeout_ms,
+                        aviso_resposta=:aviso_resposta, instrucao_resposta=:instrucao_resposta,
+                        timeout_ms=:timeout_ms,
                         retentativas=:retentativas, resposta_caminho=:resposta_caminho, ativo=:ativo,
                         editado_em=:editado_em
                  WHERE id=:id'
@@ -143,11 +145,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare(
                 'INSERT INTO ferramentas (nome, slug, descricao_llm, tipo, efeito, setor_id, depende_de,
                         metodo, url_template, headers, corpo_template, auth_tipo, auth_ref, auth_nome,
-                        aviso_resposta, timeout_ms,
+                        aviso_resposta, instrucao_resposta, timeout_ms,
                         retentativas, resposta_caminho, ativo, criado_em, editado_em)
                  VALUES (:nome, :slug, :descricao_llm, :tipo, :efeito, :setor_id, :depende_de,
                         :metodo, :url_template, :headers, :corpo_template, :auth_tipo, :auth_ref, :auth_nome,
-                        :aviso_resposta, :timeout_ms,
+                        :aviso_resposta, :instrucao_resposta, :timeout_ms,
                         :retentativas, :resposta_caminho, :ativo, :criado_em, :editado_em)'
             )->execute($dados);
 
@@ -427,6 +429,19 @@ include __DIR__ . '/partials/head.php';
                     Serve para avisar que o dado <strong>não veio da base de conhecimento</strong>.
                     É anexada pelo sistema, não pedida ao modelo — aviso que depende de ele
                     lembrar some justamente na resposta em que importava.
+                </small>
+            </label>
+
+            <label class="col-2">
+                Instruções para o modelo ao usar a resposta
+                <textarea name="instrucao_resposta" rows="5"
+                          placeholder="Ex.: multiplique os créditos pelo valor unitário, apresente o total em tabela e pergunte se a pessoa tem direito a alguma bolsa."><?= e((string) $v('instrucao_resposta')) ?></textarea>
+                <small>
+                    O procedimento que o modelo deve seguir <strong>depois</strong> de receber os dados:
+                    fórmula, formato da resposta, o que perguntar em seguida. Vai junto do resultado,
+                    <strong>só no turno em que esta ferramenta é chamada</strong> — ao contrário da
+                    descrição acima, que é enviada em toda conversa, mesmo nas que nada têm a ver com ela.
+                    Deixe na descrição apenas <em>quando chamar</em>; o <em>como responder</em> vem aqui.
                 </small>
             </label>
 

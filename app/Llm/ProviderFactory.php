@@ -260,6 +260,18 @@ final class ProviderFactory
         return (int) ($this->provedor['id'] ?? 0);
     }
 
+    /**
+     * O provedor aceita streaming?
+     *
+     * A caixa existia na tela de Provedores desde o começo e NINGUÉM lia —
+     * desmarcar não mudava nada. Botão que mente é pior que botão que falta:
+     * quem desmarcou acredita ter desligado, e diagnostica o problema errado.
+     */
+    public function suportaStream(): bool
+    {
+        return (int) ($this->provedor['suporta_stream'] ?? 1) === 1;
+    }
+
     public function papel(): string
     {
         return (string) ($this->provedor['papel'] ?? 'ambos');

@@ -71,7 +71,7 @@ final class ObservadorNeuron implements ObserverInterface
         try {
             match ($event) {
                 'inference-start' => $this->abrir('inferencia'),
-                'inference-stop' => $this->fechar('inferencia'),
+                'inference-stop' => $this->fecharInferencia($data),
 
                 // As ferramentas são cronometradas pelo `Executor`, que mede o
                 // trabalho de verdade. Aqui só se conta quantas o modelo pediu:
@@ -88,6 +88,36 @@ final class ObservadorNeuron implements ObserverInterface
     private function abrir(string $etapa): void
     {
         $this->marcos[$etapa] = microtime(true);
+    }
+
+    /**
+     * Fecha a inferência e colhe o consumo dela.
+     *
+     * É o ÚNICO lugar em que o consumo do streaming aparece. O turno completo
+     * lê `getUsage()` da resposta e grava; o streaming não tem resposta
+     * nenhuma — tem pedaços —, e por isso `tokens_in` e `tokens_out` ficavam
+     * nulos em todo turno do widget. Sem eles não há custo por atendimento
+     * justamente no canal de maior volume.
+     *
+     * O evento traz a mensagem montada (`StreamingNode` emite depois de
+     * juntar os pedaços), então o consumo chega aqui quando o fornecedor o
+     * envia. Quando não envia, fica nulo como antes — nada quebra.
+     */
+    private function fecharInferencia(mixed $dados): void
+    {
+        $this->fechar('inferencia');
+
+        $resposta = is_object($dados) && property_exists($dados, 'response') ? $dados->response : null;
+        $uso = is_object($resposta) && method_exists($resposta, 'getUsage') ? $resposta->getUsage() : null;
+
+        if ($uso === null) {
+            return;
+        }
+
+        Turno::somarTokens(
+            (int) ($uso->inputTokens ?? 0),
+            (int) ($uso->outputTokens ?? 0) + (int) ($uso->reasoningTokens ?? 0),
+        );
     }
 
     /**

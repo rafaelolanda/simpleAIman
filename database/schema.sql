@@ -578,6 +578,19 @@ CREATE TABLE IF NOT EXISTS ferramentas (
     -- para avisar que o dado nao veio da base curada — busca na web, sistema
     -- de terceiro — e precisa ser conferido.
     aviso_resposta      TEXT,
+
+    -- Como o modelo deve TRATAR o que esta ferramenta devolveu.
+    --
+    -- Diferente de `descricao_llm`, que responde "devo chamar?" e viaja em
+    -- TODA requisicao junto das outras ferramentas. Este texto viaja apenas
+    -- no turno em que a ferramenta rodou, colado ao resultado — que e onde o
+    -- procedimento importa e onde o modelo mais presta atencao.
+    --
+    -- Nasceu de um caso real: a descricao da ferramenta de mensalidade tinha
+    -- 944 caracteres de formula, fluxo e formato de tabela, e quem perguntava
+    -- sobre feriado pagava esses tokens. Pior, o excesso de procedimento
+    -- diluia o gatilho e o modelo deixava de chamar a ferramenta.
+    instrucao_resposta  TEXT,
     timeout_ms          INTEGER,
     retentativas        INTEGER NOT NULL DEFAULT 0,
     resposta_caminho    TEXT,                          -- ex.: "data.items"

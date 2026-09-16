@@ -821,5 +821,92 @@ function formatar_whatsapp(?string $texto): string
     // dois juntos DOBRAM a quebra de linha — a tag <br> mais a quebra original,
     // que o pre-wrap preserva. Deixar a quebra por conta do CSS mantém o texto
     // idêntico ao que foi digitado.
-    return $saida;
+    return tabela_markdown_para_html($saida);
+}
+
+/**
+ * Converte tabela em markdown (linhas com `|`) em `<table>`.
+ *
+ * Roda DEPOIS do escape e do negrito: o que chega aqui já é HTML seguro, e as
+ * células herdam a formatação inline. Por isso o conteúdo da célula entra sem
+ * novo escape — escapar de novo transformaria `<strong>` em texto.
+ *
+ * Existe porque o agente responde simulação de custo em tabela, que é o
+ * formato certo para o dado, e o widget mostrava os canos crus: `| Disciplina
+ * | Créditos |`, linha a linha, com os hífens do separador. Visto em uso real
+ * em 16/09/2026.
+ *
+ * No WhatsApp não há conversão possível — o aplicativo não tem tabela. Lá
+ * quem resolve é a regra de formato no prompt, que pede lista.
+ */
+function tabela_markdown_para_html(string $html): string
+{
+    if (!str_contains($html, '|')) {
+        return $html;
+    }
+
+    $linhas = explode("\n", $html);
+    $saida = [];
+    $total = count($linhas);
+
+    for ($i = 0; $i < $total; $i++) {
+        $atual = trim($linhas[$i]);
+        $proxima = isset($linhas[$i + 1]) ? trim($linhas[$i + 1]) : '';
+
+        // Uma tabela precisa do cabeçalho E do separador logo abaixo. Sem
+        // essa exigência, qualquer frase com `|` viraria tabela de uma coluna.
+        $ehTabela = str_starts_with($atual, '|')
+            && $proxima !== ''
+            && preg_match('/^\|(?:\s*:?-{2,}:?\s*\|)+$/', $proxima) === 1;
+
+        if (!$ehTabela) {
+            $saida[] = $linhas[$i];
+            continue;
+        }
+
+        $cabecalho = celulas_da_linha($atual);
+        $corpo = [];
+        $i += 2;
+
+        while ($i < $total && str_starts_with(trim($linhas[$i]), '|')) {
+            $corpo[] = celulas_da_linha(trim($linhas[$i]));
+            $i++;
+        }
+
+        $i--;
+
+        $tabela = '<table class="tabela-resposta"><thead><tr>';
+
+        foreach ($cabecalho as $c) {
+            $tabela .= '<th>' . $c . '</th>';
+        }
+
+        $tabela .= '</tr></thead><tbody>';
+
+        foreach ($corpo as $linha) {
+            $tabela .= '<tr>';
+
+            foreach ($linha as $c) {
+                $tabela .= '<td>' . $c . '</td>';
+            }
+
+            $tabela .= '</tr>';
+        }
+
+        $saida[] = $tabela . '</tbody></table>';
+    }
+
+    return implode("\n", $saida);
+}
+
+/**
+ * Células de uma linha de tabela markdown, sem os canos das pontas.
+ *
+ * @return list<string>
+ */
+function celulas_da_linha(string $linha): array
+{
+    $linha = trim($linha, '|');
+
+    return array_map('trim', explode('|', $linha));
 }

@@ -100,6 +100,23 @@ final class Turno
         ));
     }
 
+    /**
+     * Soma o consumo de UMA inferência ao turno.
+     *
+     * Acumula porque o turno com ferramenta chama o modelo mais de uma vez: a
+     * primeira decide chamar, a segunda recebe o resultado. Só a soma responde
+     * "quanto custou este atendimento".
+     */
+    public static function somarTokens(int $entrada, int $saida): void
+    {
+        if (self::$id === null) {
+            return;
+        }
+
+        self::$contexto['tokens_in'] = (int) (self::$contexto['tokens_in'] ?? 0) + $entrada;
+        self::$contexto['tokens_out'] = (int) (self::$contexto['tokens_out'] ?? 0) + $saida;
+    }
+
     /** Acumula, não substitui: um turno pode chamar três ferramentas. */
     public static function somar(string $etapa, float $ms): void
     {

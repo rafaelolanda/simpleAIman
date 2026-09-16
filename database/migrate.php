@@ -73,7 +73,9 @@ function garantir_colunas(PDO $pdo, string $tabela, array $colunas): void
     }
 }
 
-// (nenhuma coluna nova ainda — schema.sql é a fonte completa)
+// Instrução por ferramenta, enviada junto do resultado dela. Ver o comentário
+// da coluna em schema.sql.
+garantir_colunas($pdo, 'ferramentas', ['instrucao_resposta' => 'TEXT']);
 
 // Mudança de DEFAULT não alcança linha que já existe: `CREATE TABLE IF NOT
 // EXISTS` não recria a tabela, e ALTER de DEFAULT no SQLite não reescreve os

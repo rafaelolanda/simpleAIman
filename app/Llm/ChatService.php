@@ -348,8 +348,12 @@ final class ChatService
     }
 
     /** @param list<array<string, mixed>> $trechos */
-    private function montarAgente(array $trechos, int $conversaId, bool $comFerramentas = true): Agent
-    {
+    private function montarAgente(
+        array $trechos,
+        int $conversaId,
+        bool $comFerramentas = true,
+        string $formato = 'widget',
+    ): Agent {
         $provider = $this->fabrica()->chat([
             'modelo' => (string) ($this->agente['modelo'] ?? ''),
             'max_tokens' => (int) $this->agente['max_tokens'],
@@ -374,6 +378,7 @@ final class ChatService
         $config = $this->agente;
         $config['handoff_disponivel'] = ToolRegistry::temHandoff($agenteId);
         $config['ferramentas'] = $comFerramentas ? ToolRegistry::resumoParaPrompt($agenteId) : [];
+        $config['formato'] = $formato;
         $config['busca_fraca'] = $this->buscaFraca;
 
         $agent = Agent::make()
@@ -743,10 +748,9 @@ final class ChatService
             'id' => $mensagemId,
         ]);
 
-        \Turno::definir([
-            'tokens_in' => $uso->inputTokens,
-            'tokens_out' => $uso->outputTokens + $uso->reasoningTokens,
-        ]);
+        // O TURNO não é atualizado aqui: quem soma é o ObservadorNeuron, a
+        // cada inferência. Escrever dos dois lados contaria em dobro o turno
+        // com ferramenta, que chama o modelo mais de uma vez.
     }
 
     /**
@@ -816,7 +820,7 @@ final class ChatService
         try {
             $mensagens = [...$this->historico($conversaId)];
 
-            $resposta = $this->montarAgente($trechos, $conversaId)->chat($mensagens)->getMessage();
+            $resposta = $this->montarAgente($trechos, $conversaId, true, 'texto')->chat($mensagens)->getMessage();
             $texto = FiltroDeSaida::texto(PromptBuilder::normalizarCitacoes((string) $resposta->getContent()));
 
             if ($texto === '') {
@@ -900,6 +904,7 @@ final class ChatService
         // alguém configurou um. Quem lê aqui é colega de trabalho com um
         // atendimento aberto na tela: quer o fato, não a conversa.
         $config = $this->agente;
+        $config['formato'] = 'painel';
         $config['system_prompt'] = trim(
             "Você está ajudando um ATENDENTE HUMANO que está no meio de um atendimento. "
             . "Responda de forma direta e factual, em poucas linhas, sem saudação e sem "
@@ -1083,6 +1088,16 @@ _" . implode(' ', $avisos) . '_';
             \Turno::finalizar('ok');
 
             yield $curada;
+
+            return;
+        }
+
+        // Provedor sem streaming responde de uma vez, e o canal recebe um
+        // pedaço só. O visitante espera mais pela primeira palavra, mas a
+        // resposta chega inteira — e a degradação para o menu volta a
+        // funcionar, porque ela só é possível enquanto nada saiu.
+        if (!$this->fabrica()->suportaStream()) {
+            yield $this->responder($conversaId, $pergunta);
 
             return;
         }

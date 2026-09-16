@@ -123,6 +123,22 @@
     '.balao code{background:rgba(0,0,0,.08);padding:1px 4px;border-radius:4px;',
     'font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em}',
     '.de-usuario .balao code,.de-atendente .balao code{background:rgba(255,255,255,.22)}',
+    // Tabela de verdade no lugar dos canos.
+    //
+    // A resposta de simulação de custo é tabular por natureza, e até
+    // 16/09/2026 o `| Disciplina | Créditos |` aparecia cru no balão. O
+    // `white-space:normal` é necessário: o balão inteiro usa `pre-wrap`, e
+    // dentro da tabela isso criaria linha em branco a cada quebra do HTML.
+    '.balao table.tabela-resposta{border-collapse:collapse;width:100%;margin:6px 0;',
+    'font-size:.92em;white-space:normal;display:block;overflow-x:auto}',
+    '.balao .tabela-resposta th,.balao .tabela-resposta td{border:1px solid rgba(0,0,0,.14);',
+    'padding:4px 7px;text-align:left;vertical-align:top}',
+    '.balao .tabela-resposta th{background:rgba(0,0,0,.05);font-weight:600}',
+    '.de-usuario .balao .tabela-resposta th,.de-usuario .balao .tabela-resposta td,',
+    '.de-atendente .balao .tabela-resposta th,.de-atendente .balao .tabela-resposta td{',
+    'border-color:rgba(255,255,255,.3)}',
+    '.de-usuario .balao .tabela-resposta th,.de-atendente .balao .tabela-resposta th{',
+    'background:rgba(255,255,255,.18)}',
     '.fontes{margin-top:6px;font-size:12px;color:#6b7280}',
 
     // Arquivo que o atendente mandou. So o operador humano envia — o agente
