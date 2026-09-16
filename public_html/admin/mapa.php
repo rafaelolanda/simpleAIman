@@ -41,7 +41,8 @@ $padraoChat = (int) ($config['provedor_chat_padrao_id'] ?? 0);
 $padraoEmbedding = (int) ($config['provedor_embedding_padrao_id'] ?? 0);
 
 $provedores = $pdo->query(
-    'SELECT id, nome, papel, ativo, modelo_chat, modelo_embedding FROM provedores ORDER BY nome'
+    'SELECT id, nome, papel, ativo, modelo_chat, modelo_embedding, suporta_tools, suporta_stream
+       FROM provedores ORDER BY nome'
 )->fetchAll(PDO::FETCH_ASSOC);
 
 $agentes = $pdo->query(
@@ -312,7 +313,7 @@ foreach ($canais as $c) {
 //
 // Provedores → Agentes → (Canais, Bases, Ferramentas) → quem indexa as bases.
 // -------------------------------------------------------------------------
-$mapa = new Mapa([20, 290, 560, 830]);
+$mapa = new Mapa([20, 290, 560]);
 
 $colProvedores = [];
 
@@ -336,10 +337,18 @@ foreach ($provedores as $p) {
         };
     }
 
+    // Flags do provedor no proprio no.
+    //
+    // As duas mudam o que o agente CONSEGUE fazer: sem ferramentas ele nunca
+    // chama nada, e sem streaming a resposta so aparece pronta. Ficavam so no
+    // cadastro, e ninguem cruza cinco telas para descobrir por que um agente
+    // ignora a ferramenta ligada a ele.
     $colProvedores[] = [
         'chave' => 'prov-' . $id,
         'titulo' => (string) $p['nome'],
         'sub' => implode(' · ', $legenda),
+        'sub2' => 'ferramentas ' . ((int) $p['suporta_tools'] === 1 ? '✓' : '✗')
+            . ' · streaming ' . ((int) $p['suporta_stream'] === 1 ? '✓' : '✗'),
         'href' => 'provedores.php?editar=' . $id,
         'inativo' => (int) $p['ativo'] !== 1,
         'classe' => 'col-prov',
@@ -422,44 +431,9 @@ foreach ($ferramentas as $f) {
     ];
 }
 
-// Quarta coluna: quem INDEXOU cada base.
-//
-// O provedor de embedding já aparece à esquerda quando também faz chat, mas
-// ligar a base até lá cruzaria o desenho inteiro. Repetir o provedor à direita
-// mantém toda leitura no mesmo sentido.
-$usadosNoEmbedding = [];
-
-foreach ($bases as $b) {
-    $emb = (int) ($b['provedor_embedding_id'] ?? 0) ?: $padraoEmbedding;
-
-    if ($emb > 0) {
-        $usadosNoEmbedding[$emb] = true;
-    }
-}
-
-$colEmbedding = [];
-
-foreach ($provedores as $p) {
-    $id = (int) $p['id'];
-
-    if (!isset($usadosNoEmbedding[$id])) {
-        continue;
-    }
-
-    $colEmbedding[] = [
-        'chave' => 'emb-' . $id,
-        'titulo' => (string) $p['nome'],
-        'sub' => 'indexa · ' . (trim((string) $p['modelo_embedding']) ?: 'modelo não definido'),
-        'href' => 'provedores.php?editar=' . $id,
-        'inativo' => (int) $p['ativo'] !== 1,
-        'classe' => 'col-prov',
-    ];
-}
-
 $mapa->coluna(0, $colProvedores);
 $mapa->coluna(1, $colAgentes);
 $mapa->coluna(2, $colDireita);
-$mapa->coluna(3, $colEmbedding);
 $mapa->montar();
 
 foreach ($nosComAlerta as $chave => $_) {
@@ -494,10 +468,18 @@ foreach ($colDireita as $no) {
         $emb = $no['embedding_id'] ?: $padraoEmbedding;
 
         if ($emb > 0) {
+            // Volta ao provedor da PRIMEIRA coluna, por baixo do desenho.
+            //
+            // Antes o provedor era repetido numa coluna à direita para a linha
+            // não cruzar o meio. Duplicar a mesma entidade em dois lugares
+            // custa mais do que resolve: quem lê precisa perceber que as duas
+            // caixas são a mesma coisa. O caminho de retorno resolve o cruzamento
+            // sem duplicar.
+            //
             // Herdado do padrão sai mais claro que o escolhido na base: a
             // diferença entre "é o padrão" e "alguém mudou aqui" é justamente
             // o que se quer enxergar de longe.
-            $mapa->ligar($no['chave'], 'emb-' . $emb, $no['embedding_id'] === 0);
+            $mapa->ligarPorBaixo($no['chave'], 'prov-' . $emb, $no['embedding_id'] === 0);
         }
     }
 
@@ -587,10 +569,10 @@ include __DIR__ . '/partials/head.php';
 
     <p class="page-sub" style="margin-top:.6rem;">
         A linha mais clara é ligação herdada ou fora de uso — agente inativo, provedor vindo do padrão em vez
-        de escolhido. À direita das bases aparece quem as indexou: se uma base apontar para um provedor
-        diferente das outras, os vetores dela não se comparam com o resto, e a busca piora sem dar erro. A
-        seta entre ferramentas é a trava de ordem (<code>depende_de</code>): o sistema recusa a segunda
-        enquanto a primeira não tiver rodado na conversa.
+        de escolhido. A curva que passa por baixo vai da base até o provedor que a <strong>indexou</strong>:
+        se uma base apontar para um provedor diferente das outras, os vetores dela não se comparam com o
+        resto, e a busca piora sem dar erro. A seta entre ferramentas é a trava de ordem
+        (<code>depende_de</code>): o sistema recusa a segunda enquanto a primeira não tiver rodado na conversa.
     </p>
 </div>
 

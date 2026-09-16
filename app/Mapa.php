@@ -37,7 +37,10 @@ declare(strict_types=1);
 final class Mapa
 {
     public const LARGURA_NO = 210;
-    public const ALTURA_NO = 56;
+    // 66 e nao 56: cabe uma terceira linha opcional (`sub2`), usada pelas
+    // flags do provedor. Vale para todos os nos — caixa de altura variavel
+    // desalinharia as colunas e complicaria o calculo por ganho nenhum.
+    public const ALTURA_NO = 66;
     public const ESPACO = 16;
     public const ALTURA_ROTULO = 30;
 
@@ -187,6 +190,59 @@ final class Mapa
         ];
     }
 
+    /**
+     * Liga dois nós passando POR BAIXO do desenho.
+     *
+     * Para a ligação que volta — a base dizendo quem a indexou, lá na
+     * primeira coluna. Uma curva direta atravessaria as caixas do meio; a
+     * alternativa que existia antes era repetir o provedor numa coluna à
+     * direita, o que duplicava a mesma entidade em dois lugares do mapa.
+     * Sair pela base de uma caixa, correr por baixo e subir na outra é como
+     * um fluxograma desenha retorno, e mantém uma caixa por coisa.
+     */
+    public function ligarPorBaixo(string $de, string $para, bool $fraca = false): void
+    {
+        if (!isset($this->porChave[$de], $this->porChave[$para])) {
+            return;
+        }
+
+        $a = $this->porChave[$de];
+        $b = $this->porChave[$para];
+
+        // Sai pela LATERAL, nao pela base.
+        // Descer a partir da borda inferior atravessaria as caixas que estao
+        // abaixo na mesma coluna — no mapa da configuracao, a base tem a lista
+        // de ferramentas logo embaixo. Saindo pela esquerda, a curva desce no
+        // vao entre as colunas e passa por baixo de todo o desenho.
+        $x1 = $a['x'];
+        $y1 = $a['y'] + (int) (self::ALTURA_NO / 2);
+        $x2 = $b['x'] + (int) (self::LARGURA_NO / 2);
+        $y2 = $b['y'] + self::ALTURA_NO;
+        $fundo = $this->altura + 14;
+
+        // O desenho cresce para caber o retorno; sem isto a curva sairia
+        // fora do viewBox e apareceria cortada.
+        $this->altura = max($this->altura, $fundo + 16);
+
+        $this->arestas[] = [
+            'd' => sprintf(
+                'M %d %d C %d %d, %d %d, %d %d',
+                $x1,
+                $y1,
+                // 40 mantem o controle da curva dentro do vao entre colunas (60px):
+                // com 70 ela encostava na borda da coluna anterior.
+                $x1 - 40,
+                $y1,
+                $x2,
+                $fundo,
+                $x2,
+                $y2
+            ),
+            'fraca' => $fraca,
+            'seta' => false,
+        ];
+    }
+
     /** O desenho pronto. */
     public function svg(string $descricao): string
     {
@@ -249,6 +305,7 @@ final class Mapa
             . '<rect x="%d" y="%d" width="%d" height="%d" rx="10"></rect>'
             . '<text x="%d" y="%d" class="mapa-titulo">%s</text>'
             . '<text x="%d" y="%d" class="mapa-sub">%s</text>'
+            . '%s'
             . '<title>%s</title></a>',
             e((string) $no['href']),
             e($classes),
@@ -262,7 +319,14 @@ final class Mapa
             $x + 14,
             $y + 42,
             e(mb_strimwidth((string) $no['sub'], 0, 30, '…') . ($inativo ? ' · inativo' : '')),
-            e((string) $no['titulo'] . ' — ' . (string) $no['sub'])
+            isset($no['sub2']) ? sprintf(
+                '<text x="%d" y="%d" class="mapa-flag">%s</text>',
+                $x + 14,
+                $y + 58,
+                e(mb_strimwidth((string) $no['sub2'], 0, 32, '…'))
+            ) : '',
+            e((string) $no['titulo'] . ' — ' . (string) $no['sub']
+                . (isset($no['sub2']) ? ' — ' . (string) $no['sub2'] : ''))
         );
     }
 

@@ -1432,3 +1432,6 @@ html.menu-recolhido .btn-recolher { margin: 0; }
     color: var(--texto-fraco, #6b7280);
     margin-top: .15rem;
 }
+
+/* Terceira linha do nó: flags do provedor (ferramentas, streaming). */
+.mapa-svg .mapa-flag { font-size: 10.5px; fill: var(--texto-fraco, #6b7280); letter-spacing: .02em; }
