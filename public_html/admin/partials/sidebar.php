@@ -33,6 +33,7 @@ $grupos = [
         'testar-busca.php' => ['icone' => 'grafico', 'label' => 'Testar busca'],
     ],
     'Configuração' => [
+        'mapa.php' => ['icone' => 'grafico', 'label' => 'Mapa de ligações'],
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
         'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
         'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],

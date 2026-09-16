@@ -287,6 +287,13 @@ include __DIR__ . '/partials/head.php';
         válido, preencher a lacuna é a saída fácil, e o número inventado parece verdadeiro.
     </p>
 
+    <h3 class="secao-form">Antes de tudo: veja o mapa</h3>
+    <p class="page-sub">
+        <a href="mapa.php">Mapa de ligações</a> mostra, num desenho só, o que está conectado a quê e o
+        que ficou solto — agente sem base, ferramenta que ninguém chama, canal sem agente, provedor
+        inativo em uso. Boa parte dos sintomas desta página aparece lá antes, com o efeito descrito.
+    </p>
+
     <h3 class="secao-form">Ele não usa a ferramenta: diz que não encontrou nos documentos</h3>
     <p class="page-sub">
         Confira em <a href="ferramentas.php">Ferramentas</a> se ela está ativa e marcada para

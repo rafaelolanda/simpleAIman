@@ -1317,3 +1317,84 @@ html.menu-recolhido .btn-recolher { margin: 0; }
 .zap-corpo { max-height: none; flex: 1 1 auto; }
 
 .lista-conversas { max-height: calc(100vh - 11rem); }
+
+/* =====================================================================
+   Mapa de ligações (admin/mapa.php)
+
+   O desenho é SVG montado no servidor, sem biblioteca: o grafo é pequeno
+   e em camadas, e manter o deploy como `git pull` vale mais que um motor
+   de layout. As cores por coluna servem para achar o tipo de nó de longe;
+   o vermelho é reservado a quem tem ponto de atenção.
+   ===================================================================== */
+.mapa-rolagem { overflow-x: auto; padding-bottom: .4rem; }
+.mapa-svg { max-width: 100%; height: auto; min-width: 780px; }
+
+.mapa-linha {
+    stroke: var(--borda, #d5d9e2);
+    stroke-width: 1.6;
+}
+
+/* Ligação que existe mas não está em uso: fica visível, sem competir. */
+.mapa-linha.fraca { stroke-dasharray: 4 4; opacity: .5; }
+
+.mapa-no rect {
+    fill: var(--card, #fff);
+    stroke: var(--borda, #d5d9e2);
+    stroke-width: 1.5;
+    transition: stroke .15s ease, filter .15s ease;
+}
+
+.mapa-no:hover rect { stroke: var(--accent); filter: brightness(.99); }
+.mapa-no { cursor: pointer; }
+.mapa-no .mapa-titulo { font-size: 13px; font-weight: 600; fill: var(--texto, #14151a); }
+.mapa-no .mapa-sub { font-size: 11px; fill: var(--texto-fraco, #6b7280); }
+
+.mapa-no.col-prov rect { fill: rgba(37, 99, 235, .07); }
+.mapa-no.col-agente rect { fill: rgba(16, 185, 129, .09); }
+.mapa-no.col-canal rect { fill: rgba(139, 92, 246, .09); }
+.mapa-no.col-base rect { fill: rgba(245, 158, 11, .10); }
+.mapa-no.col-ferr rect { fill: rgba(14, 165, 233, .09); }
+
+.mapa-no.inativo rect { stroke-dasharray: 5 4; opacity: .65; }
+.mapa-no.alerta rect { stroke: var(--danger, #ff5470); stroke-width: 2; }
+
+.mapa-legenda {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .35rem 1rem;
+    font-size: .78rem;
+    color: var(--texto-fraco, #6b7280);
+    margin-bottom: .7rem;
+}
+
+.mapa-legenda span { display: inline-flex; align-items: center; gap: .35rem; }
+
+.mapa-chip {
+    width: 11px;
+    height: 11px;
+    border-radius: 3px;
+    border: 1.5px solid var(--borda, #d5d9e2);
+    display: inline-block;
+}
+
+.mapa-chip.col-prov { background: rgba(37, 99, 235, .25); }
+.mapa-chip.col-agente { background: rgba(16, 185, 129, .3); }
+.mapa-chip.col-canal { background: rgba(139, 92, 246, .3); }
+.mapa-chip.col-base { background: rgba(245, 158, 11, .35); }
+.mapa-chip.col-ferr { background: rgba(14, 165, 233, .3); }
+.mapa-chip.col-alerta { border-color: var(--danger, #ff5470); border-width: 2px; }
+.mapa-chip.col-inativo { border-style: dashed; }
+
+.mapa-alertas { margin: .2rem 0 0; padding-left: 1.1rem; }
+.mapa-alertas li { margin-bottom: .45rem; line-height: 1.45; }
+.mapa-alertas li.grave::marker { color: var(--danger, #ff5470); }
+.mapa-alertas li a { margin-left: .35rem; white-space: nowrap; }
+
+/* Rótulo de grupo dentro da coluna da direita (Canais, Bases, Ferramentas). */
+.mapa-svg .mapa-grupo {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    fill: var(--texto-fraco, #6b7280);
+}

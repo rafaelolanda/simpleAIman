@@ -138,6 +138,13 @@ encerra um processo em segundo plano. O mesmo pela linha de comando:
 Nada disso guarda o texto das conversas: é tudo metadado, e o conteúdo continua
 sob a retenção configurada.
 
+**Configuração › Mapa de ligações** responde *"está tudo ligado como eu penso
+que está?"*. Desenha provedores, agentes, canais, bases e ferramentas com as
+ligações reais entre eles, e aponta o que ficou solto: agente sem base, que
+responde sempre "não encontrei"; ferramenta ativa que nenhum agente chama;
+base indexada por um provedor de embedding diferente do padrão. Cada caixa
+abre a tela onde aquilo se configura.
+
 Pela linha de comando há mais dois, para quando a tela não basta:
 `php bin/ver-mensagem.php` mostra o conteúdo **cru** das últimas respostas, com
 os caracteres invisíveis à mostra — é como se descobre marcador de modelo
