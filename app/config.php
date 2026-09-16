@@ -139,7 +139,12 @@ define('TOOLS_HOSTS_PERMITIDOS', array_values(array_filter(array_map(
     explode(',', $env['TOOLS_HOSTS_PERMITIDOS'] ?? '')
 ))));
 define('TOOLS_TIMEOUT_MS', (int) ($env['TOOLS_TIMEOUT_MS'] ?? 8000));
-define('TOOLS_RESPOSTA_MAX_KB', (int) ($env['TOOLS_RESPOSTA_MAX_KB'] ?? 64));
+// 16 KB ~= 4 mil tokens. O teto anterior, 64 KB, cabia em quase nenhum
+// contexto: a resposta inteira da ferramenta entra no prompt da chamada
+// seguinte. Em 16/09/2026 uma ferramenta que devolvia a lista de todos
+// os cursos levou o pedido a 15.972 tokens contra os 8.000 do plano
+// gratuito da Groq — HTTP 413, e o turno degradou para o menu.
+define('TOOLS_RESPOSTA_MAX_KB', (int) ($env['TOOLS_RESPOSTA_MAX_KB'] ?? 16));
 
 date_default_timezone_set(APP_TIMEZONE);
 

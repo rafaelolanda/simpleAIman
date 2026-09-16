@@ -373,7 +373,13 @@ final class PromptBuilder
     {
         $texto = str_replace(['【', '】'], ['[', ']'], $texto);
 
-        return (string) preg_replace('/\[(\d{1,2})†[^\]]*\]/u', '[$1]', $texto);
+        // No streaming isto recebe PEDAÇO, que pode terminar no meio de um
+        // caractere. Com `/u`, o preg devolve null nesse caso, e devolver
+        // string vazia apagaria o pedaço — foi o que comeu letras no meio das
+        // palavras em 16/09/2026.
+        $novo = preg_replace('/\[(\d{1,2})†[^\]]*\]/u', '[$1]', $texto);
+
+        return $novo ?? $texto;
     }
 
     /**

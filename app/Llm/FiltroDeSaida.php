@@ -91,6 +91,17 @@ final class FiltroDeSaida
         $solto = strlen($this->buffer) - self::MAIOR;
 
         if ($solto > 0) {
+            // Corta em fronteira de CARACTERE, não de byte.
+            //
+            // Cortar no meio de um "ç" produz um pedaço com UTF-8 inválido, e
+            // aí `preg_replace` com `/u` devolve null — o pedaço inteiro virava
+            // string vazia e a resposta chegava com buracos no meio das
+            // palavras ("Sistemas de Infoão"). Visto em 16/09/2026, no mesmo
+            // dia em que este filtro entrou.
+            $solto = self::prefixoValido(substr($this->buffer, 0, $solto));
+        }
+
+        if ($solto > 0) {
             $saida .= substr($this->buffer, 0, $solto);
             $this->buffer = substr($this->buffer, $solto);
         }
@@ -132,10 +143,10 @@ final class FiltroDeSaida
     /** Sobras de formatação: `** **`, fileira de asteriscos, linhas vazias. */
     public static function cosmetica(string $texto): string
     {
-        $texto = (string) preg_replace('/\*\*\s*\*\*/u', '', $texto);
-        $texto = (string) preg_replace('/(?<!\S)(?:\*[ \t]*){2,}(?!\S)/u', ' ', $texto);
-        $texto = (string) preg_replace('/[ \t]+\n/u', "\n", $texto);
-        $texto = (string) preg_replace('/\n{3,}/u', "\n\n", $texto);
+        $texto = self::trocar('/\*\*\s*\*\*/u', '', $texto);
+        $texto = self::trocar('/(?<!\S)(?:\*[ \t]*){2,}(?!\S)/u', ' ', $texto);
+        $texto = self::trocar('/[ \t]+\n/u', "\n", $texto);
+        $texto = self::trocar('/\n{3,}/u', "\n\n", $texto);
 
         return trim($texto);
     }
@@ -143,7 +154,39 @@ final class FiltroDeSaida
     /** Tokens soltos do harmony (`<|start|>`, `<|end|>`) fora de marcador conhecido. */
     private static function semTokens(string $texto): string
     {
-        return (string) preg_replace('/<\|[^|>]{0,40}\|>/u', '', $texto);
+        return self::trocar('/<\|[^|>]{0,40}\|>/u', '', $texto);
+    }
+
+    /**
+     * `preg_replace` que devolve o ORIGINAL quando a expressão falha.
+     *
+     * Com `/u`, um único byte solto faz o preg devolver null. Convertido para
+     * string, isso apagava o texto inteiro em vez de deixá-lo como estava —
+     * perder formatação é aceitável, perder a resposta não é.
+     */
+    private static function trocar(string $padrao, string $por, string $texto): string
+    {
+        $novo = preg_replace($padrao, $por, $texto);
+
+        return $novo === null ? $texto : $novo;
+    }
+
+    /**
+     * Tamanho do maior prefixo que é UTF-8 completo.
+     *
+     * Um caractere UTF-8 tem no máximo 4 bytes, então basta recuar até 3.
+     */
+    private static function prefixoValido(string $texto): int
+    {
+        $tamanho = strlen($texto);
+
+        for ($i = $tamanho; $i > max(0, $tamanho - 4); $i--) {
+            if (mb_check_encoding(substr($texto, 0, $i), 'UTF-8')) {
+                return $i;
+            }
+        }
+
+        return 0;
     }
 
     /**
