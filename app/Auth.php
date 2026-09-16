@@ -104,8 +104,20 @@ final class Auth
         // Janela cumprida: o contador volta a zero e a pessoa tem as
         // LOGIN_MAX_TENTATIVAS de novo.
         self::limparTentativas($identificador);
+        self::log('login_desbloqueado', 'Bloqueio venceu; contador zerado.');
 
         return 0;
+    }
+
+    /**
+     * Nome do usuário como ele entra no log.
+     *
+     * Cortado em 40 caracteres: quem digita a senha no campo de usuário por
+     * engano não deixa a senha inteira gravada em texto puro no log.
+     */
+    private static function rotuloDeUsuario(string $usuario): string
+    {
+        return 'usuário "' . mb_substr($usuario, 0, 40) . '"';
     }
 
     /**
@@ -120,7 +132,8 @@ final class Auth
         return $usuario . '|' . client_ip();
     }
 
-    public static function registrarTentativaFalha(string $identificador): void
+    /** @return int quantas tentativas seguidas este identificador acumula */
+    public static function registrarTentativaFalha(string $identificador): int
     {
         $pdo = Database::connection();
 
@@ -133,7 +146,8 @@ final class Auth
                 'INSERT INTO login_tentativas (identificador, tentativas, criado_em, editado_em) VALUES (:id, 1, :agora, :agora)'
             );
             $stmt->execute(['id' => $identificador, 'agora' => now()]);
-            return;
+
+            return 1;
         }
 
         $tentativas = (int) $tentativas + 1;
@@ -154,6 +168,8 @@ final class Auth
             'editado_em' => now(),
             'id' => $identificador,
         ]);
+
+        return $tentativas;
     }
 
     public static function limparTentativas(string $identificador): void
@@ -166,8 +182,20 @@ final class Auth
     public static function attempt(string $usuario, string $senha): bool
     {
         $identificador = self::identificador($usuario);
+        $falta = self::bloqueioRestante($identificador);
 
-        if (self::isBlocked($identificador)) {
+        // Recusa por bloqueio vai para o log do painel.
+        //
+        // Sem isto, o admin trancado do lado de fora não tinha onde ver o que
+        // estava acontecendo: a tela dizia "usuário ou senha inválidos" e o
+        // log não mencionava bloqueio nenhum. Aconteceu em 16/09/2026.
+        if ($falta > 0) {
+            self::log(
+                'login_bloqueado',
+                self::rotuloDeUsuario($usuario) . ' · recusado sem conferir a senha · faltam '
+                    . (int) ceil($falta / 60) . ' min'
+            );
+
             return false;
         }
 
@@ -177,7 +205,16 @@ final class Auth
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($senha, $user['senha_hash'])) {
-            self::registrarTentativaFalha($identificador);
+            $tentativas = self::registrarTentativaFalha($identificador);
+            $bloqueou = $tentativas >= LOGIN_MAX_TENTATIVAS;
+
+            self::log(
+                $bloqueou ? 'login_bloqueio_iniciado' : 'login_falhou',
+                self::rotuloDeUsuario($usuario) . ' · tentativa ' . $tentativas . ' de ' . LOGIN_MAX_TENTATIVAS
+                    . ($bloqueou ? ' · bloqueado por ' . LOGIN_BLOQUEIO_MINUTOS . ' min' : '')
+                    . ($user ? '' : ' · esse usuário não existe')
+            );
+
             return false;
         }
 
