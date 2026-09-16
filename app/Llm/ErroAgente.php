@@ -187,8 +187,13 @@ final class ErroAgente extends RuntimeException
     public function sugestaoAdmin(): string
     {
         return match ($this->codigo) {
-            'provedor_cota' => 'Cota do provedor esgotada. No free tier do Gemini o limite é por modelo e por dia: '
-                . 'trocar o modelo do agente costuma destravar na hora.',
+            // Duas cotas diferentes, e a saída de uma não serve à outra.
+            'provedor_cota' => str_contains($this->detalhe, 'free-models-per-day')
+                || str_contains($this->detalhe, 'openrouter_free_tier_daily')
+                ? 'Teto diário do plano gratuito, contado por CONTA e não por modelo — trocar o modelo do '
+                    . 'agente não resolve. Espere a virada do dia ou compre créditos no fornecedor.'
+                : 'Cota do provedor esgotada. No free tier do Gemini o limite é por modelo e por dia: '
+                    . 'trocar o modelo do agente costuma destravar na hora.',
             'provedor_autenticacao' => 'Chave inválida ou sem permissão. Confira a variável indicada em '
                 . '`auth_ref` no .env e se o projeto tem acesso ao modelo.',
             'configuracao' => 'Modelo ou endpoint não encontrado. O modelo pode ter sido descontinuado — '
