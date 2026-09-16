@@ -32,6 +32,7 @@ declare(strict_types=1);
  */
 
 require_once __DIR__ . '/_init.php';
+require_once __DIR__ . '/../../app/Mapa.php';
 
 $paginaAtual = 'mapa.php';
 $tituloPagina = 'Mapa de ligações';
@@ -305,68 +306,18 @@ foreach ($canais as $c) {
     }
 }
 
+
 // -------------------------------------------------------------------------
-// Layout: quatro colunas, posição calculada aqui e desenhada em SVG.
+// Desenho: quatro colunas, montadas por SimpleAIman\Mapa.
+//
+// Provedores → Agentes → (Canais, Bases, Ferramentas) → quem indexa as bases.
 // -------------------------------------------------------------------------
-const LARGURA_NO = 210;
-const ALTURA_NO = 56;
-const ESPACO = 16;
-const COLUNAS_X = [20, 290, 560, 830];
-const ALTURA_ROTULO = 30;
-const ROTULOS = ['canal' => 'Canais', 'base' => 'Bases', 'ferramenta' => 'Ferramentas'];
-
-/** Altura que uma coluna ocupa, contando os rótulos de grupo. */
-$alturaDaColuna = static function (array $itens): int {
-    $altura = count($itens) * (ALTURA_NO + ESPACO) - ESPACO;
-    $grupoAnterior = null;
-
-    foreach ($itens as $item) {
-        $grupo = $item['grupo'] ?? null;
-
-        if ($grupo !== null && $grupo !== $grupoAnterior) {
-            $altura += ALTURA_ROTULO;
-            $grupoAnterior = $grupo;
-        }
-    }
-
-    return max($altura, 0);
-};
-
-/**
- * Empilha uma coluna, abrindo espaço e rótulo a cada troca de grupo.
- *
- * @param list<array<string, mixed>> $itens
- * @return array{0: list<array<string, mixed>>, 1: list<array{texto: string, x: int, y: int}>}
- */
-$empilhar = static function (array $itens, int $x, int $topo): array {
-    $y = $topo;
-    $saida = [];
-    $rotulos = [];
-    $grupoAnterior = null;
-
-    foreach ($itens as $item) {
-        $grupo = $item['grupo'] ?? null;
-
-        if ($grupo !== null && $grupo !== $grupoAnterior) {
-            $y += ALTURA_ROTULO;
-            $rotulos[] = ['texto' => ROTULOS[$grupo] ?? $grupo, 'x' => $x, 'y' => $y - 12];
-            $grupoAnterior = $grupo;
-        }
-
-        $item['x'] = $x;
-        $item['y'] = $y;
-        $saida[] = $item;
-        $y += ALTURA_NO + ESPACO;
-    }
-
-    return [$saida, $rotulos];
-};
+$mapa = new Mapa([20, 290, 560, 830]);
 
 $colProvedores = [];
 
 foreach ($provedores as $p) {
     $id = (int) $p['id'];
-    $papel = (string) $p['papel'];
     $legenda = [];
 
     if ($id === $padraoChat) {
@@ -378,7 +329,7 @@ foreach ($provedores as $p) {
     }
 
     if ($legenda === []) {
-        $legenda[] = match ($papel) {
+        $legenda[] = match ((string) $p['papel']) {
             'chat' => 'somente chat',
             'embedding' => 'somente embedding',
             default => 'chat e embedding',
@@ -391,6 +342,7 @@ foreach ($provedores as $p) {
         'sub' => implode(' · ', $legenda),
         'href' => 'provedores.php?editar=' . $id,
         'inativo' => (int) $p['ativo'] !== 1,
+        'classe' => 'col-prov',
     ];
 }
 
@@ -401,14 +353,20 @@ foreach ($agentes as $a) {
     $provedorId = (int) ($a['provedor_id'] ?? 0);
     $roteador = ($a['modo'] ?? 'ia') === 'roteador';
 
+    // O MODO vem primeiro, sempre visível.
+    //
+    // Antes ele só aparecia quando era roteador, e "provedor próprio" no modo
+    // IA não dizia qual dos dois modos estava valendo. Quem olha o mapa para
+    // entender por que um agente não usa a LLM precisa ver isso sem clicar.
     $colAgentes[] = [
         'chave' => 'agente-' . $id,
         'titulo' => (string) $a['nome'],
         'sub' => $roteador
-            ? 'modo roteador — sem LLM'
-            : ($provedorId > 0 ? 'provedor próprio' : 'herda o padrão de chat'),
+            ? 'roteador · menu, sem LLM'
+            : 'IA · ' . ($provedorId > 0 ? 'provedor próprio' : 'padrão de chat'),
         'href' => 'agentes.php?editar=' . $id,
         'inativo' => (int) $a['ativo'] !== 1,
+        'classe' => 'col-agente',
         'id' => $id,
         'provedor_id' => $provedorId,
         'roteador' => $roteador,
@@ -424,7 +382,9 @@ foreach ($canais as $c) {
         'sub' => 'canal · ' . (string) $c['tipo'],
         'href' => 'canais.php?editar=' . (int) $c['id'],
         'inativo' => (int) $c['ativo'] !== 1,
-        'grupo' => 'canal',
+        'classe' => 'col-canal',
+        'grupo' => 'Canais',
+        'tipo' => 'canal',
         'id' => (int) $c['id'],
         'agente_id' => (int) ($c['agente_id'] ?? 0),
     ];
@@ -436,15 +396,12 @@ foreach ($bases as $b) {
     $colDireita[] = [
         'chave' => 'base-' . (int) $b['id'],
         'titulo' => (string) $b['nome'],
-        // Quem indexou a base entra no rótulo, e não como linha de volta ao
-        // provedor: a seta cruzaria o desenho inteiro para dizer algo que
-        // cabe em duas palavras. Embedding trocado e o erro mais silencioso
-        // do RAG, entao precisa estar visivel sem clique.
-        'sub' => 'base · ' . (int) $b['vetores'] . ' vetores · '
-            . ($embDaBase === '' ? 'padrão' : $embDaBase),
+        'sub' => (int) $b['vetores'] . ' vetores · ' . ($embDaBase === '' ? 'padrão' : $embDaBase),
         'href' => 'bases.php?editar=' . (int) $b['id'],
         'inativo' => (int) $b['ativo'] !== 1,
-        'grupo' => 'base',
+        'classe' => 'col-base',
+        'grupo' => 'Bases',
+        'tipo' => 'base',
         'id' => (int) $b['id'],
         'embedding_id' => (int) ($b['provedor_embedding_id'] ?? 0),
     ];
@@ -457,7 +414,9 @@ foreach ($ferramentas as $f) {
         'sub' => 'ferramenta · ' . (string) $f['tipo'],
         'href' => 'ferramentas.php?editar=' . (int) $f['id'],
         'inativo' => (int) $f['ativo'] !== 1,
-        'grupo' => 'ferramenta',
+        'classe' => 'col-ferr',
+        'grupo' => 'Ferramentas',
+        'tipo' => 'ferramenta',
         'id' => (int) $f['id'],
         'depende_de' => (int) ($f['depende_de'] ?? 0),
     ];
@@ -467,9 +426,7 @@ foreach ($ferramentas as $f) {
 //
 // O provedor de embedding já aparece à esquerda quando também faz chat, mas
 // ligar a base até lá cruzaria o desenho inteiro. Repetir o provedor à direita
-// mantém toda leitura no mesmo sentido e deixa visível o que é o erro mais
-// silencioso do RAG: base indexada por um modelo diferente do padrão, cujos
-// vetores não se comparam com os do resto.
+// mantém toda leitura no mesmo sentido.
 $usadosNoEmbedding = [];
 
 foreach ($bases as $b) {
@@ -495,152 +452,77 @@ foreach ($provedores as $p) {
         'sub' => 'indexa · ' . (trim((string) $p['modelo_embedding']) ?: 'modelo não definido'),
         'href' => 'provedores.php?editar=' . $id,
         'inativo' => (int) $p['ativo'] !== 1,
+        'classe' => 'col-prov',
     ];
 }
 
-// Colunas centradas pela mais alta.
-//
-// Uma instalação pequena tem 1 ou 2 agentes e uma dúzia de itens à direita;
-// alinhadas pelo topo, as caixas da esquerda ficam num canto e as linhas
-// atravessam o desenho na diagonal. Centrar deixa as ligações curtas e o
-// desenho legível de uma olhada só.
-$alturas = [
-    $alturaDaColuna($colProvedores),
-    $alturaDaColuna($colAgentes),
-    $alturaDaColuna($colDireita),
-    $alturaDaColuna($colEmbedding),
-];
-$maisAlta = max($alturas);
+$mapa->coluna(0, $colProvedores);
+$mapa->coluna(1, $colAgentes);
+$mapa->coluna(2, $colDireita);
+$mapa->coluna(3, $colEmbedding);
+$mapa->montar();
 
-[$colProvedores, $rotulosProv] = $empilhar($colProvedores, COLUNAS_X[0], 40 + (int) (($maisAlta - $alturas[0]) / 2));
-[$colAgentes, $rotulosAgentes] = $empilhar($colAgentes, COLUNAS_X[1], 40 + (int) (($maisAlta - $alturas[1]) / 2));
-[$colDireita, $rotulosDireita] = $empilhar($colDireita, COLUNAS_X[2], 40 + (int) (($maisAlta - $alturas[2]) / 2));
-[$colEmbedding, $rotulosEmb] = $empilhar($colEmbedding, COLUNAS_X[3], 40 + (int) (($maisAlta - $alturas[3]) / 2));
-
-$rotulos = [...$rotulosProv, ...$rotulosAgentes, ...$rotulosDireita, ...$rotulosEmb];
-
-/** @var array<string, array<string, mixed>> $porChave */
-$porChave = [];
-
-foreach ([...$colProvedores, ...$colAgentes, ...$colDireita, ...$colEmbedding] as $no) {
-    $porChave[$no['chave']] = $no;
+foreach ($nosComAlerta as $chave => $_) {
+    $mapa->alertar((string) $chave);
 }
-
-/**
- * Curva de um nó a outro, da borda direita à borda esquerda.
- *
- * @return array{0: string, 1: bool}|null caminho e se é ligação problemática
- */
-$curva = static function (string $de, string $para) use ($porChave): ?string {
-    if (!isset($porChave[$de], $porChave[$para])) {
-        return null;
-    }
-
-    $a = $porChave[$de];
-    $b = $porChave[$para];
-
-    $x1 = $a['x'] + LARGURA_NO;
-    $y1 = $a['y'] + ALTURA_NO / 2;
-    $x2 = $b['x'];
-    $y2 = $b['y'] + ALTURA_NO / 2;
-    $meio = ($x2 - $x1) / 2;
-
-    return sprintf('M %d %d C %d %d, %d %d, %d %d', $x1, $y1, $x1 + $meio, $y1, $x2 - $meio, $y2, $x2, $y2);
-};
-
-/**
- * Curva entre dois nós da MESMA coluna, contornando pela esquerda.
- *
- * As duas caixas têm o mesmo x, então a curva do layout em camadas viraria um
- * risco reto por cima delas. Esta sai pela borda esquerda, abre um arco fora
- * da coluna e volta — o mesmo desenho que um fluxograma usa para retorno.
- */
-$curvaNaColuna = static function (string $de, string $para) use ($porChave): ?string {
-    if (!isset($porChave[$de], $porChave[$para])) {
-        return null;
-    }
-
-    $a = $porChave[$de];
-    $b = $porChave[$para];
-
-    $x = $a['x'];
-    $y1 = $a['y'] + ALTURA_NO / 2;
-    $y2 = $b['y'] + ALTURA_NO / 2;
-    // O arco cresce com a distancia, mas nao pode passar do vao entre as
-    // colunas: com oito linhas de diferenca ele invadiria a coluna dos
-    // agentes e a seta passaria por cima das caixas.
-    $vao = COLUNAS_X[2] - (COLUNAS_X[1] + LARGURA_NO) - 8;
-    $arco = min($vao, 26 + (int) (abs($y2 - $y1) / 6));
-
-    return sprintf('M %d %d C %d %d, %d %d, %d %d', $x, $y1, $x - $arco, $y1, $x - $arco, $y2, $x, $y2);
-};
-
-$arestas = [];
 
 foreach ($colAgentes as $a) {
     if ($a['provedor_id'] > 0) {
-        $arestas[] = ['d' => $curva('prov-' . $a['provedor_id'], $a['chave']), 'fraca' => $a['inativo']];
+        $mapa->ligar('prov-' . $a['provedor_id'], $a['chave'], $a['inativo']);
     } elseif (!$a['roteador'] && $padraoChat > 0) {
-        $arestas[] = ['d' => $curva('prov-' . $padraoChat, $a['chave']), 'fraca' => true];
+        $mapa->ligar('prov-' . $padraoChat, $a['chave'], true);
     }
 
     foreach (($basesDoAgente[$a['id']] ?? []) as $bid) {
-        $arestas[] = ['d' => $curva($a['chave'], 'base-' . $bid), 'fraca' => $a['inativo']];
+        $mapa->ligar($a['chave'], 'base-' . $bid, $a['inativo']);
     }
 
     foreach (($ferramentasDoAgente[$a['id']] ?? []) as $fid) {
-        $arestas[] = ['d' => $curva($a['chave'], 'ferr-' . $fid), 'fraca' => $a['inativo']];
+        $mapa->ligar($a['chave'], 'ferr-' . $fid, $a['inativo']);
     }
 }
 
 foreach ($colDireita as $no) {
-    if (($no['grupo'] ?? '') === 'canal' && ($no['agente_id'] ?? 0) > 0) {
-        // O canal aponta para o agente, mas fica à direita dele: a curva volta,
-        // e por isso ela é desenhada do agente para o canal — o sentido da
-        // LEITURA é quem manda no desenho, não o da chave estrangeira.
-        $arestas[] = ['d' => $curva('agente-' . $no['agente_id'], $no['chave']), 'fraca' => $no['inativo']];
+    if ($no['tipo'] === 'canal' && $no['agente_id'] > 0) {
+        // O canal aponta para o agente, mas fica à direita dele: a curva é
+        // desenhada do agente para o canal, porque quem manda no desenho é o
+        // sentido da LEITURA, não o da chave estrangeira.
+        $mapa->ligar('agente-' . $no['agente_id'], $no['chave'], $no['inativo']);
     }
-}
 
-foreach ($colDireita as $no) {
-    if (($no['grupo'] ?? '') === 'base') {
-        $proprio = (int) ($no['embedding_id'] ?? 0);
-        $emb = $proprio ?: $padraoEmbedding;
+    if ($no['tipo'] === 'base') {
+        $emb = $no['embedding_id'] ?: $padraoEmbedding;
 
         if ($emb > 0) {
             // Herdado do padrão sai mais claro que o escolhido na base: a
             // diferença entre "é o padrão" e "alguém mudou aqui" é justamente
             // o que se quer enxergar de longe.
-            $arestas[] = ['d' => $curva($no['chave'], 'emb-' . $emb), 'fraca' => $proprio === 0];
+            $mapa->ligar($no['chave'], 'emb-' . $emb, $no['embedding_id'] === 0);
         }
     }
 
-    // Dependência entre ferramentas: o Executor RECUSA a chamada se a
-    // pré-requisito não rodou na conversa, então esta seta é regra, não dica.
-    if (($no['grupo'] ?? '') === 'ferramenta' && ($no['depende_de'] ?? 0) > 0) {
-        $arestas[] = [
-            'd' => $curvaNaColuna('ferr-' . $no['depende_de'], $no['chave']),
-            'fraca' => $no['inativo'],
-            'seta' => true,
-        ];
+    if ($no['tipo'] === 'ferramenta' && $no['depende_de'] > 0) {
+        // Trava de ordem: o Executor RECUSA a chamada se a pré-requisito não
+        // rodou na conversa. É regra, não dica — por isso a seta.
+        $mapa->ligarNaColuna('ferr-' . $no['depende_de'], $no['chave'], $no['inativo']);
     }
 }
-
-$arestas = array_values(array_filter($arestas, static fn (array $a): bool => $a['d'] !== null));
-
-$alturaMax = 40;
-
-foreach ([$colProvedores, $colAgentes, $colDireita] as $coluna) {
-    if ($coluna !== []) {
-        $ultimo = $coluna[count($coluna) - 1];
-        $alturaMax = max($alturaMax, $ultimo['y'] + ALTURA_NO);
-    }
-}
-
-$alturaSvg = $alturaMax + 40;
-$larguraSvg = ($colEmbedding === [] ? COLUNAS_X[2] : COLUNAS_X[3]) + LARGURA_NO + 40;
 
 $graves = count(array_filter($alertas, static fn (array $a): bool => $a['grave']));
+
+$contar = static fn (array $lista): int => count(array_filter(
+    $lista,
+    static fn (array $i): bool => (int) ($i['ativo'] ?? 1) === 1
+));
+
+$resumo = [
+    ['rotulo' => 'Provedores ativos', 'valor' => $contar($provedores), 'de' => count($provedores)],
+    ['rotulo' => 'Agentes ativos', 'valor' => $contar($agentes), 'de' => count($agentes)],
+    ['rotulo' => 'Canais ativos', 'valor' => $contar($canais), 'de' => count($canais)],
+    ['rotulo' => 'Bases ativas', 'valor' => $contar($bases), 'de' => count($bases)],
+    ['rotulo' => 'Ferramentas em uso', 'valor' => count($ferramentasUsadas), 'de' => count($ferramentas)],
+    ['rotulo' => 'Vetores indexados', 'valor' => array_sum(array_column($bases, 'vetores')), 'de' => null],
+];
 
 include __DIR__ . '/partials/head.php';
 ?>
@@ -652,6 +534,17 @@ include __DIR__ . '/partials/head.php';
             Como a configuração está conectada hoje. Cada linha é uma ligação real no banco, não uma
             suposição — e cada caixa abre a tela onde ela se configura.
         </p>
+    </div>
+</div>
+
+<div class="panel">
+    <div class="mapa-resumo">
+        <?php foreach ($resumo as $item): ?>
+            <div>
+                <strong><?= (int) $item['valor'] ?><?= $item['de'] !== null ? '<span>de ' . (int) $item['de'] . '</span>' : '' ?></strong>
+                <span><?= e($item['rotulo']) ?></span>
+            </div>
+        <?php endforeach; ?>
     </div>
 </div>
 
@@ -689,72 +582,15 @@ include __DIR__ . '/partials/head.php';
     </div>
 
     <div class="mapa-rolagem">
-        <svg viewBox="0 0 <?= $larguraSvg ?> <?= $alturaSvg ?>" width="<?= $larguraSvg ?>" height="<?= $alturaSvg ?>"
-             class="mapa-svg" role="img" aria-label="Diagrama das ligações entre provedores, agentes, canais, bases e ferramentas">
-            <defs>
-                <marker id="ponta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                    <path d="M 0 0 L 8 4 L 0 8 z" class="mapa-ponta"></path>
-                </marker>
-            </defs>
-
-            <?php foreach ($rotulos as $rotulo): ?>
-                <text x="<?= (int) $rotulo['x'] ?>" y="<?= (int) $rotulo['y'] ?>" class="mapa-grupo"><?= e($rotulo['texto']) ?></text>
-            <?php endforeach; ?>
-
-            <?php foreach ($arestas as $aresta): ?>
-                <path d="<?= e($aresta['d']) ?>" class="mapa-linha<?= $aresta['fraca'] ? ' fraca' : '' ?><?= !empty($aresta['seta']) ? ' dependencia' : '' ?>"
-                      fill="none" <?= !empty($aresta['seta']) ? 'marker-end="url(#ponta)"' : '' ?>></path>
-            <?php endforeach; ?>
-
-            <?php
-            $desenhar = static function (array $no, string $classe) use ($nosComAlerta): void {
-                $alerta = isset($nosComAlerta[$no['chave']]);
-                $classes = 'mapa-no ' . $classe
-                    . ($no['inativo'] ? ' inativo' : '')
-                    . ($alerta ? ' alerta' : '');
-                ?>
-                <a href="<?= e($no['href']) ?>" class="<?= e($classes) ?>">
-                    <rect x="<?= (int) $no['x'] ?>" y="<?= (int) $no['y'] ?>" width="<?= LARGURA_NO ?>" height="<?= ALTURA_NO ?>" rx="10"></rect>
-                    <text x="<?= (int) $no['x'] + 14 ?>" y="<?= (int) $no['y'] + 24 ?>" class="mapa-titulo">
-                        <?= e(mb_strimwidth((string) $no['titulo'], 0, 26, '…')) ?>
-                    </text>
-                    <text x="<?= (int) $no['x'] + 14 ?>" y="<?= (int) $no['y'] + 42 ?>" class="mapa-sub">
-                        <?= e(mb_strimwidth((string) $no['sub'], 0, 30, '…')) ?><?= $no['inativo'] ? ' · inativo' : '' ?>
-                    </text>
-                    <title><?= e($no['titulo'] . ' — ' . $no['sub']) ?></title>
-                </a>
-                <?php
-            };
-
-            foreach ($colProvedores as $no) {
-                $desenhar($no, 'col-prov');
-            }
-
-            foreach ($colAgentes as $no) {
-                $desenhar($no, 'col-agente');
-            }
-
-            foreach ($colDireita as $no) {
-                $desenhar($no, 'col-' . match ($no['grupo']) {
-                    'canal' => 'canal',
-                    'base' => 'base',
-                    default => 'ferr',
-                });
-            }
-
-            foreach ($colEmbedding as $no) {
-                $desenhar($no, 'col-prov');
-            }
-            ?>
-        </svg>
+        <?= $mapa->svg('Ligações entre provedores, agentes, canais, bases e ferramentas') ?>
     </div>
 
     <p class="page-sub" style="margin-top:.6rem;">
         A linha mais clara é ligação herdada ou fora de uso — agente inativo, provedor vindo do padrão em vez
         de escolhido. À direita das bases aparece quem as indexou: se uma base apontar para um provedor
         diferente das outras, os vetores dela não se comparam com o resto, e a busca piora sem dar erro. A
-        seta entre ferramentas é a trava de ordem (`depende_de`): o sistema recusa a segunda enquanto a
-        primeira não tiver rodado na conversa.
+        seta entre ferramentas é a trava de ordem (<code>depende_de</code>): o sistema recusa a segunda
+        enquanto a primeira não tiver rodado na conversa.
     </p>
 </div>
 

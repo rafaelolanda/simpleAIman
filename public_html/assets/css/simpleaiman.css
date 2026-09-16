@@ -1404,3 +1404,31 @@ html.menu-recolhido .btn-recolher { margin: 0; }
 .mapa-linha.dependencia { stroke: var(--accent); stroke-width: 1.8; opacity: .75; }
 .mapa-ponta { fill: var(--accent); }
 .mapa-chip.col-seta { background: var(--accent); border-color: var(--accent); }
+
+/* Resumo no topo dos mapas: número grande, rótulo pequeno. */
+.mapa-resumo {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.4rem 2.2rem;
+}
+
+.mapa-resumo > div { display: flex; flex-direction: column; }
+
+.mapa-resumo strong {
+    font-size: 1.45rem;
+    line-height: 1.1;
+    font-weight: 700;
+}
+
+.mapa-resumo strong span {
+    font-size: .8rem;
+    font-weight: 500;
+    color: var(--texto-fraco, #6b7280);
+    margin-left: .35rem;
+}
+
+.mapa-resumo > div > span {
+    font-size: .78rem;
+    color: var(--texto-fraco, #6b7280);
+    margin-top: .15rem;
+}

@@ -34,6 +34,7 @@ $grupos = [
     ],
     'Configuração' => [
         'mapa.php' => ['icone' => 'grafico', 'label' => 'Mapa de ligações'],
+        'mapa-atendimento.php' => ['icone' => 'usuario', 'label' => 'Mapa do atendimento'],
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
         'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
         'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],
