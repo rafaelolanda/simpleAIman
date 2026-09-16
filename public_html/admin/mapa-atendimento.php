@@ -271,6 +271,14 @@ foreach ($setores as $s) {
     }
 }
 
+// Ferramenta e FAQ marcadas com um setor: vinculo de ORGANIZACAO.
+//
+// `ferramentas.setor_id` e `faq.setor_id` sao gravados no cadastro e usados
+// para exibir e organizar — nenhum dos dois muda para onde a conversa vai.
+// Quem decide o setor numa chamada e o parametro que o modelo preenche, e
+// quem decide o destino do encaminhamento e a Fila. Desenhar isso como se
+// fosse roteamento faria o mapa mentir, que e o oposto do que ele existe
+// para fazer.
 foreach ($setores as $s) {
     $id = (int) $s['id'];
 
@@ -292,7 +300,7 @@ foreach ($setores as $s) {
             'href' => 'ferramentas.php',
             'inativo' => (int) $s['ativo'] !== 1,
             'classe' => 'col-prov',
-            'grupo' => 'Ligado ao setor',
+            'grupo' => 'Classificados neste setor',
             'setor_id' => $id,
         ];
     }
@@ -380,6 +388,7 @@ include __DIR__ . '/partials/head.php';
         <span><i class="mapa-chip col-ferr"></i> Atendente fora do ar</span>
         <span><i class="mapa-chip col-canal"></i> Setores</span>
         <span><i class="mapa-chip col-base"></i> Chamados abertos</span>
+        <span><i class="mapa-chip col-prov"></i> Classificação (sem efeito no roteamento)</span>
         <span><i class="mapa-chip col-alerta"></i> Com ponto de atenção</span>
         <span><i class="mapa-chip col-inativo"></i> Não atende / inativo</span>
     </div>
@@ -389,6 +398,9 @@ include __DIR__ . '/partials/head.php';
     </div>
 
     <p class="page-sub" style="margin-top:.6rem;">
+        As caixas da direita são <strong>classificação, não roteamento</strong>: ferramenta e FAQ marcadas
+        com um setor aparecem organizadas por ele, mas isso não muda para onde a conversa é encaminhada —
+        quem decide o destino é a fila, pelos atendentes do setor.
         O ★ marca o setor padrão, destino de quem o agente não consegue classificar. "Disponível agora" exige
         três coisas ao mesmo tempo: estar marcado como atendente, ter ligado a disponibilidade e ter o painel
         aberto há pouco — é o mesmo critério que a fila usa para escolher para quem mandar.
