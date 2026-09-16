@@ -373,6 +373,7 @@ final class ChatService
         // existir de fato, o prompt proibe menciona-la.
         $config = $this->agente;
         $config['handoff_disponivel'] = ToolRegistry::temHandoff($agenteId);
+        $config['ferramentas'] = $comFerramentas ? ToolRegistry::resumoParaPrompt($agenteId) : [];
         $config['busca_fraca'] = $this->buscaFraca;
 
         $agent = Agent::make()

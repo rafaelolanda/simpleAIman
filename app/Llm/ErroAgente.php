@@ -48,6 +48,8 @@ final class ErroAgente extends RuntimeException
             . 'Posso te encaminhar para o setor responsável.',
         'limite_iteracoes' => 'Não consegui concluir essa consulta. '
             . 'Quer que eu encaminhe para alguém verificar?',
+        'pedido_grande' => 'Esta conversa ficou longa demais para eu processar de uma vez. '
+            . 'Pode reformular a pergunta, mais curta?',
         'configuracao' => 'O atendimento automático está indisponível no momento.',
         'desconhecido' => 'Não consegui responder agora. '
             . 'Quer que eu registre sua dúvida para alguém retornar?',
@@ -131,6 +133,10 @@ final class ErroAgente extends RuntimeException
             $status === 429 || str_contains($texto, 'exceeded your current quota') => 'provedor_cota',
             $status === 401 || $status === 403 => 'provedor_autenticacao',
             $status === 404 => 'configuracao',
+            // 413 da Groq: "Request too large ... Limit 8000, Requested 18155".
+            // Caia em "desconhecido" ate 16/09/2026, e o admin lia "erro
+            // desconhecido" para um problema com causa e correcao claras.
+            $status === 413 || str_contains($texto, 'Request too large') => 'pedido_grande',
             $status !== null && $status >= 500 => 'provedor_indisponivel',
             // "timed out" é como o cURL escreve ("cURL error 28: Operation timed
             // out after 40003 milliseconds"). Sem esta variante, o timeout caía
@@ -193,6 +199,10 @@ final class ErroAgente extends RuntimeException
                 . 'Se todos estiverem lentos, verifique conectividade e o CA bundle (curl.cainfo).',
             'resposta_vazia' => 'Modelo pensante gastou o orçamento de saída antes do texto. Aumente '
                 . '`max_tokens` do agente ou reduza `reasoning_effort`.',
+            'pedido_grande' => 'O pedido passou do limite de tokens do provedor. O que mais pesa: `top_k` e o '
+                . 'tamanho do chunk das bases, a descrição das ferramentas (ela vai inteira em TODA chamada) '
+                . 'e o histórico. Reduza o top_k do agente, encurte as descrições das ferramentas ou use um '
+                . 'modelo com limite maior.',
             default => 'Veja o detalhe técnico no log.',
         };
     }

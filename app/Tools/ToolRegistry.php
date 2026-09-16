@@ -182,6 +182,46 @@ final class ToolRegistry
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * Ferramentas do agente em uma linha cada, para o PROMPT.
+     *
+     * O protocolo já manda as definições, e modelo grande costuma achá-las
+     * sozinho. O pequeno segue a regra escrita e ignora o que só existe no
+     * schema: em 15/09/2026 um agente com ferramenta de mensalidade ligada
+     * respondeu "não encontrei nos documentos" a "preciso do valor do curso de
+     * computação" — cinco vezes seguidas, sem nunca chamá-la.
+     *
+     * Só a primeira frase da descrição entra: o resto costuma ser
+     * procedimento, e aqui o que importa é QUANDO chamar.
+     *
+     * @return list<array{slug: string, resumo: string}>
+     */
+    public static function resumoParaPrompt(int $agenteId): array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT f.slug, f.nome, f.descricao_llm FROM ferramentas f
+             JOIN agente_ferramentas af ON af.ferramenta_id = f.id
+             WHERE af.agente_id = :a AND f.ativo = 1
+             ORDER BY af.ordem, f.nome'
+        );
+        $stmt->execute(['a' => $agenteId]);
+
+        $lista = [];
+
+        foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $f) {
+            $texto = trim((string) preg_replace('/\s+/u', ' ', (string) $f['descricao_llm']));
+            $ponto = mb_strpos($texto, '. ');
+            $resumo = $ponto !== false ? mb_substr($texto, 0, $ponto + 1) : $texto;
+
+            $lista[] = [
+                'slug' => (string) $f['slug'],
+                'resumo' => mb_substr($resumo, 0, 200) ?: (string) $f['nome'],
+            ];
+        }
+
+        return $lista;
+    }
+
     /** O agente tem alguma ferramenta de encaminhamento ligada? */
     public static function temHandoff(int $agenteId): bool
     {
