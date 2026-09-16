@@ -21,6 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($usuario === '' || $senha === '') {
             $erro = 'Informe usuário e senha.';
+        } elseif (($falta = Auth::bloqueioRestante(Auth::identificador($usuario))) > 0) {
+            // Bloqueio tem mensagem PROPRIA.
+            //
+            // Dizer "usuario ou senha invalidos" para quem esta bloqueado manda
+            // a pessoa trocar a senha — que nao resolve — e esconde a unica
+            // acao util: esperar. Nao revela se o usuario existe: a frase fala
+            // deste computador, e o bloqueio e por usuario+IP.
+            $minutos = max(1, (int) ceil($falta / 60));
+            $erro = 'Muitas tentativas a partir deste computador. Tente de novo em '
+                . $minutos . ($minutos > 1 ? ' minutos.' : ' minuto.');
         } elseif (Auth::attempt($usuario, $senha)) {
             Auth::log('login', 'Login realizado com sucesso');
             redirect(Painel::inicioDe(Painel::papelValido(Auth::papelAtual())));

@@ -72,16 +72,52 @@ final class Auth
      */
     public static function isBlocked(string $identificador): bool
     {
+        return self::bloqueioRestante($identificador) > 0;
+    }
+
+    /**
+     * Segundos que faltam do bloqueio; 0 quando não há bloqueio.
+     *
+     * Bloqueio VENCIDO é apagado aqui, e não deixado para o próximo acerto de
+     * senha. Sem isso o contador continuava em LOGIN_MAX_TENTATIVAS depois da
+     * janela, e o erro de digitação seguinte bloqueava outros 15 minutos —
+     * sem nunca deixar entrar. Prendeu o admin da instalação em 16/09/2026:
+     * trocar a senha não adiantava, e de outro computador (outro IP) entrava.
+     */
+    public static function bloqueioRestante(string $identificador): int
+    {
         $pdo = Database::connection();
         $stmt = $pdo->prepare('SELECT bloqueado_ate FROM login_tentativas WHERE identificador = :id');
         $stmt->execute(['id' => $identificador]);
         $bloqueadoAte = $stmt->fetchColumn();
 
         if (!$bloqueadoAte) {
-            return false;
+            return 0;
         }
 
-        return strtotime((string) $bloqueadoAte) > time();
+        $falta = strtotime((string) $bloqueadoAte) - time();
+
+        if ($falta > 0) {
+            return $falta;
+        }
+
+        // Janela cumprida: o contador volta a zero e a pessoa tem as
+        // LOGIN_MAX_TENTATIVAS de novo.
+        self::limparTentativas($identificador);
+
+        return 0;
+    }
+
+    /**
+     * Chave do rate limit: usuário + IP.
+     *
+     * Combinados para que um IP tentando senha alheia não tranque o dono da
+     * conta — e é por isso que o mesmo login entra de outro computador
+     * enquanto o primeiro está bloqueado.
+     */
+    public static function identificador(string $usuario): string
+    {
+        return $usuario . '|' . client_ip();
     }
 
     public static function registrarTentativaFalha(string $identificador): void
@@ -129,7 +165,7 @@ final class Auth
 
     public static function attempt(string $usuario, string $senha): bool
     {
-        $identificador = $usuario . '|' . client_ip();
+        $identificador = self::identificador($usuario);
 
         if (self::isBlocked($identificador)) {
             return false;
