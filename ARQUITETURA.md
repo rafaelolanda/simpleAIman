@@ -274,6 +274,8 @@ ferramentas         slug, nome, setor_id,
                     auth_tipo(none|bearer|basic|header|query), auth_ref,
                     timeout_ms, retentativas,
                     resposta_caminho, resposta_template,
+                    aviso_resposta,           -- frase anexada à resposta, pelo CÓDIGO
+                    instrucao_resposta,       -- procedimento enviado JUNTO do resultado
                     -- tabela:
                     dataset_id, formula,
                     ativo
@@ -397,6 +399,8 @@ mensagem do usuário
   │
   ├─ PROMPT
   │    system do agente + trechos CERCADOS + guardrails + histórico + schema das ferramentas
+  │    guardrails incluem: lista das ferramentas em TEXTO, precedência ferramenta > documento,
+  │    e o FORMATO conforme o canal (widget aceita tabela; WhatsApp, uma linha por item)
   │
   ├─ LOOP DE FERRAMENTAS  (máx. max_iteracoes_tool, orçamento de tokens, timeout total)
   │    modelo pede ferramenta → valida params → checa depende_de → executa → devolve
@@ -404,9 +408,15 @@ mensagem do usuário
   │
   ├─ RESPOSTA
   │    stream (web) ou completa (WhatsApp) — mesmo pipeline, transportes diferentes
+  │    provedor sem `suporta_stream` responde de uma vez, mesmo no widget
+  │    FiltroDeSaida remove o raciocínio do modelo, pedaço a pedaço
   │    provedor falhou? no stream degrada para o menu; no WhatsApp, mensagem de erro
+  │    conversa já transferida? frase de espera, nunca o menu
   │
   └─ grava mensagem + fontes + execuções + tokens + turno (caminho e tempo por etapa)
+       os tokens do TURNO são somados pelo ObservadorNeuron a cada `inference-stop`,
+       e não lidos da resposta — é o que faz o streaming deixar de ser cego no custo,
+       e o que soma as várias inferências de um turno com ferramenta
 ```
 
 **Modelo pensante falha em silêncio.** Os Gemini 3.x gastam o orçamento de saída pensando
@@ -415,6 +425,19 @@ conteúdo **vazio** e `finish_reason = length`. Não é erro — é resposta em 
 no widget seria "o bot não respondeu", sem nada no log. O `ChatService` **precisa** tratar
 `finish_reason = length` com conteúdo vazio como erro legível. `reasoning_effort` (none/low/
 medium/high) controla esse gasto por agente.
+
+**Modelo de raciocínio aberto mistura pensamento e resposta.** O gpt-oss (Groq) devolve o
+raciocínio no mesmo campo do texto, marcado com `<think>` ou com os marcadores do formato
+harmony. Em 11/09/2026 uma mensagem de WhatsApp saiu com o pensamento em inglês no meio da
+resposta. Duas camadas cuidam disso: `reasoning_format=hidden` pedido à Groq, e o
+`FiltroDeSaida`, que vale para qualquer fornecedor e funciona no streaming, onde o marcador
+chega partido entre pedaços. O filtro corta em fronteira de **caractere**: cortar no meio de um
+"ç" deixa UTF-8 inválido, e `preg_replace` com `/u` devolve `null` nesse caso — o que apagava o
+pedaço inteiro e produzia resposta com buracos no meio das palavras.
+
+Quando a resposta sai vazia, o filtro informa quantos bytes recebeu e quantos liberou. São duas
+causas opostas com o mesmo sintoma: modelo que não gerou nada (corrige-se com `max_tokens` e
+`reasoning_effort`) e modelo que só gerou raciocínio (corrige-se no filtro).
 
 **Fixar a versão do modelo, nunca o alias.** `gemini-flash-latest` devolveu **503 high demand**
 enquanto os modelos de versão fixa respondiam normalmente — e um alias ainda muda comportamento
@@ -426,9 +449,16 @@ encadeamento de ferramenta, é conversa — emerge sozinho dos campos obrigatór
 **Ordem entre ferramentas**, da mais fraca à mais forte:
 
 1. `descricao_llm` ("só chame depois de ter `curso_id`")
-2. **parâmetro obrigatório** — impossível chamar sem o dado; mais forte que instrução
-3. `system_prompt` do agente (o procedimento)
-4. `depende_de` — trava real: o orquestrador **recusa** se o pré-requisito não rodou
+2. `instrucao_resposta` — chega junto do resultado, quando o assunto está em foco
+3. **parâmetro obrigatório** — impossível chamar sem o dado; mais forte que instrução
+4. `system_prompt` do agente (o procedimento geral)
+5. `depende_de` — trava real: o orquestrador **recusa** se o pré-requisito não rodou
+
+**O que nenhuma delas garante: aritmética.** Em 16/09/2026 o agente somou 32 créditos onde
+havia 22 e apresentou R$ 21.034,88 no lugar de R$ 14.461,48, corrigindo apenas depois que a
+pessoa conferiu. Regra de prompt reduz a chance e não elimina: enquanto a conta for feita pelo
+modelo, o erro é possível — e em atendimento ele vira quase-promessa de preço. O endpoint da
+ferramenta deve devolver o total **já calculado**.
 
 ---
 
@@ -526,6 +556,40 @@ fixa: o que precisa ser dito sempre não se pede, se escreve.
 
 No streaming ele sai como **último pedaço**, porque só existe depois de a ferramenta ter
 rodado — e rodar acontece no meio da geração.
+
+### Onde escrever cada instrução de ferramenta
+
+Quatro campos, e confundi-los custa caro — em tokens e em qualidade. A pergunta que cada um
+responde é diferente:
+
+| Campo | Responde | Enviado |
+|---|---|---|
+| `ferramentas.descricao_llm` | "devo chamar agora?" | em **toda** requisição, junto das outras ferramentas |
+| `ferramentas.instrucao_resposta` | "como uso o que ela devolveu?" | só no turno em que a ferramenta rodou, colado ao resultado |
+| `agentes.system_prompt` | "quem sou eu e como falo?" | em toda requisição |
+| `ferramentas.aviso_resposta` | "o que o leitor precisa saber?" | anexado pelo código ao fim da resposta |
+
+Em 15/09/2026 uma ferramenta de mensalidade tinha 944 caracteres de objetivo, regras, fórmula e
+formato de tabela na `descricao_llm`. Duas consequências: quem perguntava sobre feriado pagava
+esses tokens, e o excesso de procedimento **diluía o gatilho** — o modelo deixava de chamar a
+ferramenta e respondia "não encontrei nos documentos". A descrição quer 2 a 4 frases sobre
+QUANDO chamar; o procedimento vai em `instrucao_resposta`, que chega no momento em que serve e
+no lugar de maior atenção do modelo.
+
+### Ferramenta e RAG no mesmo assunto: quem vence
+
+A ferramenta. Ela consulta o sistema **agora**; o documento é a foto do dia em que foi indexado.
+Valor de crédito, vaga e prazo mudam por edital, e o trecho antigo continua no índice pontuando
+bem, pronto para ser citado como se valesse.
+
+A divisão que o prompt impõe: **documento para regra e política** (quem tem direito ao desconto,
+que condições valem), **ferramenta para o dado do momento** (valores, quantidades,
+disponibilidade). Havendo divergência, responde-se pela ferramenta.
+
+Isso precisou virar regra escrita porque o protocolo sozinho não bastava: as definições das
+ferramentas vão na chamada, mas as regras fixas falavam apenas de "trechos" — e um modelo
+pequeno conclui daí que a única fonte é o RAG. Por isso `ToolRegistry::resumoParaPrompt()`
+também lista as ferramentas **no texto** do prompt, com a primeira frase de cada descrição.
 
 ### Busca na web com domínio restrito
 

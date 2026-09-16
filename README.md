@@ -53,6 +53,15 @@ gravar um lead no CRM, abrir um chamado. O modelo nunca monta a URL nem o corpo
 da requisição. Ele só preenche campos que você declarou, com tipo e validação,
 dentro de um template que ele não alcança.
 
+Quando o mesmo assunto está num documento **e** numa ferramenta, vale a
+ferramenta: ela consulta o dado agora, e o documento é a foto do dia em que foi
+indexado. O documento responde pela regra ("quem tem direito ao desconto"), a
+ferramenta responde pelo número ("quanto custa hoje").
+
+A resposta também se adapta ao canal. No site, onde a tela renderiza, ele pode
+usar tabela — e uma simulação de custos fica muito melhor assim. No WhatsApp,
+que não tem tabela, a mesma informação sai em linhas curtas, uma por item.
+
 ## Multiagente, multiprovedor
 
 Cada **agente** tem prompt, modelo, temperatura, bases de conhecimento e
@@ -128,6 +137,13 @@ encerra um processo em segundo plano. O mesmo pela linha de comando:
 
 Nada disso guarda o texto das conversas: é tudo metadado, e o conteúdo continua
 sob a retenção configurada.
+
+Pela linha de comando há mais dois, para quando a tela não basta:
+`php bin/ver-mensagem.php` mostra o conteúdo **cru** das últimas respostas, com
+os caracteres invisíveis à mostra — é como se descobre marcador de modelo
+vazando no texto. E `php bin/diagnostico-login.php` responde por que o painel
+recusa um login: senha errada, usuário inexistente ou bloqueio por tentativas,
+que a tela não distingue.
 
 ## Privacidade
 

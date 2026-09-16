@@ -69,6 +69,11 @@ no banco: banco vaza em backup e em log.
 chamam API externa. É a lista de domínios que o sistema aceita alcançar, separada
 por vírgula. Vazia, nenhuma chamada externa acontece, o que é o padrão seguro.
 
+**`TOOLS_RESPOSTA_MAX_KB`** é o teto da resposta de uma ferramenta, 16 KB por padrão. Não é
+detalhe: a resposta entra **inteira** no pedido seguinte ao modelo, e uns 16 KB já valem uns 4
+mil tokens. Se uma instalação antiga tiver 64 aqui, o pedido estoura o limite de qualquer plano
+modesto e o turno morre com HTTP 413.
+
 Para gerar as duas strings aleatórias:
 
 ```bash
@@ -413,6 +418,26 @@ isso aparece como `embedding_pergunta_falhou` ou `faq_busca_falhou`.
 altas é um endpoint externo lento, e aí o detalhe do turno diz qual. Se a coluna Ferr.
 estiver no teto em muitos turnos, o agente está chamando ferramenta em círculo — reveja as
 descrições delas.
+
+**O agente não usa a ferramenta e diz que não encontrou nos documentos.** Confira se a
+ferramenta está ativa e marcada para aquele agente. Se estiver, o problema costuma ser a
+descrição: ela deve dizer em 2 a 4 frases QUANDO chamar. Procedimento, fórmula e formato de
+resposta vão no campo "Instruções para o modelo ao usar a resposta", que viaja junto do
+resultado — na descrição, eles diluem o gatilho e ainda são cobrados em toda conversa.
+
+**Erro `pedido_grande` (HTTP 413) logo depois de uma ferramenta responder.** A resposta da
+ferramenta entra inteira no pedido seguinte. Ferramenta sem parâmetro, que devolve a lista
+completa, estoura qualquer limite modesto: dê a ela um parâmetro de filtro e recorte no próprio
+endpoint. O teto é `TOOLS_RESPOSTA_MAX_KB`.
+
+**A resposta chega com buracos no meio das palavras, ou com o raciocínio do modelo em inglês.**
+Modelos de raciocínio aberto mandam o pensamento junto do texto. Rode
+`php bin/ver-mensagem.php 10` e olhe a linha "suspeitas": ela aponta `<think>`, `<|` e
+asteriscos soltos no conteúdo gravado.
+
+**Não consigo entrar no painel, mesmo com a senha nova.** Pode ser bloqueio por tentativas, que
+é por usuário **e** IP — daí entrar de outro computador funcionar. Rode
+`php bin/diagnostico-login.php`, e `--destravar` para liberar.
 
 **O assistente responde "atendimento indisponível".** Provedor sem chave, chave
 inválida ou cota estourada. O Dashboard aponta, e o botão Testar do provedor

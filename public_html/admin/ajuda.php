@@ -287,6 +287,43 @@ include __DIR__ . '/partials/head.php';
         válido, preencher a lacuna é a saída fácil, e o número inventado parece verdadeiro.
     </p>
 
+    <h3 class="secao-form">Ele não usa a ferramenta: diz que não encontrou nos documentos</h3>
+    <p class="page-sub">
+        Confira em <a href="ferramentas.php">Ferramentas</a> se ela está ativa e marcada para
+        aquele agente. Estando, o problema costuma ser a <strong>descrição</strong>: ela responde
+        a uma pergunta só, "quando devo chamar?", e quer 2 a 4 frases. Fórmula, formato da resposta
+        e o que perguntar depois vão no campo <strong>"Instruções para o modelo ao usar a
+        resposta"</strong>, enviado junto do resultado, apenas no atendimento em que a ferramenta
+        roda. Descrição longa tem dois efeitos ruins: dilui o gatilho, e é cobrada em toda
+        conversa, inclusive nas que nada têm a ver com ela.
+    </p>
+
+    <h3 class="secao-form">O documento e a ferramenta dizem valores diferentes</h3>
+    <p class="page-sub">
+        Vale o da ferramenta, e o assistente foi instruído assim: ela consulta o dado agora,
+        enquanto o documento é a foto do dia em que foi indexado. Os documentos respondem pela
+        regra — quem tem direito ao desconto, que condições valem — e a ferramenta responde pelo
+        número. Se um documento antigo com valores continuar indexado, remova-o em
+        <a href="artefatos.php">Artefatos</a>: ele segue aparecendo na busca e pode ser citado.
+    </p>
+
+    <h3 class="secao-form">A tabela veio quebrada, cheia de barras</h3>
+    <p class="page-sub">
+        No site a tabela é renderizada normalmente. No WhatsApp não existe tabela, e o assistente
+        já é instruído a responder ali em linhas curtas, uma informação por linha. Se mesmo assim
+        vier tabela, quase sempre é porque o texto de instruções do agente, ou o da ferramenta,
+        está pedindo "apresente em tabela" — essa ordem vale para os dois canais.
+    </p>
+
+    <h3 class="secao-form">Ele errou uma conta</h3>
+    <p class="page-sub">
+        Modelo de linguagem erra aritmética, e em valores isso vira quase-promessa de preço. O
+        assistente é instruído a usar o total que a ferramenta devolver, sem recalcular, e a
+        mostrar as parcelas quando ele mesmo somar. A correção de verdade é a ferramenta devolver
+        o total <strong>já calculado</strong>, em vez de devolver as partes para o modelo
+        multiplicar.
+    </p>
+
     <h3 class="secao-form">Ele respondeu certo, mas do jeito errado</h3>
     <p class="page-sub">
         Tom de voz, tamanho da resposta e o que ele prioriza vêm do texto de instruções do agente.
