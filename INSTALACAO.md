@@ -419,6 +419,11 @@ altas é um endpoint externo lento, e aí o detalhe do turno diz qual. Se a colu
 estiver no teto em muitos turnos, o agente está chamando ferramenta em círculo — reveja as
 descrições delas.
 
+**Erro 500 numa tela do painel logo depois de um `git pull`.** Falta rodar a migração. O painel passou
+a reconhecer esse caso e mostrar uma página dizendo isso, com o comando; se a tela em branco aparecer
+mesmo assim, rode `php database/migrate.php`. Sistema › Infraestrutura tem o item **Schema**, que
+compara o banco com o `schema.sql` e lista as colunas faltando.
+
 **O agente não usa a ferramenta e diz que não encontrou nos documentos.** Confira se a
 ferramenta está ativa e marcada para aquele agente. Se estiver, o problema costuma ser a
 descrição: ela deve dizer em 2 a 4 frases QUANDO chamar. Procedimento, fórmula e formato de

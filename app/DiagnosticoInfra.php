@@ -185,6 +185,74 @@ final class DiagnosticoInfra
     // -----------------------------------------------------------------
 
     /** @return list<array<string, string>> */
+    /**
+     * Colunas que o código espera e o banco não tem.
+     *
+     * Compara o banco com o `schema.sql`, que é a fonte completa — em vez de
+     * repetir aqui a lista de `garantir_colunas()` do migrate, que teria de ser
+     * mantida em dois lugares e desatualizaria no primeiro esquecimento.
+     *
+     * Existe porque deploy sem migração falha do pior jeito possível: HTTP 500
+     * seco na primeira tela que tocar a coluna nova. Aconteceu em 16/09/2026,
+     * ao salvar uma ferramenta depois de um `git pull` sem
+     * `php database/migrate.php` — e o sintoma ("erro 500 ao editar qualquer
+     * ferramenta") não sugeria migração nenhuma.
+     *
+     * @return array<string, list<string>> tabela → colunas faltando
+     */
+    public static function colunasFaltando(): array
+    {
+        $arquivo = __DIR__ . '/../database/schema.sql';
+
+        if (!is_file($arquivo)) {
+            return [];
+        }
+
+        $sql = (string) file_get_contents($arquivo);
+        $pdo = Database::connection();
+        $faltando = [];
+
+        preg_match_all('/CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\((.*?)\n\);/s', $sql, $blocos, PREG_SET_ORDER);
+
+        foreach ($blocos as [, $tabela, $corpo]) {
+            $existentes = array_column(
+                $pdo->query("PRAGMA table_info({$tabela})")->fetchAll(PDO::FETCH_ASSOC),
+                'name'
+            );
+
+            // Tabela inteira ausente é outro problema (banco nunca criado), e
+            // quem responde por ele é a tela de instalação.
+            if ($existentes === []) {
+                continue;
+            }
+
+            foreach (explode("\n", $corpo) as $linha) {
+                $linha = trim($linha);
+
+                // Comentário, linha vazia ou cláusula de tabela: não é coluna.
+                if ($linha === '' || str_starts_with($linha, '--')) {
+                    continue;
+                }
+
+                if (!preg_match('/^(\w+)\s+/', $linha, $m)) {
+                    continue;
+                }
+
+                $coluna = $m[1];
+
+                if (in_array(strtoupper($coluna), ['PRIMARY', 'FOREIGN', 'UNIQUE', 'CHECK', 'CONSTRAINT'], true)) {
+                    continue;
+                }
+
+                if (!in_array($coluna, $existentes, true)) {
+                    $faltando[$tabela][] = $coluna;
+                }
+            }
+        }
+
+        return $faltando;
+    }
+
     private static function banco(bool $completo): array
     {
         $itens = [];
@@ -207,6 +275,24 @@ final class DiagnosticoInfra
             $fts ? 'ok' : 'alerta',
             $versao . ($fts ? ' · FTS5' : ' · sem FTS5'),
             $fts ? 'A metade lexical da busca híbrida está disponível.' : 'Sem FTS5 a busca fica só vetorial: códigos e nomes próprios passam a errar.'
+        );
+
+        $faltando = self::colunasFaltando();
+        $quantas = array_sum(array_map('count', $faltando));
+
+        $itens[] = self::item(
+            'Banco',
+            'Schema',
+            $quantas === 0 ? 'ok' : 'erro',
+            $quantas === 0 ? 'na versão do código' : $quantas . ' coluna(s) faltando',
+            $quantas === 0
+                ? 'O banco tem todas as colunas que o código espera.'
+                : 'Faltam: ' . implode('; ', array_map(
+                    static fn (string $t, array $c): string => $t . ' (' . implode(', ', $c) . ')',
+                    array_keys($faltando),
+                    $faltando
+                )) . '. Rode `php database/migrate.php` — sem isso, a primeira tela que tocar nessas '
+                    . 'colunas responde erro 500.'
         );
 
         $diario = strtolower((string) $pdo->query('PRAGMA journal_mode')->fetchColumn());
