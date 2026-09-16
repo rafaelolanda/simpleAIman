@@ -1398,3 +1398,9 @@ html.menu-recolhido .btn-recolher { margin: 0; }
     text-transform: uppercase;
     fill: var(--texto-fraco, #6b7280);
 }
+
+/* Trava de ordem entre ferramentas (`depende_de`): seta, e não linha solta.
+   É regra do orquestrador, não sugestão ao modelo — por isso destaca. */
+.mapa-linha.dependencia { stroke: var(--accent); stroke-width: 1.8; opacity: .75; }
+.mapa-ponta { fill: var(--accent); }
+.mapa-chip.col-seta { background: var(--accent); border-color: var(--accent); }

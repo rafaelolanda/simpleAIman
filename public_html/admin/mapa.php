@@ -59,7 +59,7 @@ $bases = $pdo->query(
 )->fetchAll(PDO::FETCH_ASSOC);
 
 $ferramentas = $pdo->query(
-    'SELECT id, nome, slug, tipo, ativo FROM ferramentas ORDER BY nome'
+    'SELECT id, nome, slug, tipo, ativo, depende_de FROM ferramentas ORDER BY nome'
 )->fetchAll(PDO::FETCH_ASSOC);
 
 /** @return array<int, list<int>> agente → ids ligados */
@@ -459,6 +459,42 @@ foreach ($ferramentas as $f) {
         'inativo' => (int) $f['ativo'] !== 1,
         'grupo' => 'ferramenta',
         'id' => (int) $f['id'],
+        'depende_de' => (int) ($f['depende_de'] ?? 0),
+    ];
+}
+
+// Quarta coluna: quem INDEXOU cada base.
+//
+// O provedor de embedding já aparece à esquerda quando também faz chat, mas
+// ligar a base até lá cruzaria o desenho inteiro. Repetir o provedor à direita
+// mantém toda leitura no mesmo sentido e deixa visível o que é o erro mais
+// silencioso do RAG: base indexada por um modelo diferente do padrão, cujos
+// vetores não se comparam com os do resto.
+$usadosNoEmbedding = [];
+
+foreach ($bases as $b) {
+    $emb = (int) ($b['provedor_embedding_id'] ?? 0) ?: $padraoEmbedding;
+
+    if ($emb > 0) {
+        $usadosNoEmbedding[$emb] = true;
+    }
+}
+
+$colEmbedding = [];
+
+foreach ($provedores as $p) {
+    $id = (int) $p['id'];
+
+    if (!isset($usadosNoEmbedding[$id])) {
+        continue;
+    }
+
+    $colEmbedding[] = [
+        'chave' => 'emb-' . $id,
+        'titulo' => (string) $p['nome'],
+        'sub' => 'indexa · ' . (trim((string) $p['modelo_embedding']) ?: 'modelo não definido'),
+        'href' => 'provedores.php?editar=' . $id,
+        'inativo' => (int) $p['ativo'] !== 1,
     ];
 }
 
@@ -472,19 +508,21 @@ $alturas = [
     $alturaDaColuna($colProvedores),
     $alturaDaColuna($colAgentes),
     $alturaDaColuna($colDireita),
+    $alturaDaColuna($colEmbedding),
 ];
 $maisAlta = max($alturas);
 
 [$colProvedores, $rotulosProv] = $empilhar($colProvedores, COLUNAS_X[0], 40 + (int) (($maisAlta - $alturas[0]) / 2));
 [$colAgentes, $rotulosAgentes] = $empilhar($colAgentes, COLUNAS_X[1], 40 + (int) (($maisAlta - $alturas[1]) / 2));
 [$colDireita, $rotulosDireita] = $empilhar($colDireita, COLUNAS_X[2], 40 + (int) (($maisAlta - $alturas[2]) / 2));
+[$colEmbedding, $rotulosEmb] = $empilhar($colEmbedding, COLUNAS_X[3], 40 + (int) (($maisAlta - $alturas[3]) / 2));
 
-$rotulos = [...$rotulosProv, ...$rotulosAgentes, ...$rotulosDireita];
+$rotulos = [...$rotulosProv, ...$rotulosAgentes, ...$rotulosDireita, ...$rotulosEmb];
 
 /** @var array<string, array<string, mixed>> $porChave */
 $porChave = [];
 
-foreach ([...$colProvedores, ...$colAgentes, ...$colDireita] as $no) {
+foreach ([...$colProvedores, ...$colAgentes, ...$colDireita, ...$colEmbedding] as $no) {
     $porChave[$no['chave']] = $no;
 }
 
@@ -508,6 +546,33 @@ $curva = static function (string $de, string $para) use ($porChave): ?string {
     $meio = ($x2 - $x1) / 2;
 
     return sprintf('M %d %d C %d %d, %d %d, %d %d', $x1, $y1, $x1 + $meio, $y1, $x2 - $meio, $y2, $x2, $y2);
+};
+
+/**
+ * Curva entre dois nós da MESMA coluna, contornando pela esquerda.
+ *
+ * As duas caixas têm o mesmo x, então a curva do layout em camadas viraria um
+ * risco reto por cima delas. Esta sai pela borda esquerda, abre um arco fora
+ * da coluna e volta — o mesmo desenho que um fluxograma usa para retorno.
+ */
+$curvaNaColuna = static function (string $de, string $para) use ($porChave): ?string {
+    if (!isset($porChave[$de], $porChave[$para])) {
+        return null;
+    }
+
+    $a = $porChave[$de];
+    $b = $porChave[$para];
+
+    $x = $a['x'];
+    $y1 = $a['y'] + ALTURA_NO / 2;
+    $y2 = $b['y'] + ALTURA_NO / 2;
+    // O arco cresce com a distancia, mas nao pode passar do vao entre as
+    // colunas: com oito linhas de diferenca ele invadiria a coluna dos
+    // agentes e a seta passaria por cima das caixas.
+    $vao = COLUNAS_X[2] - (COLUNAS_X[1] + LARGURA_NO) - 8;
+    $arco = min($vao, 26 + (int) (abs($y2 - $y1) / 6));
+
+    return sprintf('M %d %d C %d %d, %d %d, %d %d', $x, $y1, $x - $arco, $y1, $x - $arco, $y2, $x, $y2);
 };
 
 $arestas = [];
@@ -537,6 +602,30 @@ foreach ($colDireita as $no) {
     }
 }
 
+foreach ($colDireita as $no) {
+    if (($no['grupo'] ?? '') === 'base') {
+        $proprio = (int) ($no['embedding_id'] ?? 0);
+        $emb = $proprio ?: $padraoEmbedding;
+
+        if ($emb > 0) {
+            // Herdado do padrão sai mais claro que o escolhido na base: a
+            // diferença entre "é o padrão" e "alguém mudou aqui" é justamente
+            // o que se quer enxergar de longe.
+            $arestas[] = ['d' => $curva($no['chave'], 'emb-' . $emb), 'fraca' => $proprio === 0];
+        }
+    }
+
+    // Dependência entre ferramentas: o Executor RECUSA a chamada se a
+    // pré-requisito não rodou na conversa, então esta seta é regra, não dica.
+    if (($no['grupo'] ?? '') === 'ferramenta' && ($no['depende_de'] ?? 0) > 0) {
+        $arestas[] = [
+            'd' => $curvaNaColuna('ferr-' . $no['depende_de'], $no['chave']),
+            'fraca' => $no['inativo'],
+            'seta' => true,
+        ];
+    }
+}
+
 $arestas = array_values(array_filter($arestas, static fn (array $a): bool => $a['d'] !== null));
 
 $alturaMax = 40;
@@ -549,7 +638,7 @@ foreach ([$colProvedores, $colAgentes, $colDireita] as $coluna) {
 }
 
 $alturaSvg = $alturaMax + 40;
-$larguraSvg = COLUNAS_X[2] + LARGURA_NO + 40;
+$larguraSvg = ($colEmbedding === [] ? COLUNAS_X[2] : COLUNAS_X[3]) + LARGURA_NO + 40;
 
 $graves = count(array_filter($alertas, static fn (array $a): bool => $a['grave']));
 
@@ -596,17 +685,25 @@ include __DIR__ . '/partials/head.php';
         <span><i class="mapa-chip col-ferr"></i> Ferramentas</span>
         <span><i class="mapa-chip col-alerta"></i> Com ponto de atenção</span>
         <span><i class="mapa-chip col-inativo"></i> Inativo</span>
+        <span><i class="mapa-chip col-seta"></i> Ferramenta que exige outra antes</span>
     </div>
 
     <div class="mapa-rolagem">
         <svg viewBox="0 0 <?= $larguraSvg ?> <?= $alturaSvg ?>" width="<?= $larguraSvg ?>" height="<?= $alturaSvg ?>"
              class="mapa-svg" role="img" aria-label="Diagrama das ligações entre provedores, agentes, canais, bases e ferramentas">
+            <defs>
+                <marker id="ponta" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                    <path d="M 0 0 L 8 4 L 0 8 z" class="mapa-ponta"></path>
+                </marker>
+            </defs>
+
             <?php foreach ($rotulos as $rotulo): ?>
                 <text x="<?= (int) $rotulo['x'] ?>" y="<?= (int) $rotulo['y'] ?>" class="mapa-grupo"><?= e($rotulo['texto']) ?></text>
             <?php endforeach; ?>
 
             <?php foreach ($arestas as $aresta): ?>
-                <path d="<?= e($aresta['d']) ?>" class="mapa-linha<?= $aresta['fraca'] ? ' fraca' : '' ?>" fill="none"></path>
+                <path d="<?= e($aresta['d']) ?>" class="mapa-linha<?= $aresta['fraca'] ? ' fraca' : '' ?><?= !empty($aresta['seta']) ? ' dependencia' : '' ?>"
+                      fill="none" <?= !empty($aresta['seta']) ? 'marker-end="url(#ponta)"' : '' ?>></path>
             <?php endforeach; ?>
 
             <?php
@@ -644,14 +741,20 @@ include __DIR__ . '/partials/head.php';
                     default => 'ferr',
                 });
             }
+
+            foreach ($colEmbedding as $no) {
+                $desenhar($no, 'col-prov');
+            }
             ?>
         </svg>
     </div>
 
     <p class="page-sub" style="margin-top:.6rem;">
-        A linha mais clara é ligação que existe mas não está em uso — agente inativo, ou provedor herdado do
-        padrão em vez de escolhido no agente. Bases aparecem com a contagem de vetores: base com zero vetores
-        só responde pela busca por palavra.
+        A linha mais clara é ligação herdada ou fora de uso — agente inativo, provedor vindo do padrão em vez
+        de escolhido. À direita das bases aparece quem as indexou: se uma base apontar para um provedor
+        diferente das outras, os vetores dela não se comparam com o resto, e a busca piora sem dar erro. A
+        seta entre ferramentas é a trava de ordem (`depende_de`): o sistema recusa a segunda enquanto a
+        primeira não tiver rodado na conversa.
     </p>
 </div>
 
