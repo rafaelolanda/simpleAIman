@@ -1127,7 +1127,7 @@ _" . implode(' ', $avisos) . '_';
             }
 
             if (trim($texto) === '') {
-                throw new ErroAgente('resposta_vazia', 'Stream terminou sem conteúdo.');
+                throw new ErroAgente('resposta_vazia', 'Stream terminou sem conteúdo — ' . $filtro->contabilidade() . '.');
             }
         } catch (ErroAgente $e) {
             $this->registrarFalha($conversaId, $e);

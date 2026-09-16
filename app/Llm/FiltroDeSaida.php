@@ -48,6 +48,30 @@ final class FiltroDeSaida
 
     private bool $dentro = false;
 
+    /** Bytes que chegaram do provedor neste turno. */
+    private int $recebidos = 0;
+
+    /** Bytes que saíram para o visitante. */
+    private int $emitidos = 0;
+
+    /**
+     * O que aconteceu com o texto, para o log quando a resposta sai vazia.
+     *
+     * "Stream terminou sem conteúdo" tem duas causas opostas: o modelo não
+     * gerou nada, ou gerou só raciocínio e o filtro descartou. As duas se
+     * resolvem de formas diferentes — a primeira com `max_tokens` e
+     * `reasoning_effort`, a segunda aqui dentro — e o log não distinguia.
+     */
+    public function contabilidade(): string
+    {
+        return sprintf(
+            'provedor mandou %d bytes, filtro liberou %d%s',
+            $this->recebidos,
+            $this->emitidos,
+            $this->dentro ? ', e o stream terminou DENTRO de um trecho de raciocínio' : ''
+        );
+    }
+
     /**
      * Processa um pedaço do streaming e devolve o que pode sair agora.
      *
@@ -56,6 +80,7 @@ final class FiltroDeSaida
      */
     public function pedaco(string $texto): string
     {
+        $this->recebidos += strlen($texto);
         $this->buffer .= $texto;
         $saida = '';
 
@@ -68,7 +93,7 @@ final class FiltroDeSaida
                     // pode ser metade do marcador de fechamento.
                     $this->buffer = substr($this->buffer, -self::MAIOR);
 
-                    return self::semTokens($saida);
+                    return $this->contar(self::semTokens($saida));
                 }
 
                 $this->buffer = substr($this->buffer, $pos + strlen($marcador));
@@ -106,7 +131,15 @@ final class FiltroDeSaida
             $this->buffer = substr($this->buffer, $solto);
         }
 
-        return self::semTokens($saida);
+        return $this->contar(self::semTokens($saida));
+    }
+
+    /** Soma o que saiu, para `contabilidade()`. */
+    private function contar(string $saida): string
+    {
+        $this->emitidos += strlen($saida);
+
+        return $saida;
     }
 
     /** O que ficou retido. Raciocínio sem fechamento é descartado inteiro. */
@@ -115,9 +148,8 @@ final class FiltroDeSaida
         $resto = $this->dentro ? '' : $this->buffer;
 
         $this->buffer = '';
-        $this->dentro = false;
 
-        return self::semTokens($resto);
+        return $this->contar(self::semTokens($resto));
     }
 
     /**

@@ -170,6 +170,16 @@ final class PromptBuilder
             $regras[] = 'Baseie a resposta nos trechos de referência acima. Ao usar um trecho, cite o número '
                 . 'entre colchetes ao final da frase, assim: [1].';
 
+            // Visto em 16/09/2026: o agente escreveu "[simulador_valor]" e
+            // "[ferramenta]" como se fossem citação, e citou [2] e [4] para
+            // uma informação de bolsa que estava em outro documento — o
+            // rodapé então atribuiu bolsa ao calendário acadêmico. Citar
+            // errado é pior que não citar: parece conferido, e não é.
+            $regras[] = 'Cite SOMENTE números que existam nos trechos acima, e apenas quando o trecho daquele '
+                . 'número for de fato a origem do que você escreveu. Não invente marcador como [ferramenta] ou '
+                . '[nome_da_ferramenta] — a origem dos dados de ferramenta já é registrada pelo sistema. Na '
+                . 'dúvida sobre qual número usar, escreva a frase sem citação.';
+
             // Sem esta regra o agente vira excessivamente cauteloso e recusa
             // com a resposta na mão. Aconteceu em uso real: perguntado sobre
             // valores, listou três cursos a partir da tabela de preços;
@@ -264,6 +274,13 @@ final class PromptBuilder
                 . 'não encontrou a informação sem ter chamado a ferramenta que trata daquele assunto.',
             'Não peça à pessoa um dado que a ferramenta devolve. Chame a ferramenta primeiro e pergunte '
                 . 'depois só o que faltar.',
+            // Em 16/09/2026 o agente somou 32 créditos onde havia 22, e
+            // apresentou R$ 21.034,88 em vez de R$ 14.461,48 — só corrigiu
+            // depois que a pessoa conferiu. Conta de cabeça com dinheiro é
+            // quase-promessa de preço.
+            'Se a ferramenta devolver um total (soma de créditos, valor total, quantidade), use o número dela '
+                . 'e não recalcule. Quando precisar somar você mesmo, mostre as parcelas somadas ao lado do '
+                . 'resultado, para que a pessoa possa conferir.',
             // Precedência, e não empate. O documento é uma FOTO do dia em que
             // foi indexado; a ferramenta consulta o sistema agora. Valor de
             // crédito, vaga e prazo mudam por edital — e o trecho antigo
