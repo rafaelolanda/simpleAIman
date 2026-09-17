@@ -525,7 +525,7 @@ $listar = static function (array $linhas) use ($comFiltros, $ms): void {
                     <td><strong>Conversa</strong></td>
                     <td>
                         <?php if ($detalhe['conversa_id']): ?>
-                            <a href="conversas.php?id=<?= (int) $detalhe['conversa_id'] ?>">
+                            <a href="conversas.php?ver=<?= (int) $detalhe['conversa_id'] ?>">
                                 #<?= (int) $detalhe['conversa_id'] ?> — ver a conversa inteira
                             </a>
                         <?php else: ?>

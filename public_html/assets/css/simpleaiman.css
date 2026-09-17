@@ -216,7 +216,14 @@
 
 .form-acoes { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 
-td.acoes { white-space: nowrap; display: flex; gap: 0.35rem; align-items: center; }
+/* A célula de ações continua CÉLULA.
+   `display: flex` no <td> o tira do fluxo da tabela: ele deixa de esticar até
+   a altura da linha, e a borda fica solta, desalinhada das vizinhas — em toda
+   listagem do painel. O espaçamento entre os botões volta por margem, que não
+   depende de contexto flex. */
+td.acoes { white-space: nowrap; vertical-align: middle; }
+td.acoes > * { vertical-align: middle; }
+td.acoes > * + * { margin-left: 0.35rem; }
 
 /* barra de progresso da indexação ---------------------------- */
 
@@ -1435,3 +1442,33 @@ html.menu-recolhido .btn-recolher { margin: 0; }
 
 /* Terceira linha do nó: flags do provedor (ferramentas, streaming). */
 .mapa-svg .mapa-flag { font-size: 10.5px; fill: var(--texto-fraco, #6b7280); letter-spacing: .02em; }
+
+/* Cartão recolhível (<details class="card card-recolhivel">).
+   O resumo precisa parecer um cabeçalho clicável, não um item de lista: o
+   marcador padrão do navegador desalinha do título e muda de forma entre
+   Chrome e Safari. */
+details.card-recolhivel > summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+details.card-recolhivel > summary::-webkit-details-marker { display: none; }
+
+details.card-recolhivel > summary::before {
+    content: "";
+    width: 0;
+    height: 0;
+    border-left: 5px solid currentColor;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    opacity: .55;
+    transition: transform .15s ease;
+}
+
+details.card-recolhivel[open] > summary::before { transform: rotate(90deg); }
+details.card-recolhivel > summary .card-title { margin: 0; }
+details.card-recolhivel > summary:hover .card-title { color: var(--accent); }

@@ -113,9 +113,19 @@ include __DIR__ . '/partials/head.php';
 </div>
 
 <?php if ($semResposta): ?>
-    <div class="card">
-        <h2 class="card-title">Perguntas sem resposta nos documentos</h2>
-        <p class="vazio" style="margin-bottom:0.8rem;">
+    <?php // Recolhido por padrão.
+          //
+          // A lista é material de trabalho — serve para uma rodada de curadoria
+          // de FAQ, não para todo dia. Aberta, empurrava a busca e a conversa
+          // aberta para fora da tela, que é o que se vem fazer aqui na maioria
+          // das visitas. O número no resumo mantém a informação visível sem
+          // ocupar o espaço. ?>
+    <details class="card card-recolhivel">
+        <summary>
+            <span class="card-title">Perguntas sem resposta nos documentos</span>
+            <span class="tag"><?= count($semResposta) ?></span>
+        </summary>
+        <p class="vazio" style="margin:0.8rem 0;">
             O agente admitiu não ter a informação. Cada linha é candidata a virar FAQ ou a indicar
             um documento faltando.
         </p>
@@ -134,7 +144,7 @@ include __DIR__ . '/partials/head.php';
             <?php endforeach; ?>
             </tbody>
         </table>
-    </div>
+    </details>
 <?php endif; ?>
 
 <?php if ($conversa): ?>
