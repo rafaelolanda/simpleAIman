@@ -122,6 +122,12 @@ banco diria "expurgado" com a foto inteira lá.
 
 Duas telas respondem às duas perguntas que aparecem primeiro.
 
+O **Dashboard** mostra a atividade dos últimos 14 dias em dois gráficos — um
+por medida, porque conversa e mensagem vivem em ordens de grandeza diferentes
+e um eixo só esconderia a menor. Quem tem papel de atendente abre o mesmo
+Dashboard recortado: só o próprio atendimento, sem configuração e sem número
+dos colegas.
+
 **Sistema › Turnos** responde *"o que aconteceu nesta resposta?"*. Cada
 resposta vira um registro com o caminho que tomou — FAQ, documentos ou menu —,
 quantos trechos usou e o tempo gasto em cada etapa: busca, modelo, ferramentas.

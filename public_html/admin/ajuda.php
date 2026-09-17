@@ -287,6 +287,14 @@ include __DIR__ . '/partials/head.php';
         válido, preencher a lacuna é a saída fácil, e o número inventado parece verdadeiro.
     </p>
 
+    <h3 class="secao-form">O Dashboard de quem atende</h3>
+    <p class="page-sub">
+        Quem tem papel de <strong>atendente</strong> abre o mesmo Dashboard, mas vê apenas o próprio
+        atendimento: as conversas que passaram pelas mãos dele, quantas respondeu por dia e quantas estão
+        com ele agora. Nada de configuração, de estado do sistema ou de número dos colegas. Administrador e
+        editor veem a visão da instância inteira.
+    </p>
+
     <h3 class="secao-form">Quem enxerga os mapas</h3>
     <p class="page-sub">
         <a href="mapa-agora.php">Agora</a> fica disponível para administrador e editor. O atendente não a

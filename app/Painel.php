@@ -63,8 +63,15 @@ final class Painel
         // alimenta o RAG, responde pelo assunto e precisa da visao ampla.
         'mapa-agora.php' => ['admin', 'editor'],
 
+        // Dashboard para os três papéis, com DADOS diferentes.
+        //
+        // O atendente vê um painel só dele: as conversas que passaram pelas
+        // mãos dele, e nada de configuração, alerta de sistema ou número dos
+        // colegas. A tela é a mesma; o recorte é feito em index.php, pelo
+        // `atendente_id` e pelo autor das mensagens.
+        'index.php' => ['admin', 'editor', 'atendente'],
+
         // Conteúdo — o que o agente sabe
-        'index.php' => ['admin', 'editor'],
         'bases.php' => ['admin', 'editor'],
         'artefatos.php' => ['admin', 'editor'],
         'faq.php' => ['admin', 'editor'],

@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/_init.php';
+require_once __DIR__ . '/../../app/Grafico.php';
 
 $paginaAtual = 'index.php';
 $tituloPagina = 'Dashboard';
@@ -10,6 +11,19 @@ $tituloPagina = 'Dashboard';
 $contar = static function (PDO $pdo, string $sql): int {
     return (int) $pdo->query($sql)->fetchColumn();
 };
+
+/**
+ * Quem atende vê o MESMO painel, com os dados dele.
+ *
+ * Não é uma tela separada, e isso é de propósito: o recorte por pessoa cabe
+ * numa cláusula `WHERE`, enquanto uma segunda tela seria outro arquivo para
+ * manter em dia. O que muda é o conteúdo — nada de configuração, de alerta de
+ * infraestrutura ou de número dos colegas, que em atendimento vira placar.
+ */
+$souAtendente = $meuPapel === 'atendente';
+$meuId = (int) (Auth::userId() ?? 0);
+
+if (!$souAtendente) {
 
 $totais = [
     'agentes' => $contar($pdo, 'SELECT COUNT(*) FROM agentes WHERE ativo = 1'),
@@ -123,27 +137,110 @@ if ($setoresSemRevisao > 0) {
     $alertas[] = ['aviso', $setoresSemRevisao . ' setor(es) sem revisão de contato há mais de 6 meses.'];
 }
 
+} // fim do bloco que só o admin e o editor enxergam
+
 $hoje = today();
 $inicio = date('Y-m-d', strtotime('-13 day'));
-$serie = Metrics::serieDiaria($inicio, $hoje);
+$seteDias = date('Y-m-d H:i:s', strtotime('-6 day midnight'));
 
-$ultimasConversas = $pdo->query(
-    'SELECT c.id, c.titulo, c.modo, c.criado_em, a.nome AS agente,
-            (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs
-     FROM conversas c
-     LEFT JOIN agentes a ON a.id = c.agente_id
-     ORDER BY c.id DESC LIMIT 8'
-)->fetchAll();
+if ($souAtendente) {
+    // Série do atendente: quantas conversas ele atendeu em cada dia.
+    //
+    // Contada pela MENSAGEM que ele enviou, e não por `conversas.atendente_id`:
+    // aquela coluna guarda quem está com a conversa AGORA, e é limpa quando a
+    // conversa volta ao bot. Quem atendeu ontem sumiria do próprio painel.
+    $minhas = $pdo->prepare(
+        "SELECT date(criado_em) AS dia,
+                COUNT(DISTINCT conversa_id) AS conversas,
+                COUNT(*) AS mensagens
+           FROM mensagens
+          WHERE autor_tipo = 'atendente' AND autor_id = :eu AND date(criado_em) >= :inicio
+          GROUP BY date(criado_em)"
+    );
+    $minhas->execute(['eu' => $meuId, 'inicio' => $inicio]);
+
+    $porDia = [];
+
+    foreach ($minhas->fetchAll(PDO::FETCH_ASSOC) as $linha) {
+        $porDia[(string) $linha['dia']] = [
+            'conversa_atendida' => (int) $linha['conversas'],
+            'mensagem_atendente' => (int) $linha['mensagens'],
+        ];
+    }
+
+    $serieConversas = Grafico::completar($porDia, 'conversa_atendida');
+    $serieMensagens = Grafico::completar($porDia, 'mensagem_atendente');
+
+    $comigoAgora = (int) $pdo->query(
+        "SELECT COUNT(*) FROM conversas WHERE modo = 'humano' AND atendente_id = " . $meuId
+    )->fetchColumn();
+
+    $ultimasConversas = $pdo->prepare(
+        "SELECT c.id, c.modo, c.criado_em, a.nome AS agente,
+                (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs,
+                (SELECT MAX(m.criado_em) FROM mensagens m WHERE m.conversa_id = c.id) AS ultima
+           FROM conversas c
+           LEFT JOIN agentes a ON a.id = c.agente_id
+          WHERE c.id IN (SELECT DISTINCT conversa_id FROM mensagens
+                          WHERE autor_tipo = 'atendente' AND autor_id = :eu)
+          ORDER BY ultima DESC LIMIT 8"
+    );
+    $ultimasConversas->execute(['eu' => $meuId]);
+    $ultimasConversas = $ultimasConversas->fetchAll(PDO::FETCH_ASSOC);
+} else {
+    $serie = Metrics::serieDiaria($inicio, $hoje);
+    $serieConversas = Grafico::completar($serie, 'conversa_iniciada');
+    $serieMensagens = Grafico::completar($serie, 'mensagem_enviada');
+
+    $ultimasConversas = $pdo->query(
+        'SELECT c.id, c.titulo, c.modo, c.criado_em, a.nome AS agente,
+                (SELECT COUNT(*) FROM mensagens m WHERE m.conversa_id = c.id) AS msgs
+         FROM conversas c
+         LEFT JOIN agentes a ON a.id = c.agente_id
+         ORDER BY c.id DESC LIMIT 8'
+    )->fetchAll();
+}
 
 include __DIR__ . '/partials/head.php';
 ?>
 
 <div class="page-header">
-    <h1>Dashboard</h1>
-    <p class="page-sub">Visão geral da instância <strong><?= e($config['nome_instancia']) ?></strong>.</p>
+    <h1><?= $souAtendente ? 'Meu atendimento' : 'Dashboard' ?></h1>
+    <p class="page-sub">
+        <?php if ($souAtendente): ?>
+            O que passou pelas suas mãos nos últimos 14 dias.
+        <?php else: ?>
+            Visão geral da instância <strong><?= e($config['nome_instancia']) ?></strong>.
+        <?php endif; ?>
+    </p>
 </div>
 
-<?php if ($alertas): ?>
+<?php if ($souAtendente): ?>
+    <div class="stat-grid">
+        <a class="stat-card" href="atendimento.php">
+            <span class="stat-icon"><?= svg_icon('chat', 22) ?></span>
+            <span class="stat-valor"><?= (int) $comigoAgora ?></span>
+            <span class="stat-rotulo">Com você agora</span>
+        </a>
+        <a class="stat-card" href="atendimento.php">
+            <span class="stat-icon"><?= svg_icon('usuario', 22) ?></span>
+            <span class="stat-valor"><?= (int) ($filaAtendimento ?? 0) ?></span>
+            <span class="stat-rotulo">Esperando na fila</span>
+        </a>
+        <span class="stat-card">
+            <span class="stat-icon"><?= svg_icon('fone', 22) ?></span>
+            <span class="stat-valor"><?= array_sum(array_slice($serieConversas, -7)) ?></span>
+            <span class="stat-rotulo">Atendidas nos últimos 7 dias</span>
+        </span>
+        <span class="stat-card">
+            <span class="stat-icon"><?= svg_icon('log', 22) ?></span>
+            <span class="stat-valor"><?= array_sum(array_slice($serieMensagens, -7)) ?></span>
+            <span class="stat-rotulo">Mensagens que você enviou (7 dias)</span>
+        </span>
+    </div>
+<?php endif; ?>
+
+<?php if (!$souAtendente && $alertas): ?>
     <div class="card" style="margin-bottom:1.25rem;">
         <h2 class="card-title">Estado do sistema</h2>
         <ul class="lista-alertas">
@@ -152,12 +249,13 @@ include __DIR__ . '/partials/head.php';
             <?php endforeach; ?>
         </ul>
     </div>
-<?php else: ?>
+<?php elseif (!$souAtendente): ?>
     <div class="card" style="margin-bottom:1.25rem;">
         <p class="alerta alerta-ok">Nenhum alerta. Provedor configurado e ingestão sem pendências.</p>
     </div>
 <?php endif; ?>
 
+<?php if (!$souAtendente): ?>
 <div class="stat-grid">
     <?php
     $cards = [
@@ -179,41 +277,79 @@ include __DIR__ . '/partials/head.php';
         </a>
     <?php endforeach; ?>
 </div>
+<?php endif; ?>
 
+<?php
+// Dois gráficos, e não um com dois eixos.
+//
+// Uma conversa tem dezenas de mensagens: no mesmo eixo, a série menor vira uma
+// linha rente ao chão. Dois eixos "resolveriam" o desenho e estragariam a
+// leitura, porque a posição relativa das curvas passaria a depender da escala
+// escolhida. Cada medida com seu próprio máximo diz a verdade sobre as duas.
+$totalConversas = array_sum($serieConversas);
+$totalMensagens = array_sum($serieMensagens);
+?>
 <div class="card">
-    <h2 class="card-title">Atividade dos últimos 14 dias</h2>
-    <?php if (!$serie): ?>
-        <p class="vazio">Sem métricas ainda — elas começam a aparecer quando o agente entrar em uso.</p>
+    <h2 class="card-title">
+        <?= $souAtendente ? 'Seu movimento nos últimos 14 dias' : 'Atividade dos últimos 14 dias' ?>
+    </h2>
+
+    <?php if ($totalConversas === 0 && $totalMensagens === 0): ?>
+        <p class="vazio">
+            <?= $souAtendente
+                ? 'Você ainda não respondeu nenhuma conversa neste período.'
+                : 'Sem métricas ainda — elas começam a aparecer quando o agente entrar em uso.' ?>
+        </p>
     <?php else: ?>
-        <table class="tabela">
-            <thead>
-            <tr>
-                <th>Dia</th>
-                <th>Conversas</th>
-                <th>Mensagens</th>
-                <th>Ferramentas</th>
-                <th>Leads</th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach (array_reverse($serie, true) as $dia => $tipos): ?>
+        <div class="graficos-lado">
+            <div>
+                <p class="grafico-titulo">
+                    <strong><?= number_format($totalConversas, 0, ',', '.') ?></strong>
+                    <?= $souAtendente ? 'conversas atendidas' : 'conversas iniciadas' ?>
+                </p>
+                <?= Grafico::barras($serieConversas, 'conversas') ?>
+            </div>
+            <div>
+                <p class="grafico-titulo">
+                    <strong><?= number_format($totalMensagens, 0, ',', '.') ?></strong>
+                    <?= $souAtendente ? 'mensagens suas' : 'mensagens trocadas' ?>
+                </p>
+                <?= Grafico::barras($serieMensagens, 'mensagens') ?>
+            </div>
+        </div>
+
+        <?php // A tabela continua existindo, recolhida: o gráfico dá a forma, e
+              // quem precisa do número exato de um dia abre aqui. ?>
+        <details class="card-recolhivel" style="margin-top:1rem;">
+            <summary><span class="card-title">Ver os números dia a dia</span></summary>
+            <table class="tabela" style="margin-top:.7rem;">
+                <thead>
                 <tr>
-                    <td><?= e(date('d/m', strtotime($dia))) ?></td>
-                    <td><?= (int) ($tipos['conversa_iniciada'] ?? 0) ?></td>
-                    <td><?= (int) ($tipos['mensagem_enviada'] ?? 0) ?></td>
-                    <td><?= (int) ($tipos['ferramenta_executada'] ?? 0) ?></td>
-                    <td><?= (int) ($tipos['lead_capturado'] ?? 0) ?></td>
+                    <th>Dia</th>
+                    <th><?= $souAtendente ? 'Conversas atendidas' : 'Conversas' ?></th>
+                    <th><?= $souAtendente ? 'Mensagens suas' : 'Mensagens' ?></th>
                 </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                <?php foreach (array_reverse($serieConversas, true) as $dia => $quantas): ?>
+                    <tr>
+                        <td><?= e(date('d/m', strtotime($dia))) ?></td>
+                        <td><?= (int) $quantas ?></td>
+                        <td><?= (int) ($serieMensagens[$dia] ?? 0) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+        </details>
     <?php endif; ?>
 </div>
 
 <div class="card">
-    <h2 class="card-title">Últimas conversas</h2>
+    <h2 class="card-title"><?= $souAtendente ? 'Suas últimas conversas' : 'Últimas conversas' ?></h2>
     <?php if (!$ultimasConversas): ?>
-        <p class="vazio">Nenhuma conversa registrada.</p>
+        <p class="vazio">
+            <?= $souAtendente ? 'Você ainda não atendeu nenhuma conversa.' : 'Nenhuma conversa registrada.' ?>
+        </p>
     <?php else: ?>
         <table class="tabela">
             <thead>
@@ -228,7 +364,7 @@ include __DIR__ . '/partials/head.php';
             <tbody>
             <?php foreach ($ultimasConversas as $c): ?>
                 <tr>
-                    <td><?= (int) $c['id'] ?></td>
+                    <td><a href="conversas.php?ver=<?= (int) $c['id'] ?>"><?= (int) $c['id'] ?></a></td>
                     <td><?= e($c['agente'] ?? '—') ?></td>
                     <td><span class="tag"><?= e($c['modo']) ?></span></td>
                     <td><?= (int) $c['msgs'] ?></td>

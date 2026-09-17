@@ -1472,3 +1472,56 @@ details.card-recolhivel > summary::before {
 details.card-recolhivel[open] > summary::before { transform: rotate(90deg); }
 details.card-recolhivel > summary .card-title { margin: 0; }
 details.card-recolhivel > summary:hover .card-title { color: var(--accent); }
+
+/* =====================================================================
+   Gráfico de barras (app/Grafico.php)
+
+   Uma série por gráfico, na cor de destaque da instância. Eixo e grade
+   ficam recessivos de propósito: quem lê procura a forma da série, não a
+   régua. O detalhe exato vive na tabela que acompanha.
+   ===================================================================== */
+.gr { width: 100%; height: auto; display: block; }
+
+.gr-barra {
+    fill: var(--accent);
+    opacity: .85;
+    transition: opacity .12s ease;
+}
+
+.gr-barra:hover { opacity: 1; }
+
+/* Dia sem registro: um traço, não um vazio. Sumir com o dia faria o eixo
+   mentir sobre o ritmo. */
+.gr-barra.vazia { fill: var(--text-muted, #9aa1b1); opacity: .28; }
+
+.gr-grade { stroke: var(--border, #2a2f3a); stroke-width: 1; stroke-dasharray: 3 4; }
+.gr-eixo { stroke: var(--border, #2a2f3a); stroke-width: 1; }
+
+.gr-escala,
+.gr-dia {
+    font-size: 11px;
+    fill: var(--text-muted, #9aa1b1);
+}
+
+.gr-valor {
+    font-size: 12px;
+    font-weight: 700;
+    fill: var(--text, #eef0f4);
+}
+
+.graficos-lado {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.1rem;
+}
+
+.grafico-titulo {
+    font-size: .82rem;
+    color: var(--text-muted, #9aa1b1);
+    margin: 0 0 .35rem;
+    display: flex;
+    align-items: baseline;
+    gap: .45rem;
+}
+
+.grafico-titulo strong { font-size: 1.15rem; color: var(--text, #eef0f4); }
