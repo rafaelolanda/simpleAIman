@@ -1449,7 +1449,7 @@ pessoal e tem valor longo. Mas cai junto com a conversa quando a conversa é apa
 
 ### A tela
 
-`admin/turnos.php`, em Sistema › Diagnóstico. Restrita a `admin`, como Logs.
+`admin/turnos.php`, em Sistema › Turnos. Restrita a `admin`, como Logs.
 
 Responde três perguntas, nesta ordem de urgência:
 
@@ -1480,7 +1480,7 @@ Hostinger, precisou saber em 11/09/2026: o WhatsApp só devolvia o aviso de turn
 interrompido, o playground ficou bem mais lento que no ambiente local e uma
 indexação de 300 KB demorou demais.
 
-Três peças, com duas faces (`bin/diagnostico.php` e Sistema › Infraestrutura)
+Três peças, com duas faces (`bin/diagnostico.php` e Sistema › Diagnóstico)
 lendo a mesma classe, `DiagnosticoInfra` — como o `DiagnosticoProvedor` já fazia:
 
 - **Batimento do worker** (`Jobs/Batimento`). Cada execução abre um registro

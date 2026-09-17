@@ -8,9 +8,9 @@ require_once __DIR__ . '/../../app/DiagnosticoInfra.php';
 use SimpleAIman\Jobs\Batimento;
 
 /**
- * Infraestrutura: o servidor em que esta instância roda, e se o worker vive.
+ * Diagnóstico: o servidor em que esta instância roda, e se o worker vive.
  *
- * Irmã da tela de Diagnóstico. Aquela olha para dentro do atendimento — onde
+ * Irmã da tela de Turnos. Aquela olha para dentro do atendimento — onde
  * cada turno gastou tempo; esta olha para o chão em que ele pisa: PHP,
  * extensões, SQLite, rede até o fornecedor e o servidor web.
  *
@@ -23,7 +23,7 @@ use SimpleAIman\Jobs\Batimento;
  */
 
 $paginaAtual = 'infra.php';
-$tituloPagina = 'Infraestrutura';
+$tituloPagina = 'Diagnóstico';
 
 $completo = false;
 
@@ -93,7 +93,7 @@ include __DIR__ . '/partials/head.php';
 ?>
 
 <div class="page-header">
-    <h1>Infraestrutura</h1>
+    <h1>Diagnóstico do servidor</h1>
     <p class="page-sub">
         O servidor em que esta instância roda, e se o worker está vivo. Tudo aqui é medido
         <strong>pelo PHP do site</strong> — que pode ser outro binário, com outra configuração, que o

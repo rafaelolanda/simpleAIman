@@ -37,23 +37,30 @@ $grupos = [
         'bases.php' => ['icone' => 'base', 'label' => 'Bases'],
         'artefatos.php' => ['icone' => 'arquivo', 'label' => 'Artefatos'],
         'faq.php' => ['icone' => 'faq', 'label' => 'FAQ'],
-        'testar-busca.php' => ['icone' => 'grafico', 'label' => 'Testar busca'],
+        'testar-busca.php' => ['icone' => 'lupa', 'label' => 'Testar busca'],
     ],
     'Configuração' => [
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
         'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
-        'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],
+        'canais.php' => ['icone' => 'antena', 'label' => 'Canais'],
         'ferramentas.php' => ['icone' => 'ferramenta', 'label' => 'Ferramentas'],
         'setores.php' => ['icone' => 'setor', 'label' => 'Setores'],
-        'playground.php' => ['icone' => 'chat', 'label' => 'Playground'],
-        'testar-ferramenta.php' => ['icone' => 'grafico', 'label' => 'Testar ferramenta'],
+        'playground.php' => ['icone' => 'faisca', 'label' => 'Playground'],
+        // "Testar ferramenta" sai do menu: ela só faz sentido com UMA ferramenta
+        // escolhida, e chega pelo botão "Testar" na tela de Ferramentas — na
+        // listagem e no formulário de edição. No menu, abria pedindo que a
+        // pessoa escolhesse de novo o que ela já tinha em mãos.
     ],
+    // Os dois nomes estavam trocados. "Diagnóstico" era a tela de turnos, que
+    // conta o que aconteceu em cada resposta — isso é HISTÓRICO, e o nome
+    // certo é Turnos. Diagnosticar é o que se faz na tela de servidor, worker,
+    // disco e rede, que se chamava Infraestrutura.
     'Sistema' => [
-        'ajuda.php' => ['icone' => 'faq', 'label' => 'Como usar'],
+        'ajuda.php' => ['icone' => 'livro', 'label' => 'Como usar'],
         'configuracoes.php' => ['icone' => 'engrenagem', 'label' => 'Configurações'],
-        'privacidade.php' => ['icone' => 'chave', 'label' => 'Privacidade'],
-        'turnos.php' => ['icone' => 'grafico', 'label' => 'Diagnóstico'],
-        'infra.php' => ['icone' => 'engrenagem', 'label' => 'Infraestrutura'],
+        'privacidade.php' => ['icone' => 'escudo', 'label' => 'Privacidade'],
+        'turnos.php' => ['icone' => 'cronometro', 'label' => 'Turnos'],
+        'infra.php' => ['icone' => 'servidor', 'label' => 'Diagnóstico'],
         'logs.php' => ['icone' => 'log', 'label' => 'Logs'],
     ],
 ];

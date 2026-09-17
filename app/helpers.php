@@ -717,6 +717,16 @@ function svg_icon(string $nome, int $tamanho = 20): string
         'fone' => '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/>'
             . '<path d="M4 13h2.6a1 1 0 0 1 1 1v3.4a1 1 0 0 1-1 1H5.6A1.6 1.6 0 0 1 4 16.8z"/>'
             . '<path d="M20 13h-2.6a1 1 0 0 0-1 1v3.4a1 1 0 0 0 1 1h1a1.6 1.6 0 0 0 1.6-1.6z"/>',
+        // Um icone por item do menu. Repetido, ele deixa de identificar e passa
+        // a confundir: quem navega pelo formato — e todo mundo navega, depois da
+        // primeira semana — clica no vizinho.
+        'lupa' => '<circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/>',
+        'livro' => '<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v16H6.5A2.5 2.5 0 0 0 4 20.5z"/><path d="M4 20.5V4.5"/><path d="M8 7h8"/>',
+        'cronometro' => '<circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9.5 2h5"/><path d="M19 6l1.5-1.5"/>',
+        'servidor' => '<rect x="3" y="4" width="18" height="6" rx="1.6"/><rect x="3" y="14" width="18" height="6" rx="1.6"/><path d="M7 7h.01"/><path d="M7 17h.01"/>',
+        'antena' => '<circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7"/><path d="M15.5 15.5a5 5 0 0 0 0-7"/><path d="M6 6a8.5 8.5 0 0 0 0 12"/><path d="M18 18a8.5 8.5 0 0 0 0-12"/>',
+        'faisca' => '<path d="M13 2 4.5 13.5H11l-1 8.5 9-12h-6.5z"/>',
+        'escudo' => '<path d="M12 3l8 3v5.5c0 4.6-3.2 8.8-8 10.5-4.8-1.7-8-5.9-8-10.5V6z"/><path d="M9.2 12.2l2 2 3.6-3.8"/>',
         'pulso' => '<path d="M2 12h4l2.5-6 4 13 3-9 2.5 2H22"/>',
         'eye-off' => '<path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3A17 17 0 0 0 2 12s3.6 7 10 7c2 0 3.7-.7 5.1-1.6"/><path d="M3 3l18 18"/>',
     ];

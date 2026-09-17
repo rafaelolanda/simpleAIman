@@ -122,14 +122,14 @@ banco diria "expurgado" com a foto inteira lá.
 
 Duas telas respondem às duas perguntas que aparecem primeiro.
 
-**Sistema › Diagnóstico** responde *"o que aconteceu nesta resposta?"*. Cada
+**Sistema › Turnos** responde *"o que aconteceu nesta resposta?"*. Cada
 resposta vira um registro com o caminho que tomou — FAQ, documentos ou menu —,
 quantos trechos usou e o tempo gasto em cada etapa: busca, modelo, ferramentas.
 Dá para abrir um atendimento específico e ver a mensagem, as ferramentas
 chamadas e o tempo de cada uma. A tela mostra também a latência típica, a taxa
 de erro e quanto do atendimento sai sem chamar o modelo.
 
-**Sistema › Infraestrutura** responde *"o servidor está saudável?"*. Mostra se o
+**Sistema › Diagnóstico** responde *"o servidor está saudável?"*. Mostra se o
 worker está vivo e como terminou cada execução, confere PHP, extensões, SQLite
 e rede até o fornecedor, e tem uma sonda que mede em que segundo o servidor web
 encerra um processo em segundo plano. O mesmo pela linha de comando:

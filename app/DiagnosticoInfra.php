@@ -20,7 +20,7 @@ use SimpleAIman\Llm\ProviderFactory;
  *
  * ## Duas faces, um código
  *
- * `bin/diagnostico.php` e a tela Sistema › Infraestrutura leem esta mesma
+ * `bin/diagnostico.php` e a tela Sistema › Diagnóstico leem esta mesma
  * classe — como `DiagnosticoProvedor` serve ao painel e ao
  * `bin/testar-provedor.php`. Duas implementações garantiriam que uma delas
  * estivesse desatualizada justamente quando alguém precisasse dela.
@@ -127,7 +127,7 @@ final class DiagnosticoInfra
                 'OPcache',
                 'info',
                 'não se aplica',
-                'Na linha de comando ele não conta. O que importa é o do site: veja em Sistema › Infraestrutura, no painel.'
+                'Na linha de comando ele não conta. O que importa é o do site: veja em Sistema › Diagnóstico, no painel.'
             );
         }
 
@@ -571,7 +571,7 @@ final class DiagnosticoInfra
                     'Conexão · chat',
                     $conexao['ms'] === null ? 'erro' : ($conexao['ms'] < 300 ? 'ok' : 'alerta'),
                     $conexao['ms'] === null ? 'falhou: ' . $conexao['erro'] : sprintf('%.0f ms até %s', $conexao['ms'], $destino['host']),
-                    'O tempo de resposta do modelo em si aparece em Provedores › Testar e na tela de Diagnóstico.'
+                    'O tempo de resposta do modelo em si aparece em Provedores › Testar e na tela de Turnos.'
                 );
             }
         } catch (Throwable $e) {

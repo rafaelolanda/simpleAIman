@@ -5,7 +5,12 @@ declare(strict_types=1);
 require_once __DIR__ . '/_init.php';
 
 /**
- * Diagnóstico de turnos.
+ * Turnos: o que aconteceu em cada resposta.
+ *
+ * Chamava-se "Diagnóstico" no menu, e o nome puxava para o lado errado: o
+ * que se lê aqui é HISTÓRICO — que caminho a resposta tomou, quanto tempo
+ * levou cada etapa, o que falhou. Diagnosticar é o que se faz na tela de
+ * servidor, worker, disco e rede, hoje chamada Diagnóstico.
  *
  * Um turno é uma pergunta e o que ela provocou. A tabela `turnos` guarda uma
  * linha por resposta, com o caminho que ela tomou e o tempo gasto em cada
@@ -27,7 +32,7 @@ require_once __DIR__ . '/_init.php';
  */
 
 $paginaAtual = 'turnos.php';
-$tituloPagina = 'Diagnóstico';
+$tituloPagina = 'Turnos';
 
 // ---------------------------------------------------------------------
 // Filtros
@@ -219,7 +224,7 @@ include __DIR__ . '/partials/head.php';
 ?>
 
 <div class="page-header">
-    <h1>Diagnóstico de turnos</h1>
+    <h1>Turnos</h1>
     <p class="page-sub">
         Um turno é uma pergunta e o que ela provocou. Aqui se vê para onde o tempo foi e o que
         falhou. Os números são de <strong>metadado</strong>; o texto das conversas fica em

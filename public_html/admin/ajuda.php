@@ -351,7 +351,7 @@ include __DIR__ . '/partials/head.php';
     </p>
 
     <p class="page-sub">
-        <strong><a href="turnos.php">Diagnóstico</a></strong> responde <em>"o que aconteceu nesta
+        <strong><a href="turnos.php">Turnos</a></strong> responde <em>"o que aconteceu nesta
         resposta?"</em>. Mostra o tempo típico de resposta, quantas falharam e por qual motivo, e
         quanto do atendimento saiu sem chamar a inteligência artificial. Clicando em
         <strong>Abrir</strong> num atendimento, você vê por onde a resposta veio — FAQ, documentos
@@ -360,7 +360,7 @@ include __DIR__ . '/partials/head.php';
     </p>
 
     <p class="page-sub">
-        <strong><a href="infra.php">Infraestrutura</a></strong> responde <em>"o servidor está
+        <strong><a href="infra.php">Diagnóstico</a></strong> responde <em>"o servidor está
         saudável?"</em>. Mostra se a rotina que processa documentos e mensagens está rodando, e
         confere o servidor, o banco e a conexão com o fornecedor de inteligência artificial. Se um
         documento ficar parado em "pendente" ou o WhatsApp parar de responder, comece por ela.

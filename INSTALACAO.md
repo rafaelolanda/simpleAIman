@@ -232,7 +232,7 @@ e para o kick do worker, que respondem primeiro e trabalham depois: no LiteSpeed
 a função que libera a conexão é outra, e o servidor pode encerrar o processo
 antes de o trabalho terminar.
 
-Depois de instalar, rode a **sonda** em Sistema › Infraestrutura. Se ela
+Depois de instalar, rode a **sonda** em Sistema › Diagnóstico. Se ela
 sobreviver os 60 s, o trabalho em segundo plano funciona neste servidor. Se
 morrer antes, uma resposta do modelo mais longa que esse tempo morre junto — é o
 turno interrompido do WhatsApp —, e o caminho é não depender do kick para o
@@ -240,7 +240,7 @@ trabalho longo.
 
 ### Como confirmar que o worker está rodando
 
-O jeito direto é o cartão **Worker** em Sistema › Infraestrutura, ou
+O jeito direto é o cartão **Worker** em Sistema › Diagnóstico, ou
 `php bin/diagnostico.php`: cada execução deixa um batimento com horário, origem
 (cron ou kick) e desfecho. Com o cron a cada cinco minutos, o esperado é perto de
 12 execuções por hora pela linha de comando.
@@ -358,7 +358,7 @@ Teste antes de entregar.
 
 ### Onde olhar primeiro
 
-**Sistema › Infraestrutura.** Se a dúvida é o chão em que o sistema pisa — o
+**Sistema › Diagnóstico.** Se a dúvida é o chão em que o sistema pisa — o
 worker está rodando? falta extensão? o SQLite está lento? o servidor encerra o
 processo no meio? —, comece por aqui. A tela mostra se o worker está vivo, as
 últimas execuções dele com a origem de cada uma (cron ou kick) e como
@@ -380,7 +380,7 @@ php bin/diagnostico.php
 `--rapido` pula os testes de disco e rede (que fazem uma chamada real de
 embedding); `--sonda` dispara a sonda daqui e espera o resultado.
 
-**Sistema › Diagnóstico.** Com a infraestrutura em ordem, é a próxima parada. A tela mostra a latência típica (mediana e
+**Sistema › Turnos.** Com a infraestrutura em ordem, é a próxima parada. A tela mostra a latência típica (mediana e
 p95), a taxa de erro, quanto do atendimento sai sem chamar o modelo, para onde o tempo está
 indo por etapa, e as falhas agrupadas por causa. Os quinze turnos mais lentos ficam listados
 — é por onde começar quando alguém reclama de lentidão.
@@ -413,7 +413,7 @@ precisam sair do provedor padrão de embedding. Se ele estiver sem chave, inativ
 apontando para um provedor de chat, a FAQ falha em silêncio e o turno segue pelo RAG. No log
 isso aparece como `embedding_pergunta_falhou` ou `faq_busca_falhou`.
 
-**As respostas ficaram lentas e ninguém sabe por quê.** Abra Sistema › Diagnóstico e olhe
+**As respostas ficaram lentas e ninguém sabe por quê.** Abra Sistema › Turnos e olhe
 "Para onde vai o tempo". Inferência alta é o modelo ou a rede até o fornecedor; ferramentas
 altas é um endpoint externo lento, e aí o detalhe do turno diz qual. Se a coluna Ferr.
 estiver no teto em muitos turnos, o agente está chamando ferramenta em círculo — reveja as
@@ -421,7 +421,7 @@ descrições delas.
 
 **Erro 500 numa tela do painel logo depois de um `git pull`.** Falta rodar a migração. O painel passou
 a reconhecer esse caso e mostrar uma página dizendo isso, com o comando; se a tela em branco aparecer
-mesmo assim, rode `php database/migrate.php`. Sistema › Infraestrutura tem o item **Schema**, que
+mesmo assim, rode `php database/migrate.php`. Sistema › Diagnóstico tem o item **Schema**, que
 compara o banco com o `schema.sql` e lista as colunas faltando.
 
 **O agente não usa a ferramenta e diz que não encontrou nos documentos.** Confira se a
@@ -464,14 +464,14 @@ a aba Conhecimento do agente, ou a coluna Usada por, em Bases.
 sai da busca na hora. O que sobra costuma ser o histórico: o modelo recebe as
 mensagens anteriores da conversa, e o que ele já respondeu a partir da base
 continua lá. Ou o assunto também está na FAQ, que não depende de base. Teste
-numa conversa nova; em Sistema › Diagnóstico, o turno mostra *busca · 0
+numa conversa nova; em Sistema › Turnos, o turno mostra *busca · 0
 trechos* quando nada foi recuperado.
 
 **No WhatsApp a resposta é só "estou com dificuldade para responder".** O
 fornecedor falhou — no plano gratuito do Gemini, quase sempre um 503 de
 sobrecarga ("high demand"). O chat do site troca para o menu de setores nesse
 caso; o WhatsApp ainda não, e devolve a mensagem pedindo para tentar de novo. O
-código da falha aparece em Sistema › Diagnóstico, em "Falhas por causa".
+código da falha aparece em Sistema › Turnos, em "Falhas por causa".
 
 **O WhatsApp não recebe nada.** Confira a inscrição do app na conta, no painel
 da Meta, e depois se as quatro variáveis do `.env` estão preenchidas. A tela do

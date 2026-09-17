@@ -94,7 +94,7 @@ if ($parados > 0) {
 // um arquivo ficou parado. Este diz direto se alguém está consumindo a fila —
 // antes de algo dar errado. Ver SimpleAIman\Jobs\Batimento.
 $batimento = \SimpleAIman\Jobs\Batimento::resumo();
-$verInfra = $meuPapel === 'admin' ? ' Veja em <a href="infra.php">Infraestrutura</a>.' : '';
+$verInfra = $meuPapel === 'admin' ? ' Veja em <a href="infra.php">Diagnóstico</a>.' : '';
 
 if ($batimento['ultima'] === null) {
     $alertas[] = ['erro', 'O worker nunca registrou uma execução. Confira o <code>cron</code> do <code>bin/worker.php</code>.' . $verInfra];

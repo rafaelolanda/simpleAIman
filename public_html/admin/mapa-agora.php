@@ -169,7 +169,7 @@ if ((int) $turnos['erros'] > 0) {
         'grave' => true,
         'texto' => (int) $turnos['erros'] . ' turno(s) falharam na última hora. O detalhe de cada um diz a causa.',
         'onde' => 'turnos.php?status=erro',
-        'rotulo' => 'Diagnóstico',
+        'rotulo' => 'Turnos',
     ];
 }
 
@@ -179,7 +179,7 @@ if ((int) $turnos['degradados'] > 0) {
         'texto' => (int) $turnos['degradados'] . ' turno(s) caíram no menu de setores na última hora — o modelo '
             . 'falhou e o atendimento se defendeu.',
         'onde' => 'turnos.php',
-        'rotulo' => 'Diagnóstico',
+        'rotulo' => 'Turnos',
     ];
 }
 
