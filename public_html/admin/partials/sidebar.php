@@ -19,6 +19,13 @@
 $grupos = [
     '' => [
         'index.php' => ['icone' => 'grafico', 'label' => 'Dashboard'],
+        // Os tres mapas ficam juntos, no topo: sao telas de PANORAMA, e quem
+        // abre o painel querendo entender o estado geral comeca por elas.
+        // Cada uma com icone proprio — repetir o do Dashboard faria os quatro
+        // itens virarem um borrao para quem navega pelo formato.
+        'mapa-agora.php' => ['icone' => 'pulso', 'label' => 'Agora'],
+        'mapa.php' => ['icone' => 'mapa', 'label' => 'Mapa de ligações'],
+        'mapa-atendimento.php' => ['icone' => 'fone', 'label' => 'Mapa do atendimento'],
     ],
     'Operação' => [
         'atendimento.php' => ['icone' => 'usuario', 'label' => 'Atendimento'],
@@ -33,8 +40,6 @@ $grupos = [
         'testar-busca.php' => ['icone' => 'grafico', 'label' => 'Testar busca'],
     ],
     'Configuração' => [
-        'mapa.php' => ['icone' => 'grafico', 'label' => 'Mapa de ligações'],
-        'mapa-atendimento.php' => ['icone' => 'usuario', 'label' => 'Mapa do atendimento'],
         'provedores.php' => ['icone' => 'plug', 'label' => 'Provedores'],
         'agentes.php' => ['icone' => 'bot', 'label' => 'Agentes'],
         'canais.php' => ['icone' => 'plug', 'label' => 'Canais'],

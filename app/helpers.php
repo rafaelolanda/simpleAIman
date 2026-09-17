@@ -709,6 +709,15 @@ function svg_icon(string $nome, int $tamanho = 20): string
         'log' => '<path d="M5 3h14v18H5z"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/>',
         'usuario' => '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
         'eye' => '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+        // Icones dos tres mapas. Nenhum reaproveita o 'grafico' do Dashboard:
+        // na mesma secao do menu, dois itens com o mesmo desenho viram um so
+        // para quem navega pelo formato, sem ler o rotulo.
+        'mapa' => '<circle cx="5" cy="7" r="2.2"/><circle cx="5" cy="17" r="2.2"/>'
+            . '<circle cx="19" cy="12" r="2.2"/><path d="M7.2 7.9 16.9 11.2"/><path d="M7.2 16.1 16.9 12.8"/>',
+        'fone' => '<path d="M4 13v-1a8 8 0 0 1 16 0v1"/>'
+            . '<path d="M4 13h2.6a1 1 0 0 1 1 1v3.4a1 1 0 0 1-1 1H5.6A1.6 1.6 0 0 1 4 16.8z"/>'
+            . '<path d="M20 13h-2.6a1 1 0 0 0-1 1v3.4a1 1 0 0 0 1 1h1a1.6 1.6 0 0 0 1.6-1.6z"/>',
+        'pulso' => '<path d="M2 12h4l2.5-6 4 13 3-9 2.5 2H22"/>',
         'eye-off' => '<path d="M9.9 5.2A9.8 9.8 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4M6.3 6.3A17 17 0 0 0 2 12s3.6 7 10 7c2 0 3.7-.7 5.1-1.6"/><path d="M3 3l18 18"/>',
     ];
 
