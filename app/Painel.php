@@ -52,6 +52,17 @@ final class Painel
         // abrir a foto que a pessoa mandou para explicar o problema.
         'anexo.php' => ['admin', 'editor', 'atendente'],
 
+        // Panorama do momento: admin e editor, NAO o atendente.
+        //
+        // A tela mostra quem esta com cada conversa e ha quanto tempo. Nas
+        // maos de quem atende ao lado, isso vira placar entre colegas —
+        // custo social que a tela nao precisa pagar, porque quem atende ja
+        // tem a fila e a propria conversa na tela de Atendimento.
+        //
+        // O editor entra porque nesta instalacao ele e a lideranca do setor:
+        // alimenta o RAG, responde pelo assunto e precisa da visao ampla.
+        'mapa-agora.php' => ['admin', 'editor'],
+
         // Conteúdo — o que o agente sabe
         'index.php' => ['admin', 'editor'],
         'bases.php' => ['admin', 'editor'],

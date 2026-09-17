@@ -287,6 +287,14 @@ include __DIR__ . '/partials/head.php';
         válido, preencher a lacuna é a saída fácil, e o número inventado parece verdadeiro.
     </p>
 
+    <h3 class="secao-form">Quem enxerga os mapas</h3>
+    <p class="page-sub">
+        <a href="mapa-agora.php">Agora</a> fica disponível para administrador e editor. O atendente não a
+        vê: ela mostra quem está com cada conversa e há quanto tempo, e entre quem atende lado a lado isso
+        vira placar. Quem atende já tem a fila e a própria conversa na tela de Atendimento. Os outros dois
+        mapas são só do administrador, porque tratam de configuração e de contatos internos.
+    </p>
+
     <h3 class="secao-form">Antes de tudo: veja o mapa</h3>
     <p class="page-sub">
         <a href="mapa.php">Mapa de ligações</a> mostra, num desenho só, o que está conectado a quê e o
