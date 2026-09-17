@@ -10,6 +10,38 @@ $tituloPagina = 'Chamados';
 $ESTADOS = ['aberto' => 'Aberto', 'respondido' => 'Respondido', 'fechado' => 'Fechado'];
 $filtro = valor_em($_GET['status'] ?? 'aberto', [...array_keys($ESTADOS), 'todos'], 'aberto');
 
+/**
+ * Quem atende vê os chamados DO SETOR dele; admin e editor veem todos.
+ *
+ * Chamado carrega dado pessoal de quem pediu retorno — nome, telefone, e-mail,
+ * e a dúvida por extenso. Não há razão para quem atende o NTI ler o que alguém
+ * contou ao setor financeiro.
+ *
+ * O recorte vale para a lista E para as ações: filtrar só a tela seria
+ * aparência, porque responder e fechar recebem o id por POST e qualquer id
+ * serviria. Aqui as duas leem o mesmo `$escopoSetor`.
+ */
+$souAtendente = $meuPapel === 'atendente';
+$meuSetor = null;
+
+if ($souAtendente) {
+    $stmt = $pdo->prepare('SELECT setor_id FROM admin_users WHERE id = :id');
+    $stmt->execute(['id' => Auth::userId()]);
+    $valor = $stmt->fetchColumn();
+    $meuSetor = $valor !== false && $valor !== null ? (int) $valor : null;
+}
+
+/** Cláusula de escopo, pronta para entrar em qualquer WHERE. */
+$escopoSetor = static function (string $coluna = 'c.setor_id') use ($souAtendente, $meuSetor): string {
+    if (!$souAtendente) {
+        return '1 = 1';
+    }
+
+    // Atendente sem setor não vê chamado nenhum — e a tela diz isso, em vez de
+    // mostrar uma lista vazia sem explicação.
+    return $meuSetor === null ? '1 = 0' : $coluna . ' = ' . $meuSetor;
+};
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!csrf_verify($_POST['csrf_token'] ?? null)) {
         flash_set('erro', 'Sessão expirada. Tente novamente.');
@@ -23,7 +55,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $resposta = trim(texto_utf8($_POST['resposta'] ?? ''));
 
         $pdo->prepare(
-            'UPDATE chamados SET resposta = :r, status = :s, editado_em = :agora WHERE id = :id'
+            'UPDATE chamados SET resposta = :r, status = :s, editado_em = :agora
+              WHERE id = :id AND ' . $escopoSetor('setor_id')
         )->execute([
             'r' => $resposta,
             's' => $resposta !== '' ? 'respondido' : 'aberto',
@@ -37,8 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($acao === 'fechar') {
-        $pdo->prepare('UPDATE chamados SET status = \'fechado\', editado_em = :agora WHERE id = :id')
-            ->execute(['agora' => now(), 'id' => $id]);
+        $pdo->prepare(
+            'UPDATE chamados SET status = \'fechado\', editado_em = :agora
+              WHERE id = :id AND ' . $escopoSetor('setor_id')
+        )->execute(['agora' => now(), 'id' => $id]);
         Auth::log('chamado_fechado', 'id=' . $id);
         flash_set('sucesso', 'Chamado fechado.');
         redirect('chamados.php?status=' . $filtro);
@@ -46,17 +81,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $sql = 'SELECT c.*, s.nome AS setor, s.email AS setor_email
-        FROM chamados c LEFT JOIN setores s ON s.id = c.setor_id';
+        FROM chamados c LEFT JOIN setores s ON s.id = c.setor_id
+        WHERE ' . $escopoSetor();
 
 if ($filtro !== 'todos') {
-    $sql .= " WHERE c.status = '" . $filtro . "'";
+    $sql .= " AND c.status = '" . $filtro . "'";
 }
 
 $chamados = $pdo->query($sql . ' ORDER BY c.id DESC LIMIT 200')->fetchAll();
 
+// A contagem das abas segue o MESMO escopo da lista.
+//
+// Contar tudo e listar um pedaço faria a aba dizer "12 abertos" com dois na
+// tela — o tipo de número que ninguém confere e todo mundo repete em reunião.
 $contagem = [];
 
-foreach ($pdo->query('SELECT status, COUNT(*) t FROM chamados GROUP BY status')->fetchAll() as $r) {
+foreach ($pdo->query('SELECT c.status, COUNT(*) t FROM chamados c WHERE ' . $escopoSetor() . ' GROUP BY c.status')->fetchAll() as $r) {
     $contagem[$r['status']] = (int) $r['t'];
 }
 
@@ -68,6 +108,12 @@ include __DIR__ . '/partials/head.php';
     <p class="page-sub">
         Dúvidas que o agente registrou porque não soube responder. <strong>O agente prometeu retorno
         a uma pessoa real</strong> — cada linha aqui é alguém esperando.
+        <?php if ($souAtendente && $meuSetor !== null): ?>
+            <br>Você vê os chamados do seu setor.
+        <?php elseif ($souAtendente): ?>
+            <br><strong>Você não está vinculado a nenhum setor</strong>, então nenhum chamado aparece aqui.
+            Peça a um administrador para definir seu setor em Usuários.
+        <?php endif; ?>
     </p>
 </div>
 

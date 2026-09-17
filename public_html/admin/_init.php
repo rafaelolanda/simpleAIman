@@ -88,7 +88,24 @@ set_exception_handler(static function (Throwable $e): void {
 });
 
 // contadores do menu: a sidebar aparece em toda página do painel, então ficam aqui
-$chamadosAbertos = (int) $pdo->query("SELECT COUNT(*) FROM chamados WHERE status = 'aberto'")->fetchColumn();
+//
+// O crachá de chamados respeita o MESMO recorte da tela: quem atende vê os do
+// setor dele. Um crachá com 12 levando a uma lista de 2 é pior que crachá
+// nenhum — ele vira número repetido em reunião, sem ninguém conferir.
+$meuSetorId = null;
+
+if ($meuPapel === 'atendente') {
+    $stmt = $pdo->prepare('SELECT setor_id FROM admin_users WHERE id = :id');
+    $stmt->execute(['id' => Auth::userId()]);
+    $valor = $stmt->fetchColumn();
+    $meuSetorId = $valor !== false && $valor !== null ? (int) $valor : null;
+}
+
+$chamadosAbertos = $meuPapel === 'atendente'
+    ? ($meuSetorId === null
+        ? 0
+        : (int) $pdo->query("SELECT COUNT(*) FROM chamados WHERE status = 'aberto' AND setor_id = " . $meuSetorId)->fetchColumn())
+    : (int) $pdo->query("SELECT COUNT(*) FROM chamados WHERE status = 'aberto'")->fetchColumn();
 $artefatosPendentes = (int) $pdo->query("SELECT COUNT(*) FROM artefatos WHERE status IN ('pendente','processando')")->fetchColumn();
 $artefatosComErro = (int) $pdo->query("SELECT COUNT(*) FROM artefatos WHERE status = 'erro'")->fetchColumn();
 

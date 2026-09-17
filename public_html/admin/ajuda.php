@@ -67,6 +67,8 @@ include __DIR__ . '/partials/head.php';
             <li><a href="#ver">Onde ver o que aconteceu</a></li>
         <?php endif; ?>
         <li><a href="#nao-sabe">O que acontece quando ele não sabe</a></li>
+        <li><a href="#chamados">Chamados: alguém está esperando retorno</a></li>
+        <li><a href="#quem-ve">Quem enxerga o quê</a></li>
         <?php if ($administra): ?>
             <li><a href="#agentes">Quando criar um assistente novo</a></li>
             <li><a href="#custo">Quanto custa e como não estourar</a></li>
@@ -287,22 +289,6 @@ include __DIR__ . '/partials/head.php';
         válido, preencher a lacuna é a saída fácil, e o número inventado parece verdadeiro.
     </p>
 
-    <h3 class="secao-form">O Dashboard de quem atende</h3>
-    <p class="page-sub">
-        Quem tem papel de <strong>atendente</strong> abre o mesmo Dashboard, mas vê apenas o próprio
-        atendimento: as conversas que passaram pelas mãos dele, quantas respondeu por dia e quantas estão
-        com ele agora. Nada de configuração, de estado do sistema ou de número dos colegas. Administrador e
-        editor veem a visão da instância inteira.
-    </p>
-
-    <h3 class="secao-form">Quem enxerga os mapas</h3>
-    <p class="page-sub">
-        <a href="mapa-agora.php">Agora</a> fica disponível para administrador e editor. O atendente não a
-        vê: ela mostra quem está com cada conversa e há quanto tempo, e entre quem atende lado a lado isso
-        vira placar. Quem atende já tem a fila e a própria conversa na tela de Atendimento. Os outros dois
-        mapas são só do administrador, porque tratam de configuração e de contatos internos.
-    </p>
-
     <h3 class="secao-form">Antes de tudo: veja o mapa</h3>
     <p class="page-sub">
         <a href="mapa.php">Mapa de ligações</a> mostra, num desenho só, o que está conectado a quê e o
@@ -407,6 +393,69 @@ include __DIR__ . '/partials/head.php';
         E ele sempre pode entregar o contato do setor, que sai do seu cadastro em
         <a href="setores.php">Setores</a>. Por isso vale manter esses contatos revisados: o painel
         marca os que estão há muito tempo sem revisão.
+    </p>
+</div>
+
+<div class="card" id="chamados">
+    <h2 class="card-title">Chamados: alguém está esperando retorno</h2>
+
+    <p class="page-sub">
+        Um chamado nasce quando <?= e($nome) ?> não soube responder e a pessoa aceitou deixar o contato.
+        Cada linha em <a href="chamados.php">Chamados</a> é alguém que recebeu uma promessa de retorno.
+    </p>
+
+    <p class="page-sub">
+        <strong>O sistema não responde por você.</strong> Ele registra o chamado, avisa o setor por e-mail
+        (quando o setor tem e-mail cadastrado) e guarda o contato que a pessoa informou. O retorno em si
+        sai por telefone, e-mail ou WhatsApp, feito por uma pessoa. O campo de resposta na tela é
+        <strong>anotação interna</strong>: serve para registrar o que foi combinado, e não chega a ninguém
+        de fora.
+    </p>
+
+    <p class="page-sub">
+        Por isso fechar um chamado significa "isto foi resolvido", não "isto foi enviado". Um chamado
+        aberto há dias é uma promessa não cumprida — e é assim que ele deve ser lido.
+    </p>
+
+    <p class="page-sub">
+        Quem atende vê <strong>apenas os chamados do próprio setor</strong>, porque cada um carrega dado
+        pessoal de quem pediu retorno: nome, contato e a dúvida por extenso. Administrador e editor veem
+        todos. Se você atende e não está vinculado a um setor, a lista vem vazia e a tela avisa — nesse
+        caso, peça a um administrador para definir seu setor.
+    </p>
+
+    <p class="page-sub">
+        Para o agente conseguir registrar chamados, a ferramenta <strong>Registrar chamado</strong>
+        precisa estar ativa e marcada para ele, e o setor precisa de e-mail. Sem isso, ele nem oferece —
+        e é melhor assim: oferecer o que não se cumpre é pior que dizer "não sei".
+    </p>
+</div>
+
+<div class="card" id="quem-ve">
+    <h2 class="card-title">Quem enxerga o quê</h2>
+
+    <p class="page-sub">
+        São três papéis. <strong>Administrador</strong> vê tudo. <strong>Editor</strong> cuida do
+        conteúdo — bases, artefatos, FAQ, setores — e não entra em provedores, canais nem ferramentas.
+        <strong>Atendente</strong> trabalha na conversa: fila, atendimento e os chamados do setor dele.
+    </p>
+
+    <p class="page-sub">
+        O <strong>Dashboard</strong> abre para os três, com dados diferentes. Quem atende vê o próprio
+        atendimento: as conversas que passaram pelas mãos dele, quantas respondeu por dia e quantas estão
+        com ele agora. Sem configuração, sem estado do sistema e sem o número dos colegas.
+    </p>
+
+    <p class="page-sub">
+        A tela <strong>Agora</strong> fica com administrador e editor. Ela mostra quem está com cada
+        conversa e há quanto tempo; entre quem atende lado a lado, isso vira placar. Quem atende já tem a
+        fila e a própria conversa na tela de Atendimento. Os outros dois mapas são só do administrador,
+        porque tratam de configuração e de contatos internos.
+    </p>
+
+    <p class="page-sub">
+        Esconder um item do menu não é segurança: quem digita o endereço é barrado do mesmo jeito, pela
+        mesma lista que monta o menu. É uma lista só, justamente para as duas coisas nunca divergirem.
     </p>
 </div>
 
