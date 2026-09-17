@@ -248,6 +248,25 @@ if (($_GET['acao'] ?? '') === 'json') {
     header('Content-Type: application/json; charset=UTF-8');
     header('Cache-Control: no-store');
 
+    // A SESSAO E LIBERADA ANTES DO TRABALHO.
+    //
+    // O PHP guarda a sessao em arquivo e a tranca enquanto a requisicao
+    // roda: duas requisicoes da MESMA sessao nunca correm juntas. Esta aqui
+    // repete a cada 4 segundos, entao segurava a trava sem parar — e um
+    // clique no menu ficava esperando a consulta terminar. O sintoma nao
+    // parece sessao: a pagina antiga continua pintada, o item do menu fica
+    // presi em `:active` e o cursor congela como mãozinha, sem nada no
+    // console. E o mesmo problema que `api/chat.php` ja resolvia no
+    // streaming, e que aqui passou despercebido porque cada consulta e
+    // rapida — o que nao impede a FILA de requisicoes.
+    //
+    // O token de CSRF e forcado antes de fechar: ele nasce na sessao, e o
+    // parcial da lista monta o formulario de assumir. Gerado depois do
+    // fechamento, ele se perderia e o proximo "Assumir" cairia em
+    // "sessao expirada".
+    csrf_token();
+    session_write_close();
+
     // Batimento. A presença sai de graça de uma requisição que já existia: a
     // tela consulta a cada 4s de qualquer forma. Quem fechou o navegador para
     // de bater e some da fila sozinho, sem depender de lembrar do botão.
